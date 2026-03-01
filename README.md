@@ -1,4 +1,8 @@
-# 🪽 Mercury
+<p align="center">
+  <img src="assets/logo.svg" alt="Mercury" width="128" height="128" />
+</p>
+
+# Mercury
 
 <p align="center">
   <em>There are many claws, but this one is mine.</em>
