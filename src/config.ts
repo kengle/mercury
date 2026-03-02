@@ -103,10 +103,8 @@ export function loadConfig(): AppConfig {
     dataDir: process.env.MERCURY_DATA_DIR,
     authPath: process.env.MERCURY_AUTH_PATH,
 
-    // Container / Agent (new name with fallback to old)
-    agentContainerImage:
-      process.env.MERCURY_AGENT_IMAGE ??
-      process.env.MERCURY_AGENT_CONTAINER_IMAGE,
+    // Container / Agent
+    agentContainerImage: process.env.MERCURY_AGENT_IMAGE,
     containerTimeoutMs: process.env.MERCURY_CONTAINER_TIMEOUT_MS,
     maxConcurrency: process.env.MERCURY_MAX_CONCURRENCY,
 
