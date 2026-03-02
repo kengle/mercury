@@ -51,6 +51,8 @@ Custom roles can be created by assigning permissions to any role name.
 | `roles.revoke` | Remove roles from users |
 | `permissions.get` | View role permissions |
 | `permissions.set` | Modify role permissions |
+| `groups.list` | View all groups |
+| `groups.rename` | Set group display name |
 
 ## Managing Roles
 
@@ -90,6 +92,23 @@ mercury-ctl permissions set moderator prompt,stop,tasks.list,tasks.pause,tasks.r
 # Give a role full task control
 mercury-ctl permissions set taskmaster prompt,tasks.list,tasks.create,tasks.pause,tasks.resume,tasks.delete
 ```
+
+## Managing Groups
+
+Groups can be listed and renamed via `mercury-ctl`:
+
+```bash
+# List all groups with their names
+mercury-ctl groups list
+
+# Get current group's display name
+mercury-ctl groups name
+
+# Set current group's display name
+mercury-ctl groups name "Startup Buddies"
+```
+
+Group names are stored in the database and shown in logs/dashboard for easier identification (instead of raw IDs like `whatsapp:120363404922156552@g.us`).
 
 ## Seeding Admins
 
