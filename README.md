@@ -119,6 +119,12 @@ mercury run       # Start the assistant
 mercury build     # Rebuild container image
 mercury status    # Show status
 mercury kb-distill [--backfill]  # Run KB distillation
+
+# Service management (preferred for background running)
+mercury service install    # Install as system service
+mercury service uninstall  # Remove service
+mercury service status     # Show service status
+mercury service logs [-f]  # View/tail logs
 ```
 
 ### mercury-ctl
