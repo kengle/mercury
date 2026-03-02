@@ -63,6 +63,8 @@ Usage:
   mercury-ctl roles revoke <platform-user-id>
   mercury-ctl permissions show [--role <role>]
   mercury-ctl permissions set <role> <perm1,perm2,...>
+  mercury-ctl groups list
+  mercury-ctl groups name [<name>]
   mercury-ctl stop
   mercury-ctl compact
 
@@ -224,6 +226,43 @@ async function main() {
         }
         default:
           fatal(`Unknown permissions subcommand: ${sub}`);
+      }
+      break;
+    }
+
+    case "groups": {
+      if (!sub) usage();
+      switch (sub) {
+        case "list": {
+          const data = (await api("GET", "/api/groups")) as {
+            groups: Array<{ id: string; title: string }>;
+          };
+          for (const g of data.groups) {
+            const name = g.title !== g.id ? g.title : "(unnamed)";
+            process.stdout.write(`${g.id}\t${name}\n`);
+          }
+          break;
+        }
+        case "name": {
+          const name = args[2];
+          if (name) {
+            // Set name
+            print(await api("PUT", "/api/groups/current/name", { name }));
+          } else {
+            // Get name
+            const data = (await api("GET", "/api/groups/current")) as {
+              group: { id: string; title: string };
+            };
+            const displayName =
+              data.group.title !== data.group.id
+                ? data.group.title
+                : "(unnamed)";
+            process.stdout.write(`${displayName}\n`);
+          }
+          break;
+        }
+        default:
+          fatal(`Unknown groups subcommand: ${sub}`);
       }
       break;
     }

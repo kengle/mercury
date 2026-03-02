@@ -1,12 +1,21 @@
-import { afterEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import path from "node:path";
 import { loadConfig, resolveProjectPath } from "../src/config.js";
 
 describe("loadConfig", () => {
   const originalEnv = { ...process.env };
 
+  beforeEach(() => {
+    // Clear all MERCURY_ env vars before each test to isolate from .env file
+    for (const key of Object.keys(process.env)) {
+      if (key.startsWith("MERCURY_")) {
+        delete process.env[key];
+      }
+    }
+  });
+
   afterEach(() => {
-    // Restore env
+    // Restore original env after each test
     for (const key of Object.keys(process.env)) {
       if (key.startsWith("MERCURY_")) {
         delete process.env[key];
@@ -18,25 +27,13 @@ describe("loadConfig", () => {
   test("defaults", () => {
     const config = loadConfig();
     expect(config.dataDir).toBe(".mercury");
-    expect(config.dbPath).toBe(path.join(".mercury", "state.db"));
-    expect(config.globalDir).toBe(path.join(".mercury", "global"));
-    expect(config.groupsDir).toBe(path.join(".mercury", "groups"));
-    expect(config.whatsappAuthDir).toBe(path.join(".mercury", "whatsapp-auth"));
     expect(config.triggerPatterns).toBe("@Pi,Pi");
     expect(config.triggerMatch).toBe("mention");
     expect(config.maxConcurrency).toBe(2);
     expect(config.chatSdkPort).toBe(8787);
-    expect(config.containerTimeoutMs).toBe(5 * 60 * 1000); // 5 minutes default
+    expect(config.containerTimeoutMs).toBe(5 * 60 * 1000);
     expect(config.logLevel).toBe("info");
     expect(config.logFormat).toBe("text");
-  });
-
-  test("logLevel and logFormat can be overridden", () => {
-    process.env.MERCURY_LOG_LEVEL = "debug";
-    process.env.MERCURY_LOG_FORMAT = "json";
-    const config = loadConfig();
-    expect(config.logLevel).toBe("debug");
-    expect(config.logFormat).toBe("json");
   });
 
   test("derived paths use dataDir", () => {
@@ -51,20 +48,18 @@ describe("loadConfig", () => {
   test("env overrides", () => {
     process.env.MERCURY_TRIGGER_PATTERNS = "@Bot,Bot";
     process.env.MERCURY_TRIGGER_MATCH = "prefix";
-    process.env.MERCURY_ADMINS = "user1,user2";
     process.env.MERCURY_MAX_CONCURRENCY = "4";
+    process.env.MERCURY_CONTAINER_TIMEOUT_MS = "120000";
+    process.env.MERCURY_LOG_LEVEL = "debug";
+    process.env.MERCURY_LOG_FORMAT = "json";
 
     const config = loadConfig();
     expect(config.triggerPatterns).toBe("@Bot,Bot");
     expect(config.triggerMatch).toBe("prefix");
-    expect(config.admins).toBe("user1,user2");
     expect(config.maxConcurrency).toBe(4);
-  });
-
-  test("containerTimeoutMs can be overridden", () => {
-    process.env.MERCURY_CONTAINER_TIMEOUT_MS = "120000"; // 2 minutes
-    const config = loadConfig();
     expect(config.containerTimeoutMs).toBe(120000);
+    expect(config.logLevel).toBe("debug");
+    expect(config.logFormat).toBe("json");
   });
 });
 

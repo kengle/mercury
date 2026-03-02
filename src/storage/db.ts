@@ -153,6 +153,22 @@ export class Db {
       .all() as Group[];
   }
 
+  updateGroupTitle(groupId: string, title: string): boolean {
+    const now = Date.now();
+    const result = this.db
+      .query("UPDATE groups SET title = ?, updated_at = ? WHERE id = ?")
+      .run(title, now, groupId);
+    return result.changes > 0;
+  }
+
+  getGroup(groupId: string): Group | null {
+    return this.db
+      .query(
+        "SELECT id, title, created_at as createdAt, updated_at as updatedAt FROM groups WHERE id = ?",
+      )
+      .get(groupId) as Group | null;
+  }
+
   addMessage(
     groupId: string,
     role: StoredMessage["role"],

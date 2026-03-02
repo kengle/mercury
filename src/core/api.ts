@@ -356,5 +356,32 @@ export function handleApiRequest(
     return json({ groupId, boundary });
   }
 
+  // --- groups ---
+  if (path === "/api/groups" && request.method === "GET") {
+    const denied = check(ctx.db, groupId, role, "groups.list");
+    if (denied) return denied;
+    const groups = ctx.db.listGroups();
+    return json({ groups });
+  }
+
+  if (path === "/api/groups/current" && request.method === "GET") {
+    const group = ctx.db.getGroup(groupId);
+    if (!group) return error("Group not found", 404);
+    return json({ group });
+  }
+
+  if (path === "/api/groups/current/name" && request.method === "PUT") {
+    const denied = check(ctx.db, groupId, role, "groups.rename");
+    if (denied) return denied;
+    return (async () => {
+      const body = await parseBody<{ name?: string }>(request);
+      if (!body) return error("Invalid JSON body", 400);
+      if (!body.name) return error("Missing name", 400);
+      const updated = ctx.db.updateGroupTitle(groupId, body.name);
+      if (!updated) return error("Group not found", 404);
+      return json({ groupId, name: body.name });
+    })();
+  }
+
   return error("Not found", 404);
 }
