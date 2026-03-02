@@ -12,6 +12,19 @@ bun run typecheck    # TypeScript only
 bun run lint         # Biome only
 ```
 
+## Running in Background
+
+The preferred way to run Mercury in the background is via system service (not tmux):
+
+```bash
+mercury service install   # Install as launchd (macOS) or systemd (Linux)
+mercury service status    # Check if running
+mercury service logs -f   # Tail logs
+mercury service uninstall # Remove service
+```
+
+This provides auto-restart on crash and proper system integration. See [deployment.md](docs/deployment.md) for details.
+
 ## Structure
 
 ```
