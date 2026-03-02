@@ -51,18 +51,26 @@ async function main() {
   const adapters: Record<string, Adapter> = {};
 
   if (config.enableSlack) {
-    if (!process.env.SLACK_SIGNING_SECRET) {
+    if (!process.env.MERCURY_SLACK_BOT_TOKEN) {
       throw new Error(
-        "MERCURY_ENABLE_SLACK=true but SLACK_SIGNING_SECRET is not set",
+        "MERCURY_ENABLE_SLACK=true but MERCURY_SLACK_BOT_TOKEN is not set",
       );
     }
-    adapters.slack = createSlackAdapter();
+    if (!process.env.MERCURY_SLACK_SIGNING_SECRET) {
+      throw new Error(
+        "MERCURY_ENABLE_SLACK=true but MERCURY_SLACK_SIGNING_SECRET is not set",
+      );
+    }
+    adapters.slack = createSlackAdapter({
+      botToken: process.env.MERCURY_SLACK_BOT_TOKEN,
+      signingSecret: process.env.MERCURY_SLACK_SIGNING_SECRET,
+    });
   }
 
   if (config.enableDiscord) {
-    if (!process.env.DISCORD_BOT_TOKEN) {
+    if (!process.env.MERCURY_DISCORD_BOT_TOKEN) {
       throw new Error(
-        "MERCURY_ENABLE_DISCORD=true but DISCORD_BOT_TOKEN is not set",
+        "MERCURY_ENABLE_DISCORD=true but MERCURY_DISCORD_BOT_TOKEN is not set",
       );
     }
     adapters.discord = createDiscordNativeAdapter({

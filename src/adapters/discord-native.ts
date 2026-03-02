@@ -506,11 +506,11 @@ export class DiscordNativeAdapter
 export function createDiscordNativeAdapter(
   options?: Partial<DiscordNativeAdapterOptions>,
 ): DiscordNativeAdapter {
-  const botToken = options?.botToken || process.env.DISCORD_BOT_TOKEN;
+  const botToken = options?.botToken || process.env.MERCURY_DISCORD_BOT_TOKEN;
 
   if (!botToken) {
     throw new Error(
-      "Discord native adapter requires DISCORD_BOT_TOKEN environment variable",
+      "Discord native adapter requires MERCURY_DISCORD_BOT_TOKEN environment variable",
     );
   }
 
