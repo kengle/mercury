@@ -159,13 +159,13 @@ export type { DiscordAdapter, DiscordThreadId };
 export function createDiscordAdapter(options?: {
   userName?: string;
 }): DiscordAdapter {
-  const botToken = process.env.DISCORD_BOT_TOKEN;
-  const publicKey = process.env.DISCORD_PUBLIC_KEY;
-  const applicationId = process.env.DISCORD_APPLICATION_ID;
+  const botToken = process.env.MERCURY_DISCORD_BOT_TOKEN;
+  const publicKey = process.env.MERCURY_DISCORD_PUBLIC_KEY;
+  const applicationId = process.env.MERCURY_DISCORD_APPLICATION_ID;
 
   if (!botToken || !publicKey || !applicationId) {
     throw new Error(
-      "Discord adapter requires DISCORD_BOT_TOKEN, DISCORD_PUBLIC_KEY, and DISCORD_APPLICATION_ID",
+      "Discord adapter requires MERCURY_DISCORD_BOT_TOKEN, MERCURY_DISCORD_PUBLIC_KEY, and MERCURY_DISCORD_APPLICATION_ID",
     );
   }
 
