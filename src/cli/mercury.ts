@@ -173,20 +173,21 @@ async function runAction(): Promise<void> {
     process.exit(1);
   }
 
-  const imageCheck = spawnSync(
-    "docker",
-    ["image", "inspect", "mercury-agent:latest"],
-    {
-      stdio: "pipe",
-    },
-  );
+  const envVars = loadEnvFile(envPath);
+  const imageName = envVars.MERCURY_AGENT_IMAGE || "mercury-agent:latest";
+
+  const imageCheck = spawnSync("docker", ["image", "inspect", imageName], {
+    stdio: "pipe",
+  });
   if (imageCheck.status !== 0) {
-    console.error("Error: Container image 'mercury-agent:latest' not found.");
-    console.error("Run 'mercury build' to build it.");
+    console.error(`Error: Container image '${imageName}' not found.`);
+    if (imageName.startsWith("ghcr.io/")) {
+      console.error(`Run 'docker pull ${imageName}' to pull it.`);
+    } else {
+      console.error("Run 'mercury build' to build it.");
+    }
     process.exit(1);
   }
-
-  const envVars = loadEnvFile(envPath);
 
   console.log("🪽 Starting mercury...\n");
 
