@@ -691,6 +691,38 @@ describe("PUT /api/groups/current/name", () => {
   });
 });
 
+describe("DELETE /api/groups/current", () => {
+  test("deletes current group data", async () => {
+    await api("POST", "/api/tasks", {
+      body: { cron: "0 * * * *", prompt: "ping" },
+    });
+    await api("POST", "/api/roles", {
+      body: { platformUserId: "cleanup-user", role: "moderator" },
+    });
+    await api("PUT", "/api/config", {
+      body: { key: "trigger_match", value: "always" },
+    });
+
+    const { status, data } = await api("DELETE", "/api/groups/current");
+    expect(status).toBe(200);
+    expect(data.deleted).toBe(true);
+
+    const removed = data.removed as {
+      tasks: number;
+      group: number;
+    };
+    expect(removed.group).toBe(1);
+    expect(removed.tasks).toBeGreaterThanOrEqual(1);
+  });
+
+  test("member without permission is denied", async () => {
+    const { status } = await api("DELETE", "/api/groups/current", {
+      callerId: "user1",
+    });
+    expect(status).toBe(403);
+  });
+});
+
 // ─── Not Found ────────────────────────────────────────────────────────────
 
 describe("Unknown routes", () => {

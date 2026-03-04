@@ -137,7 +137,7 @@ mercury-ctl tasks list|create|pause|resume|delete
 mercury-ctl roles list|grant|revoke
 mercury-ctl permissions show|set
 mercury-ctl config get|set
-mercury-ctl groups list|name
+mercury-ctl groups list|name|delete
 mercury-ctl stop
 mercury-ctl compact
 ```

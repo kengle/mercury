@@ -66,6 +66,7 @@ Usage:
   mercury-ctl permissions set <role> <perm1,perm2,...>
   mercury-ctl groups list
   mercury-ctl groups name [<name>]
+  mercury-ctl groups delete
   mercury-ctl stop
   mercury-ctl compact
 
@@ -262,6 +263,9 @@ async function main() {
           }
           break;
         }
+        case "delete":
+          print(await api("DELETE", "/api/groups/current"));
+          break;
         default:
           fatal(`Unknown groups subcommand: ${sub}`);
       }
