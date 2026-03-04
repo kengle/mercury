@@ -74,6 +74,7 @@ mercury-ctl config set <key> <value>  # Set config value
 mercury-ctl groups list               # List all groups with names
 mercury-ctl groups name               # Get current group's display name
 mercury-ctl groups name "My Group"    # Set current group's display name
+mercury-ctl groups delete             # Delete current group + tasks/messages/roles/config
 ```
 
 ### Roles & Permissions

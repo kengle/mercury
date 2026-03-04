@@ -42,3 +42,17 @@ groups.put("/current/name", async (c) => {
 
   return c.json({ groupId, name: body.name });
 });
+
+groups.delete("/current", (c) => {
+  const { groupId } = getAuth(c);
+  const denied = checkPerm(c, "groups.delete");
+  if (denied) return denied;
+
+  const { db } = getApiCtx(c);
+  const result = db.deleteGroup(groupId);
+  if (!result.deleted) {
+    return c.json({ error: "Group not found" }, 404);
+  }
+
+  return c.json({ groupId, deleted: true, removed: result.removed });
+});

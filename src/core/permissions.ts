@@ -18,6 +18,7 @@ export const ALL_PERMISSIONS = [
   "permissions.set",
   "groups.list",
   "groups.rename",
+  "groups.delete",
 ] as const;
 
 export type Permission = (typeof ALL_PERMISSIONS)[number];

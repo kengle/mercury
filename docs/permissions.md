@@ -53,6 +53,7 @@ Custom roles can be created by assigning permissions to any role name.
 | `permissions.set` | Modify role permissions |
 | `groups.list` | View all groups |
 | `groups.rename` | Set group display name |
+| `groups.delete` | Delete current group and all related DB data |
 
 ## Managing Roles
 
@@ -106,6 +107,9 @@ mercury-ctl groups name
 
 # Set current group's display name
 mercury-ctl groups name "Startup Buddies"
+
+# Delete current group (tasks, messages, roles, config)
+mercury-ctl groups delete
 ```
 
 Group names are stored in the database and shown in logs/dashboard for easier identification (instead of raw IDs like `whatsapp:120363404922156552@g.us`).

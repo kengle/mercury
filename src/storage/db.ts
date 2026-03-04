@@ -177,6 +177,50 @@ export class Db {
       .get(groupId) as Group | null;
   }
 
+  deleteGroup(groupId: string): {
+    deleted: boolean;
+    removed: {
+      group: number;
+      messages: number;
+      tasks: number;
+      chatState: number;
+      roles: number;
+      config: number;
+    };
+  } {
+    this.db.exec("BEGIN IMMEDIATE");
+    try {
+      const messages = this.db
+        .query("DELETE FROM messages WHERE group_id = ?")
+        .run(groupId).changes;
+      const tasks = this.db
+        .query("DELETE FROM tasks WHERE group_id = ?")
+        .run(groupId).changes;
+      const chatState = this.db
+        .query("DELETE FROM chat_state WHERE group_id = ?")
+        .run(groupId).changes;
+      const roles = this.db
+        .query("DELETE FROM group_roles WHERE group_id = ?")
+        .run(groupId).changes;
+      const config = this.db
+        .query("DELETE FROM group_config WHERE group_id = ?")
+        .run(groupId).changes;
+      const group = this.db
+        .query("DELETE FROM groups WHERE id = ?")
+        .run(groupId).changes;
+
+      this.db.exec("COMMIT");
+
+      return {
+        deleted: group > 0,
+        removed: { group, messages, tasks, chatState, roles, config },
+      };
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   addMessage(
     groupId: string,
     role: StoredMessage["role"],
