@@ -11,6 +11,7 @@ import {
   resetPermissions,
   seededGroups,
 } from "../src/core/permissions.js";
+import { ConfigRegistry } from "../src/extensions/config-registry.js";
 import { ExtensionRegistry } from "../src/extensions/loader.js";
 import { Db } from "../src/storage/db.js";
 
@@ -91,6 +92,7 @@ beforeEach(async () => {
     queue: new GroupQueue(2),
     scheduler,
     registry,
+    configRegistry: new ConfigRegistry(),
   });
 });
 

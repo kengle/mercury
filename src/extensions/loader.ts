@@ -10,6 +10,7 @@ import path from "node:path";
 import type { Logger } from "../logger.js";
 import type { Db } from "../storage/db.js";
 import { MercuryExtensionAPIImpl } from "./api.js";
+import type { ConfigRegistry } from "./config-registry.js";
 import { RESERVED_EXTENSION_NAMES } from "./reserved.js";
 import type {
   EventHandler,
@@ -25,7 +26,12 @@ export class ExtensionRegistry {
   private readonly extensions = new Map<string, ExtensionMeta>();
 
   /** Load all extensions from a directory. */
-  async loadAll(extensionsDir: string, db: Db, log: Logger): Promise<void> {
+  async loadAll(
+    extensionsDir: string,
+    db: Db,
+    log: Logger,
+    configRegistry?: ConfigRegistry,
+  ): Promise<void> {
     if (!fs.existsSync(extensionsDir)) {
       log.debug(`Extensions directory not found: ${extensionsDir}`);
       return;
@@ -68,6 +74,12 @@ export class ExtensionRegistry {
 
       try {
         const meta = await loadExtension(name, extDir, indexPath, db);
+        // Register extension config keys in the config registry
+        if (configRegistry) {
+          for (const [key, def] of meta.configs) {
+            configRegistry.register(name, key, def);
+          }
+        }
         this.extensions.set(name, meta);
         log.info(`Loaded extension: ${name}`);
       } catch (err) {
