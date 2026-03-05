@@ -70,6 +70,14 @@ describe("MercuryExtensionAPI", () => {
 			});
 		});
 
+		it("registers with dynamic permission system", () => {
+			const api = createApi("perm-test");
+			api.permission({ defaultRoles: ["member"] });
+
+			const { getAllPermissions } = require("../src/core/permissions.js");
+			expect(getAllPermissions()).toContain("perm-test");
+		});
+
 		it("throws on second call", () => {
 			const api = createApi();
 			api.permission({ defaultRoles: ["admin"] });
@@ -173,6 +181,13 @@ describe("MercuryExtensionAPI", () => {
 				api.job("", { interval: 1000, run: async () => {} }),
 			).toThrow("requires a name");
 		});
+
+		it("throws when run is not a function", () => {
+			const api = createApi();
+			expect(() =>
+				api.job("bad", { interval: 1000, run: "not a fn" as any }),
+			).toThrow("requires a run function");
+		});
 	});
 
 	describe("config()", () => {
@@ -231,6 +246,28 @@ describe("MercuryExtensionAPI", () => {
 			expect(() => api.widget({ label: "", render: () => "" })).toThrow(
 				"requires a label",
 			);
+		});
+
+		it("throws when render is not a function", () => {
+			const api = createApi();
+			expect(() =>
+				api.widget({ label: "X", render: "not a fn" as any }),
+			).toThrow("requires a render function");
+		});
+	});
+
+	describe("meta isolation", () => {
+		it("two extensions have independent metadata", () => {
+			const a = new MercuryExtensionAPIImpl("ext-a", extDir, db);
+			const b = new MercuryExtensionAPIImpl("ext-b", extDir, db);
+
+			a.config("key", { description: "a", default: "1" });
+			b.job("tick", { interval: 1000, run: async () => {} });
+
+			expect(a.getMeta().configs.size).toBe(1);
+			expect(a.getMeta().jobs.size).toBe(0);
+			expect(b.getMeta().configs.size).toBe(0);
+			expect(b.getMeta().jobs.size).toBe(1);
 		});
 	});
 
