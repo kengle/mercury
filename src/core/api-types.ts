@@ -3,7 +3,7 @@ import type { AgentContainerRunner } from "../agent/container-runner.js";
 import type { AppConfig } from "../config.js";
 import type { Db } from "../storage/db.js";
 import type { GroupQueue } from "./group-queue.js";
-import { hasPermission, type Permission } from "./permissions.js";
+import { hasPermission } from "./permissions.js";
 import type { TaskScheduler } from "./task-scheduler.js";
 
 // ─── Context Types ────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ export const getApiCtx = (c: Context<Env>): ApiContext => c.get("apiCtx");
 
 export const checkPerm = (
   c: Context<Env>,
-  permission: Permission,
+  permission: string,
 ): Response | null => {
   const { groupId, role } = c.get("auth");
   const { db } = c.get("apiCtx");
