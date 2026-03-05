@@ -1,3 +1,5 @@
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { type Adapter, Chat, type Message, type Thread } from "chat";
 import { createDiscordMessageHandler } from "./adapters/discord.js";
@@ -17,6 +19,8 @@ import { createWhatsAppMessageHandler } from "./handlers/whatsapp.js";
 import { configureLogger, logger } from "./logger.js";
 import { createApp } from "./server.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const PACKAGE_ROOT = join(__dirname, "..");
 const startTime = Date.now();
 
 async function main() {
@@ -37,15 +41,27 @@ async function main() {
   const registry = new ExtensionRegistry();
   const configRegistry = new ConfigRegistry();
   const extensionsDir = resolveProjectPath(`${config.dataDir}/extensions`);
-  await registry.loadAll(extensionsDir, core.db, logger, configRegistry);
+  const builtinExtDir = join(__dirname, "extensions");
+  await registry.loadAll(
+    extensionsDir,
+    core.db,
+    logger,
+    configRegistry,
+    builtinExtDir,
+  );
   logger.info("Extensions loaded", { count: registry.size });
 
   // Wire extensions into runtime (hooks, context)
   core.initExtensions(registry);
 
-  // Install skills
+  // Install skills (extension + built-in)
   const globalDir = resolveProjectPath(config.globalDir);
   installExtensionSkills(registry.list(), globalDir, logger);
+  installBuiltinSkills(
+    join(PACKAGE_ROOT, "resources/skills"),
+    globalDir,
+    logger,
+  );
 
   // Build derived container image if extensions declare CLIs
   const agentImage = await ensureDerivedImage(
@@ -143,7 +159,6 @@ async function main() {
   // ─── Start Services ─────────────────────────────────────────────────────
 
   core.startScheduler(messageSender);
-  core.startKbDistill();
 
   // Start extension background jobs
   const jobRunner = new JobRunner();

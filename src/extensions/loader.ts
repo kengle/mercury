@@ -25,8 +25,25 @@ const VALID_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
 export class ExtensionRegistry {
   private readonly extensions = new Map<string, ExtensionMeta>();
 
-  /** Load all extensions from a directory. */
+  /**
+   * Load all extensions from one or more directories.
+   * The first directory is the primary (user extensions),
+   * additional directories are for built-in extensions shipped with Mercury.
+   */
   async loadAll(
+    extensionsDir: string,
+    db: Db,
+    log: Logger,
+    configRegistry?: ConfigRegistry,
+    ...extraDirs: string[]
+  ): Promise<void> {
+    const dirs = [extensionsDir, ...extraDirs];
+    for (const dir of dirs) {
+      await this.loadFromDir(dir, db, log, configRegistry);
+    }
+  }
+
+  private async loadFromDir(
     extensionsDir: string,
     db: Db,
     log: Logger,

@@ -79,14 +79,22 @@ src/
 │   ├── api.ts                  # MercuryExtensionAPI implementation
 │   ├── loader.ts               # Extension discovery + ExtensionRegistry
 │   ├── hooks.ts                # Hook dispatcher (lifecycle events)
+│   ├── jobs.ts                 # Background job runner (interval + cron)
+│   ├── config-registry.ts      # Extension config key registration
 │   ├── skills.ts               # Skill installation (copy to global dir)
 │   ├── image-builder.ts        # Derived Docker image builder
-│   └── reserved.ts             # Reserved extension names (shared constant)
+│   ├── reserved.ts             # Reserved extension names (shared constant)
+│   ├── napkin/                 # Built-in: vault management (CLI + skill + hook)
+│   │   ├── index.ts
+│   │   └── skill/SKILL.md
+│   └── kb-distill/             # Built-in: knowledge extraction (job + widget)
+│       ├── index.ts
+│       └── distill.ts
 │
 ├── cli/
 │   ├── mercury.ts              # Main CLI (init, run, build)
 │   ├── mrctl.ts                # In-container CLI
-│   ├── kb-distill.ts           # KB distillation logic
+│   ├── kb-distill.ts           # Re-exports from extensions/kb-distill/
 │   └── whatsapp-auth.ts        # WhatsApp QR auth
 │
 └── dashboard/
@@ -98,6 +106,12 @@ container/                  # Dockerfile + build.sh
 resources/
 ├── templates/              # Init templates (AGENTS.md, .env)
 ├── prompts/                # KB distillation prompts
+├── skills/                 # Built-in skills for mrctl commands
+│   ├── tasks/SKILL.md
+│   ├── roles/SKILL.md
+│   ├── permissions/SKILL.md
+│   ├── config/SKILL.md
+│   └── groups/SKILL.md
 └── extensions/             # Pi extensions (subagent)
 ```
 
@@ -115,8 +129,12 @@ resources/
 | `core/routes/*.ts` | Individual API route handlers |
 | `extensions/loader.ts` | Extension discovery, loading via Bun import, registry |
 | `extensions/hooks.ts` | Hook dispatch with mutation semantics for before/after_container |
+| `extensions/jobs.ts` | Background job runner — interval and cron scheduling |
+| `extensions/config-registry.ts` | Extension config key registration with validation |
 | `extensions/skills.ts` | Copy extension skills to global dir (not symlink — Docker mount) |
 | `extensions/image-builder.ts` | Derived Docker image with extension CLIs, content-hash cache |
+| `extensions/napkin/index.ts` | Built-in extension: vault dirs, CLI, skill, workspace_init hook |
+| `extensions/kb-distill/index.ts` | Built-in extension: distillation job, config, dashboard widget |
 
 ## Database Schema
 
