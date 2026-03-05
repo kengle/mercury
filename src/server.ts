@@ -8,7 +8,7 @@ import type { AppConfig } from "./config.js";
 import { createApiApp } from "./core/api.js";
 import { createDashboardRoutes } from "./core/routes/dashboard.js";
 import type { MercuryCoreRuntime } from "./core/runtime.js";
-import { ExtensionRegistry } from "./extensions/loader.js";
+import type { ExtensionRegistry } from "./extensions/loader.js";
 import { logger } from "./logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -26,7 +26,7 @@ export interface ServerContext {
   adapters: Record<string, Adapter>;
   webhooks: Record<string, WebhookHandler>;
   startTime: number;
-  registry?: ExtensionRegistry;
+  registry: ExtensionRegistry;
 }
 
 export function createApp(ctx: ServerContext): Hono {
@@ -124,7 +124,7 @@ export function createApp(ctx: ServerContext): Hono {
     containerRunner: core.containerRunner,
     queue: core.queue,
     scheduler: core.scheduler,
-    registry: ctx.registry ?? new ExtensionRegistry(),
+    registry: ctx.registry,
   });
 
   app.route("/api", apiApp);

@@ -5,6 +5,12 @@ import { setupAdapters } from "./adapters/setup.js";
 import { createSlackMessageHandler } from "./adapters/slack.js";
 import { loadConfig, resolveProjectPath } from "./config.js";
 import { MercuryCoreRuntime } from "./core/runtime.js";
+import { ensureDerivedImage } from "./extensions/image-builder.js";
+import { ExtensionRegistry } from "./extensions/loader.js";
+import {
+  installBuiltinSkills,
+  installExtensionSkills,
+} from "./extensions/skills.js";
 import { createWhatsAppMessageHandler } from "./handlers/whatsapp.js";
 import { configureLogger, logger } from "./logger.js";
 import { createApp } from "./server.js";
@@ -23,6 +29,28 @@ async function main() {
 
   const core = new MercuryCoreRuntime(config);
   await core.initialize();
+
+  // ─── Load Extensions ────────────────────────────────────────────────────
+
+  const registry = new ExtensionRegistry();
+  const extensionsDir = resolveProjectPath(`${config.dataDir}/extensions`);
+  await registry.loadAll(extensionsDir, core.db, logger);
+  logger.info("Extensions loaded", { count: registry.size });
+
+  // Wire extensions into runtime (hooks, context)
+  core.initExtensions(registry);
+
+  // Install skills
+  const globalDir = resolveProjectPath(config.globalDir);
+  installExtensionSkills(registry.list(), globalDir, logger);
+
+  // Build derived container image if extensions declare CLIs
+  const agentImage = await ensureDerivedImage(
+    config.agentContainerImage,
+    registry.list(),
+    logger,
+  );
+  core.containerRunner.setImage(agentImage);
 
   // ─── Setup Adapters ─────────────────────────────────────────────────────
 
@@ -131,6 +159,7 @@ async function main() {
     adapters,
     webhooks,
     startTime,
+    registry,
   });
 
   const server = Bun.serve({
