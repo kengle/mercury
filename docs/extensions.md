@@ -94,7 +94,9 @@ Register a skill directory for agent discovery.
 mercury.skill("./skill");
 ```
 
-The directory must contain a `SKILL.md` file in pi's skill format. Mercury symlinks it into the global pi agent dir so the agent discovers it inside containers.
+The directory must contain a `SKILL.md` file in pi's [skill format](https://agentskills.io/specification). Mercury copies the entire skill directory into `.mercury/global/skills/<name>/`, which is mounted into containers at `/home/node/.pi/agent/skills/<name>/`. Pi discovers it automatically.
+
+Skills can contain multiple files — scripts, references, assets — not just SKILL.md. The agent uses relative paths from SKILL.md to access them.
 
 ### `mercury.on(event, handler)`
 
@@ -215,6 +217,25 @@ interface MercuryExtensionContext {
 ```
 
 ## Container Integration
+
+### Derived Image
+
+### Skill Files
+
+Skills can include anything the agent needs:
+
+```
+napkin/skill/
+├── SKILL.md              # Required: frontmatter + instructions
+├── scripts/              # Helper scripts
+│   └── search.js
+├── references/           # Detailed docs loaded on-demand
+│   └── api-reference.md
+└── assets/
+    └── template.json
+```
+
+All files are copied into the container mount. Relative paths from SKILL.md work.
 
 ### Derived Image
 
