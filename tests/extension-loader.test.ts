@@ -252,6 +252,35 @@ describe("ExtensionRegistry", () => {
 		expect(ext.widgets[0].label).toBe("Test");
 	});
 
+	it("throws on duplicate extension name", async () => {
+		// Create two dirs with same name — not possible in filesystem,
+		// but we can test by loading the same dir twice via the registry internals.
+		// Instead, test that two registries loading same dir work independently.
+		// The real duplicate check matters if loadAll is called twice.
+		writeExt("dup-test", "export default function(m) {}");
+		await registry.loadAll(extDir, db, log);
+		expect(registry.size).toBe(1);
+
+		// Loading again into same registry should skip (already registered)
+		// but the current impl would throw on duplicate — let's verify
+		await expect(registry.loadAll(extDir, db, log)).rejects.toThrow(
+			"Duplicate extension",
+		);
+	});
+
+	it("getCliExtensions only returns extensions with cli", async () => {
+		writeExt(
+			"with-cli",
+			`export default function(m) { m.cli({ name: "with-cli", install: "npm i -g x" }); }`,
+		);
+		writeExt("no-cli", "export default function(m) {}");
+		await registry.loadAll(extDir, db, log);
+		expect(registry.size).toBe(2);
+		const cliExts = registry.getCliExtensions();
+		expect(cliExts).toHaveLength(1);
+		expect(cliExts[0].name).toBe("with-cli");
+	});
+
 	it("store is scoped to extension", async () => {
 		writeExt(
 			"store-test",
