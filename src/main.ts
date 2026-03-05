@@ -5,7 +5,9 @@ import { setupAdapters } from "./adapters/setup.js";
 import { createSlackMessageHandler } from "./adapters/slack.js";
 import { loadConfig, resolveProjectPath } from "./config.js";
 import { MercuryCoreRuntime } from "./core/runtime.js";
+import { ConfigRegistry } from "./extensions/config-registry.js";
 import { ensureDerivedImage } from "./extensions/image-builder.js";
+import { JobRunner } from "./extensions/jobs.js";
 import { ExtensionRegistry } from "./extensions/loader.js";
 import {
   installBuiltinSkills,
@@ -33,8 +35,9 @@ async function main() {
   // ─── Load Extensions ────────────────────────────────────────────────────
 
   const registry = new ExtensionRegistry();
+  const configRegistry = new ConfigRegistry();
   const extensionsDir = resolveProjectPath(`${config.dataDir}/extensions`);
-  await registry.loadAll(extensionsDir, core.db, logger);
+  await registry.loadAll(extensionsDir, core.db, logger, configRegistry);
   logger.info("Extensions loaded", { count: registry.size });
 
   // Wire extensions into runtime (hooks, context)
@@ -141,6 +144,16 @@ async function main() {
 
   core.startScheduler(messageSender);
   core.startKbDistill();
+
+  // Start extension background jobs
+  const jobRunner = new JobRunner();
+  jobRunner.start(registry.list(), {
+    db: core.db,
+    config,
+    log: logger,
+  });
+  core.onShutdown(() => jobRunner.stop());
+
   await bot.initialize();
 
   // ─── Create HTTP Server ─────────────────────────────────────────────────
@@ -160,6 +173,7 @@ async function main() {
     webhooks,
     startTime,
     registry,
+    configRegistry,
   });
 
   const server = Bun.serve({
