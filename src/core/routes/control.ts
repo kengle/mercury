@@ -1,5 +1,7 @@
+import path from "node:path";
 import { Hono } from "hono";
 import { checkPerm, type Env, getApiCtx, getAuth } from "../api-types.js";
+import { compactSession } from "../compact.js";
 import { getRolePermissions } from "../permissions.js";
 
 export const control = new Hono<Env>();
@@ -23,12 +25,20 @@ control.post("/stop", (c) => {
   return c.json({ stopped, dropped });
 });
 
-control.post("/compact", (c) => {
+control.post("/compact", async (c) => {
   const { groupId } = getAuth(c);
   const denied = checkPerm(c, "compact");
   if (denied) return denied;
 
-  const { db } = getApiCtx(c);
+  const { config, db } = getApiCtx(c);
+  const safeGroup = groupId.replace(/[^a-zA-Z0-9-_]/g, "_");
+  const workspace = path.resolve(config.groupsDir, safeGroup);
+  const sessionFile = path.join(workspace, ".mercury.session.jsonl");
+
+  const result = await compactSession(sessionFile, config);
+
+  // Also set Mercury's own message boundary
   const boundary = db.setSessionBoundaryToLatest(groupId);
-  return c.json({ groupId, boundary });
+
+  return c.json({ groupId, boundary, compaction: result });
 });
