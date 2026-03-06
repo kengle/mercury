@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { proto } from "@whiskeysockets/baileys";
+import { createWhatsAppBaileysAdapter } from "../src/adapters/whatsapp.js";
 import { detectWhatsAppMedia } from "../src/adapters/whatsapp-media.js";
 
 describe("detectWhatsAppMedia", () => {
@@ -115,6 +116,22 @@ describe("detectWhatsAppMedia", () => {
     const docMsg: proto.IMessage = { documentMessage: {} };
     expect(detectWhatsAppMedia(docMsg)?.mimeType).toBe(
       "application/octet-stream",
+    );
+  });
+});
+
+describe("WhatsApp media workspace resolution", () => {
+  test("uses canonical full thread ID for media workspace lookup", () => {
+    const adapter = createWhatsAppBaileysAdapter();
+    const remoteJid = "120363424912914933@g.us";
+
+    const threadId = adapter.encodeThreadId({
+      chatJid: remoteJid,
+      threadJid: remoteJid,
+    });
+
+    expect(threadId).toBe(
+      "whatsapp:120363424912914933@g.us:120363424912914933@g.us",
     );
   });
 });

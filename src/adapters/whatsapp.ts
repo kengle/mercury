@@ -521,8 +521,10 @@ export class WhatsAppBaileysAdapter
     const mediaInfo = detectWhatsAppMedia(msg.message);
 
     if (mediaInfo && this.mediaEnabled && this.sock && this.getGroupWorkspace) {
-      // Derive groupId the same way chat-sdk does (whatsapp:{chatJid})
-      const groupId = `whatsapp:${remoteJid}`;
+      const groupId = this.encodeThreadId({
+        chatJid: remoteJid,
+        threadJid: remoteJid,
+      });
 
       try {
         const workspace = await this.getGroupWorkspace(groupId);
