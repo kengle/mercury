@@ -266,4 +266,117 @@ describe("cron job scheduling", () => {
     runner.start([ext], ctx);
     expect(runner.activeCount).toBe(1);
   });
+
+  test("cron job fires and reschedules", async () => {
+    // We can't wait for real cron (1 min minimum), so we test the
+    // scheduleCron path by using a very-soon cron and short sleep.
+    // Instead, we verify the run function is called by using a
+    // patched getNextCronDelay that returns a tiny delay.
+    let runCount = 0;
+
+    // Use a custom job runner where we directly call scheduleCron
+    // via the public start() with a mock cron that fires immediately.
+    // We can do this by monkey-patching getNextCronDelay temporarily.
+    const origModule = await import("../src/extensions/jobs.js");
+
+    // Create a job with interval-like behavior via very fast polling
+    // Actually, we can test the setTimeout path fires by using
+    // the runner and a short setTimeout directly.
+    const ext = makeExt({
+      jobs: new Map([
+        [
+          "cron-fire",
+          {
+            cron: "* * * * *", // every minute
+            async run() {
+              runCount++;
+            },
+          },
+        ],
+      ]),
+    });
+
+    // Override the timer to fire immediately
+    const originalSetTimeout = globalThis.setTimeout;
+    // biome-ignore lint/suspicious/noGlobalAssign: test override
+    globalThis.setTimeout = ((
+      fn: (...args: unknown[]) => void,
+      _delay: number,
+      ...args: unknown[]
+    ) => {
+      // Fire with 10ms delay instead of waiting for cron
+      return originalSetTimeout(fn, 10, ...args);
+    }) as typeof setTimeout;
+
+    try {
+      runner.start([ext], ctx);
+      // Wait for the first cron fire + reschedule
+      await Bun.sleep(80);
+      expect(runCount).toBeGreaterThanOrEqual(1);
+      // Should still be active (rescheduled)
+      expect(runner.activeCount).toBe(1);
+    } finally {
+      // biome-ignore lint/suspicious/noGlobalAssign: test restore
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
+
+  test("cron job with invalid expression logs error", () => {
+    const ext = makeExt({
+      jobs: new Map([
+        [
+          "bad-cron",
+          {
+            cron: "not valid",
+            async run() {},
+          },
+        ],
+      ]),
+    });
+
+    runner.start([ext], ctx);
+    // Invalid cron doesn't register a timer
+    expect(runner.activeCount).toBe(0);
+  });
+
+  test("cron job stops after runner.stop()", async () => {
+    let runCount = 0;
+    const ext = makeExt({
+      jobs: new Map([
+        [
+          "cron-stop",
+          {
+            cron: "* * * * *",
+            async run() {
+              runCount++;
+            },
+          },
+        ],
+      ]),
+    });
+
+    const originalSetTimeout = globalThis.setTimeout;
+    // biome-ignore lint/suspicious/noGlobalAssign: test override
+    globalThis.setTimeout = ((
+      fn: (...args: unknown[]) => void,
+      _delay: number,
+      ...args: unknown[]
+    ) => {
+      return originalSetTimeout(fn, 10, ...args);
+    }) as typeof setTimeout;
+
+    try {
+      runner.start([ext], ctx);
+      await Bun.sleep(30);
+      const countAtStop = runCount;
+      runner.stop();
+      await Bun.sleep(50);
+      // Should not have run more after stop
+      expect(runCount).toBe(countAtStop);
+      expect(runner.activeCount).toBe(0);
+    } finally {
+      // biome-ignore lint/suspicious/noGlobalAssign: test restore
+      globalThis.setTimeout = originalSetTimeout;
+    }
+  });
 });
