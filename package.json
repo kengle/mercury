@@ -24,6 +24,7 @@
   "files": [
     "src",
     "resources",
+    "docs",
     "README.md"
   ],
   "scripts": {
