@@ -279,6 +279,36 @@ mercury.permission({ defaultRoles: ["admin", "member"] });
 - Per-group overrides via `mrctl permissions set <role> prompt,napkin,...`
 - See [permissions.md](permissions.md) for the full RBAC system
 
+## Installation
+
+### `mercury add`
+
+Install extensions from local paths, npm, or git:
+
+```bash
+mercury add ./path/to/extension         # local directory
+mercury add npm:mercury-ext-napkin      # npm package
+mercury add git:github.com/user/ext     # git repo
+```
+
+Mercury copies the extension to `.mercury/extensions/<name>/`, installs dependencies if `package.json` is present, copies skills to the global dir, and validates the extension loads correctly.
+
+### `mercury remove`
+
+```bash
+mercury remove napkin
+```
+
+Removes the extension directory and its installed skill. Restart Mercury to apply.
+
+### `mercury extensions list`
+
+```bash
+mercury extensions list    # or: mercury ext list
+```
+
+Shows all installed extensions (user + built-in) with features and descriptions.
+
 ## Types
 
 All types are in `src/extensions/types.ts`:

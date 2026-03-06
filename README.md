@@ -121,6 +121,13 @@ mercury build     # Rebuild container image
 mercury status    # Show status
 mercury kb-distill [--backfill]  # Run KB distillation
 
+# Extension management
+mercury add ./path/to/extension   # Install from local path
+mercury add npm:<package>         # Install from npm
+mercury add git:<repo-url>        # Install from git
+mercury remove <name>             # Remove extension
+mercury extensions list           # List installed extensions
+
 # Service management (preferred for background running)
 mercury service install    # Install as system service
 mercury service uninstall  # Remove service

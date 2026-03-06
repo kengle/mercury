@@ -92,7 +92,7 @@ src/
 │       └── distill.ts
 │
 ├── cli/
-│   ├── mercury.ts              # Main CLI (init, run, build)
+│   ├── mercury.ts              # Main CLI (init, run, build, add, remove, ext list)
 │   ├── mrctl.ts                # In-container CLI
 │   ├── kb-distill.ts           # Re-exports from extensions/kb-distill/
 │   └── whatsapp-auth.ts        # WhatsApp QR auth
