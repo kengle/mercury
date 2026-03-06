@@ -1188,12 +1188,12 @@ function extensionsListAction(): void {
   }
 }
 
-// Chat command — direct bridge to talk to the running Mercury instance
 program
   .command("chat [text...]")
   .description("Send a message to Mercury and get a reply")
   .option("-p, --port <port>", "Mercury server port", "8787")
   .option("-g, --group <groupId>", "Group ID for the conversation")
+  .option("-f, --file <paths...>", "Attach files to the message")
   .option("--caller <callerId>", "Caller ID", "cli:user")
   .option("--json", "Output raw JSON response")
   .action(
@@ -1202,11 +1202,11 @@ program
       options: {
         port: string;
         group?: string;
+        file?: string[];
         caller: string;
         json?: boolean;
       },
     ) => {
-      // Read from args or stdin
       let text: string;
       if (textParts.length > 0) {
         text = textParts.join(" ");
@@ -1224,11 +1224,27 @@ program
       }
 
       const url = `http://localhost:${options.port}/chat`;
-      const body: Record<string, string> = {
+      const body: Record<string, unknown> = {
         text,
         callerId: options.caller,
       };
       if (options.group) body.groupId = options.group;
+
+      if (options.file && options.file.length > 0) {
+        const files: Array<{ name: string; data: string }> = [];
+        for (const filePath of options.file) {
+          const abs = resolve(CWD, filePath);
+          if (!existsSync(abs)) {
+            console.error(`Error: file not found: ${filePath}`);
+            process.exit(1);
+          }
+          files.push({
+            name: basename(abs),
+            data: readFileSync(abs).toString("base64"),
+          });
+        }
+        body.files = files;
+      }
 
       try {
         const res = await fetch(url, {
@@ -1249,9 +1265,9 @@ program
           reply: string;
           files: Array<{
             filename: string;
-            path: string;
             mimeType: string;
             sizeBytes: number;
+            data: string;
           }>;
           error?: string;
         };
@@ -1261,9 +1277,12 @@ program
         } else {
           if (data.reply) console.log(data.reply);
           if (data.files && data.files.length > 0) {
-            console.error(
-              `\n[${data.files.length} file(s): ${data.files.map((f) => f.filename).join(", ")}]`,
-            );
+            for (const f of data.files) {
+              const outPath = join(CWD, f.filename);
+              writeFileSync(outPath, Buffer.from(f.data, "base64"));
+              const kb = (f.sizeBytes / 1024).toFixed(1);
+              console.error(`→ ${outPath} (${kb} KB)`);
+            }
           }
         }
       } catch (err) {
