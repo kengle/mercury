@@ -1,3 +1,4 @@
+import path from "node:path";
 import { ContainerError } from "../agent/container-error.js";
 import { AgentContainerRunner } from "../agent/container-runner.js";
 import { type AppConfig, resolveProjectPath } from "../config.js";
@@ -16,6 +17,7 @@ import type {
   MessageAttachment,
   MessageSender,
 } from "../types.js";
+import { compactSession } from "./compact.js";
 import { GroupQueue } from "./group-queue.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { type RouteResult, routeInput } from "./router.js";
@@ -107,7 +109,7 @@ export class MercuryCoreRuntime {
     });
 
     if (route.type === "command") {
-      const reply = this.executeCommand(message.groupId, route.command);
+      const reply = await this.executeCommand(message.groupId, route.command);
       return { ...route, result: { reply, files: [] } };
     }
 
@@ -191,7 +193,10 @@ export class MercuryCoreRuntime {
     return this.rateLimiter.isAllowed(groupId, userId, effectiveLimit);
   }
 
-  private executeCommand(groupId: string, command: string): string {
+  private async executeCommand(
+    groupId: string,
+    command: string,
+  ): Promise<string> {
     switch (command) {
       case "stop": {
         const stopped = this.containerRunner.abort(groupId);
@@ -202,8 +207,17 @@ export class MercuryCoreRuntime {
         return "No active run.";
       }
       case "compact": {
+        const safeGroup = groupId.replace(/[^a-zA-Z0-9-_]/g, "_");
+        const workspace = path.resolve(this.config.groupsDir, safeGroup);
+        const sessionFile = path.join(workspace, ".mercury.session.jsonl");
+        const result = await compactSession(sessionFile, this.config);
         this.db.setSessionBoundaryToLatest(groupId);
-        return "Compacted.";
+        if (result.compacted) {
+          return "Compacted.";
+        }
+        return result.error
+          ? `Compact: ${result.error}`
+          : "Nothing to compact.";
       }
       default:
         return `Unknown command: ${command}`;
