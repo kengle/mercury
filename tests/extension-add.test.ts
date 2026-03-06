@@ -27,7 +27,10 @@ let extensionsDir: string;
 let globalDir: string;
 
 beforeEach(() => {
-  testDir = join(tmpdir(), `mercury-add-test-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  testDir = join(
+    tmpdir(),
+    `mercury-add-test-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+  );
   extensionsDir = join(testDir, ".mercury", "extensions");
   globalDir = join(testDir, ".mercury", "global");
   mkdirSync(extensionsDir, { recursive: true });
@@ -38,7 +41,11 @@ afterEach(() => {
   rmSync(testDir, { recursive: true, force: true });
 });
 
-function createTestExtension(dir: string, name: string, opts?: { skill?: boolean; packageJson?: boolean }): string {
+function createTestExtension(
+  dir: string,
+  name: string,
+  opts?: { skill?: boolean; packageJson?: boolean },
+): string {
   const extDir = join(dir, name);
   mkdirSync(extDir, { recursive: true });
   writeFileSync(
@@ -63,7 +70,10 @@ mrctl ${name} do-stuff
     );
   }
   if (opts?.packageJson) {
-    writeFileSync(join(extDir, "package.json"), JSON.stringify({ name, version: "1.0.0" }));
+    writeFileSync(
+      join(extDir, "package.json"),
+      JSON.stringify({ name, version: "1.0.0" }),
+    );
   }
   return extDir;
 }
@@ -192,7 +202,9 @@ describe("extension listing", () => {
     createTestExtension(extensionsDir, "ext-b");
 
     const entries = [];
-    for (const entry of require("node:fs").readdirSync(extensionsDir, { withFileTypes: true })) {
+    for (const entry of require("node:fs").readdirSync(extensionsDir, {
+      withFileTypes: true,
+    })) {
       if (!entry.isDirectory()) continue;
       if (!VALID_EXT_NAME_RE.test(entry.name)) continue;
       if (RESERVED_EXTENSION_NAMES.has(entry.name)) continue;
@@ -210,7 +222,9 @@ describe("extension listing", () => {
     createTestExtension(extensionsDir, "valid-ext");
 
     const entries = [];
-    for (const entry of require("node:fs").readdirSync(extensionsDir, { withFileTypes: true })) {
+    for (const entry of require("node:fs").readdirSync(extensionsDir, {
+      withFileTypes: true,
+    })) {
       if (!entry.isDirectory()) continue;
       if (!existsSync(join(extensionsDir, entry.name, "index.ts"))) continue;
       entries.push(entry.name);
@@ -227,6 +241,8 @@ describe("extension listing", () => {
     const descMatch = content.match(/^description:\s*(.+?)(?:\n[a-z]|\n---)/ms);
 
     expect(descMatch).toBeTruthy();
-    expect(descMatch![1].replace(/\n\s*/g, " ").trim()).toBe("Test extension for desc-ext");
+    expect(descMatch![1].replace(/\n\s*/g, " ").trim()).toBe(
+      "Test extension for desc-ext",
+    );
   });
 });
