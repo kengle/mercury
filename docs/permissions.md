@@ -168,7 +168,7 @@ This registers a permission named after the extension (e.g., `napkin`). The beha
 - **Per-space overrides** still take precedence over defaults
 - **Built-in permission names** cannot be overridden by extensions
 
-The agent uses `mrctl ext list` to discover available extensions, and `mrctl <ext-name> <args>` to run extension CLIs. Permission is checked before execution.
+Extension CLIs are called directly by the agent in bash. Permission enforcement is handled by a pi extension that blocks denied CLIs at the bash tool level, based on the caller's role and the `MERCURY_DENIED_CLIS` environment variable set by Mercury's runtime.
 
 ### API
 

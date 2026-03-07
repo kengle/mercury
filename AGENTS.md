@@ -225,7 +225,7 @@ Key types are in `src/extensions/types.ts`. See [docs/extensions.md](docs/extens
 
 `mrctl` has two types of commands:
 - **Built-in**: `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` — HTTP calls to host API
-- **Extension**: `mrctl <ext-name> <args>` — permission check then local CLI exec in container
+- **Extension**: Called directly in bash (e.g., `napkin search "query"`) — RBAC enforced by pi extension at bash level
 
 Built-in names are reserved — extensions cannot collide with them.
 
