@@ -197,8 +197,7 @@ mrctl spaces list|name|delete
 mrctl conversations list [--unlinked]
 mrctl stop
 mrctl compact
-mrctl ext list                # List installed extensions
-mrctl <extension> [args...]   # Run extension CLI (permission-gated)
+
 ```
 
 

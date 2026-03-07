@@ -67,7 +67,7 @@ mercury.cli({ name: "napkin", install: "bun add -g napkin-ai" });
 - `name` — binary name (should match extension name)
 - `install` — shell command run as a Dockerfile `RUN` step
 
-Mercury auto-generates a derived Docker image with all extension CLIs installed. The agent invokes them via `mrctl <ext-name> <args>`.
+Mercury auto-generates a derived Docker image with all extension CLIs installed. The agent calls them directly in bash. Permission enforcement is handled by a built-in pi extension that blocks denied CLIs based on the caller's role.
 
 Can only be called once per extension.
 
@@ -258,8 +258,7 @@ Mercury builds this image on startup (cached by content hash). If no extensions 
 The agent discovers extension CLIs via skills (SKILL.md files) and invokes them through `mrctl`:
 
 ```bash
-mrctl napkin search "query"    # permission check → run napkin CLI
-mrctl ext list                 # list installed extensions
+napkin search "query"           # called directly, RBAC enforced at bash level
 ```
 
 ## Built-in Commands vs Extensions
@@ -268,8 +267,8 @@ mrctl ext list                 # list installed extensions
 
 | Type | Examples | How it works |
 |------|----------|--------------|
-| **Built-in** | `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` | HTTP calls to host API |
-| **Extension** | `napkin`, `kb-distill`, any custom | Permission check via API, then local CLI exec |
+| **Built-in** | `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` | HTTP calls to host API via `mrctl` |
+| **Extension** | `napkin`, `pinchtab`, any custom | Called directly in bash, RBAC enforced by pi extension |
 
 Built-in names are reserved — extension registration fails on collision.
 

@@ -23,12 +23,6 @@ type ListExtensionsResponse = {
   extensions: ExtensionSummary[];
 };
 
-type ExtensionAuthResponse = {
-  allowed?: boolean;
-  extension?: string;
-  error?: string;
-};
-
 let tmpDir: string;
 let db: Db;
 let app: Hono<Env>;
@@ -144,60 +138,5 @@ describe("GET /ext", () => {
   test("requires auth headers", async () => {
     const res = await app.request("/ext");
     expect(res.status).toBe(400);
-  });
-});
-
-// ─── POST /ext/:name/auth ─────────────────────────────────────────────────
-
-describe("POST /ext/:name/auth", () => {
-  test("allows admin for extension with permission", async () => {
-    const res = await app.request("/ext/napkin/auth", {
-      method: "POST",
-      headers: headers("admin1"),
-    });
-    expect(res.status).toBe(200);
-    const body = (await res.json()) as ExtensionAuthResponse;
-    expect(body.allowed).toBe(true);
-    expect(body.extension).toBe("napkin");
-  });
-
-  test("returns 404 for unknown extension", async () => {
-    const res = await app.request("/ext/nonexistent/auth", {
-      method: "POST",
-      headers: headers(),
-    });
-    expect(res.status).toBe(404);
-    const body = (await res.json()) as ExtensionAuthResponse;
-    expect(body.error).toContain("Unknown extension");
-  });
-
-  test("returns 400 for extension without CLI", async () => {
-    const res = await app.request("/ext/kb-distill/auth", {
-      method: "POST",
-      headers: headers(),
-    });
-    expect(res.status).toBe(400);
-    const body = (await res.json()) as ExtensionAuthResponse;
-    expect(body.error).toContain("has no CLI");
-  });
-
-  test("returns 403 when caller lacks permission", async () => {
-    // "nobody" has no role assignments, resolves to "member"
-    // napkin has defaultRoles ["admin", "member"] so member should have it
-    // But we need a case where permission is denied. Let's register a restricted extension.
-    // Actually, napkin defaultRoles includes member, so let's test with a user
-    // whose role doesn't include the permission.
-
-    // Override napkin permissions to admin-only for this test
-    db.ensureSpace("test-group");
-    db.setSpaceConfig("test-group", "role.member.permissions", "prompt");
-
-    const res = await app.request("/ext/napkin/auth", {
-      method: "POST",
-      headers: headers("nobody", "test-group"),
-    });
-    expect(res.status).toBe(403);
-    const body = (await res.json()) as ExtensionAuthResponse;
-    expect(body.error).toContain("napkin");
   });
 });

@@ -1,7 +1,5 @@
 #!/usr/bin/env bun
 
-import { RESERVED_EXTENSION_NAMES } from "../extensions/reserved.js";
-
 const API_URL = process.env.API_URL;
 const CALLER_ID = process.env.CALLER_ID;
 const SPACE_ID = process.env.SPACE_ID;
@@ -60,13 +58,6 @@ Built-in commands:
   mrctl conversations list
   mrctl stop
   mrctl compact
-  mrctl ext list
-
-Extension commands:
-  mrctl <extension> [args...]    Run an extension CLI (permission-gated)
-
-Run 'mrctl ext list' to see installed extensions.
-
 Environment:
   API_URL       Host API base URL
   CALLER_ID     Platform user ID of the caller
@@ -87,69 +78,6 @@ function parseFlag(args: string[], flag: string): string | undefined {
   return args[idx + 1];
 }
 
-// Built-in command names — anything else is dispatched as an extension.
-// Includes help flags that aren't in reserved names.
-const BUILTINS = new Set([...RESERVED_EXTENSION_NAMES, "--help", "-h"]);
-
-async function runExtension(name: string, extArgs: string[]): Promise<void> {
-  // 1. Permission check via host API
-  let authRes: Response;
-  try {
-    authRes = await fetch(`${API_URL}/api/ext/${name}/auth`, {
-      method: "POST",
-      headers,
-    });
-  } catch (err) {
-    fatal(
-      `Failed to reach host API: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
-
-  if (authRes.status === 404) {
-    fatal(`unknown command '${name}'. Run 'mrctl help' for usage.`);
-  }
-
-  if (authRes.status === 403) {
-    fatal(`permission denied. You need the '${name}' permission.`);
-  }
-
-  if (authRes.status === 400) {
-    const data = (await authRes.json()) as { error?: string };
-    fatal(data.error ?? `Extension '${name}' has no CLI`);
-  }
-
-  if (!authRes.ok) {
-    fatal(`Auth check failed: ${authRes.status}`);
-  }
-
-  // 2. Run CLI locally in container
-  const cwd = process.env.MERCURY_WORKSPACE ?? process.cwd();
-  const proc = Bun.spawn([name, ...extArgs], {
-    cwd,
-    env: process.env,
-    stdout: "pipe",
-    stderr: "pipe",
-  });
-
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-
-  if (stderr) process.stderr.write(stderr);
-  if (stdout) process.stdout.write(stdout);
-
-  // Check if CLI was found
-  if (exitCode === 127 || (exitCode !== 0 && stderr.includes("not found"))) {
-    process.stderr.write(
-      `error: '${name}' CLI not found. The extension may require an image rebuild.\n`,
-    );
-  }
-
-  process.exit(exitCode);
-}
-
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) usage();
@@ -157,42 +85,9 @@ async function main() {
   const cmd = args[0];
   const sub = args[1];
 
-  // Extension dispatch — anything not a built-in
-  if (!BUILTINS.has(cmd)) {
-    await runExtension(cmd, args.slice(1));
-    return;
-  }
-
   switch (cmd) {
     case "whoami": {
       print(await api("GET", "/api/whoami"));
-      break;
-    }
-
-    case "ext": {
-      if (sub !== "list") {
-        fatal("Usage: mrctl ext list");
-      }
-      const data = (await api("GET", "/api/ext")) as {
-        extensions: Array<{
-          name: string;
-          hasCli: boolean;
-          hasSkill: boolean;
-          permission: string | null;
-        }>;
-      };
-      if (data.extensions.length === 0) {
-        process.stdout.write("No extensions installed.\n");
-      } else {
-        for (const ext of data.extensions) {
-          const parts: string[] = [];
-          if (ext.hasCli) parts.push("CLI");
-          if (ext.hasSkill) parts.push("Skill");
-          if (!ext.hasCli && !ext.hasSkill) parts.push("Job");
-          const caps = parts.join(" + ");
-          process.stdout.write(`${ext.name.padEnd(16)}${caps}\n`);
-        }
-      }
       break;
     }
 

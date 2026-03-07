@@ -16,4 +16,4 @@ mrctl permissions set <role> <perm1,perm2,...>
 
 Conversation management uses the existing space permissions: `spaces.list` for listing conversations, `spaces.rename` for linking/unlinking, and `spaces.delete` for deleting the current space.
 
-Extension permissions are also available — run `mrctl ext list` to see installed extensions. Each extension adds its own permission (e.g., `napkin`).
+Extension permissions are also available. Each extension adds its own permission (e.g., `napkin`). Extension CLIs are called directly in bash — permission enforcement is automatic.
