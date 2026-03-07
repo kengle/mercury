@@ -49,7 +49,7 @@ export function setupAdapters(config: AppConfig): Record<string, Adapter> {
           | "MultiTenant"
           | undefined) ?? "SingleTenant",
       appTenantId: process.env.MERCURY_TEAMS_APP_TENANT_ID,
-      userName: config.chatSdkUserName,
+      userName: config.botUsername,
     });
   }
 
@@ -60,13 +60,13 @@ export function setupAdapters(config: AppConfig): Record<string, Adapter> {
       );
     }
     adapters.discord = createDiscordNativeAdapter({
-      userName: config.chatSdkUserName,
+      userName: config.botUsername,
     });
   }
 
   if (config.enableWhatsApp) {
     adapters.whatsapp = createWhatsAppBaileysAdapter({
-      userName: config.chatSdkUserName,
+      userName: config.botUsername,
       authDir: resolveProjectPath(config.whatsappAuthDir),
       mediaEnabled: config.mediaEnabled,
       mediaMaxSizeBytes: config.mediaMaxSizeMb * 1024 * 1024,

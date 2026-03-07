@@ -107,7 +107,7 @@ async function main() {
   }
 
   const normalizeCtx: NormalizeContext = {
-    botUserName: config.chatSdkUserName,
+    botUserName: config.botUsername,
     getWorkspace: (spaceId) =>
       ensureSpaceWorkspace(resolveProjectPath(config.spacesDir), spaceId),
     media: {
@@ -208,7 +208,7 @@ async function main() {
   });
 
   const server = Bun.serve({
-    port: config.chatSdkPort,
+    port: config.port,
     fetch: app.fetch,
   });
 
