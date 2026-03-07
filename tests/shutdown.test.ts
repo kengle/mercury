@@ -3,12 +3,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AppConfig } from "../src/config.js";
-import { GroupQueue } from "../src/core/group-queue.js";
 import { MercuryCoreRuntime } from "../src/core/runtime.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
 
-describe("GroupQueue shutdown", () => {
-  test("cancelAll cancels all pending work across groups", () => {
-    const q = new GroupQueue(1);
+describe("SpaceQueue shutdown", () => {
+  test("cancelAll cancels all pending work across spaces", () => {
+    const q = new SpaceQueue(1);
     // Fill concurrency so further enqueues are pending
     q.enqueue("g1", () => new Promise(() => {})); // never resolves
 
@@ -24,18 +24,18 @@ describe("GroupQueue shutdown", () => {
   });
 
   test("cancelAll returns 0 when nothing is pending", () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     expect(q.cancelAll()).toBe(0);
   });
 
   test("waitForActive resolves immediately when nothing active", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     const result = await q.waitForActive(100);
     expect(result).toBe(true);
   });
 
   test("waitForActive waits for active work to finish", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     let resolve!: () => void;
     const workDone = new Promise<void>((r) => {
       resolve = r;
@@ -59,7 +59,7 @@ describe("GroupQueue shutdown", () => {
   });
 
   test("waitForActive returns false on timeout", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     // Work that never finishes
     q.enqueue("g1", () => new Promise(() => {}));
 
@@ -90,7 +90,7 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
       admins: "",
       dbPath: path.join(dir, "state.db"),
       globalDir: path.join(dir, "global"),
-      groupsDir: path.join(dir, "groups"),
+      spacesDir: path.join(dir, "spaces"),
       whatsappAuthDir: path.join(dir, "wa-auth"),
     };
   }
@@ -109,14 +109,14 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
     core.startScheduler();
 
     // Write something to DB to confirm it's open
-    core.db.ensureGroup("test-group");
+    core.db.ensureSpace("test-group");
 
     await core.shutdown(5000);
 
     expect(core.isShuttingDown).toBe(true);
 
     // DB should be closed — further writes should throw
-    expect(() => core.db.ensureGroup("another")).toThrow();
+    expect(() => core.db.ensureSpace("another")).toThrow();
   });
 
   test("shutdown is idempotent — second call is a no-op", async () => {
@@ -157,7 +157,7 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
 
     expect(order).toEqual(["hook1", "hook2"]);
     // DB should still be closed despite hook error
-    expect(() => core.db.ensureGroup("x")).toThrow();
+    expect(() => core.db.ensureSpace("x")).toThrow();
   });
 
   test("shutdown cancels pending queue entries", async () => {
@@ -192,7 +192,7 @@ describe("AgentContainerRunner.killAll", () => {
     });
 
     // Simulate killAll
-    for (const [_groupId, proc] of running) {
+    for (const [_spaceId, proc] of running) {
       proc.kill("SIGTERM");
     }
 

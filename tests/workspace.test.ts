@@ -3,8 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import {
-  ensureGroupWorkspace,
   ensurePiResourceDir,
+  ensureSpaceWorkspace,
 } from "../src/storage/memory.js";
 
 let tmpDir: string;
@@ -53,14 +53,14 @@ describe("ensurePiResourceDir", () => {
   });
 });
 
-describe("ensureGroupWorkspace", () => {
-  test("creates group workspace with sanitized name", () => {
-    const groupsDir = path.join(tmpDir, "groups");
-    fs.mkdirSync(groupsDir, { recursive: true });
+describe("ensureSpaceWorkspace", () => {
+  test("creates space workspace using the slug directly", () => {
+    const spacesDir = path.join(tmpDir, "spaces");
+    fs.mkdirSync(spacesDir, { recursive: true });
 
-    const dir = ensureGroupWorkspace(groupsDir, "whatsapp:123@s.whatsapp.net");
+    const dir = ensureSpaceWorkspace(spacesDir, "main");
 
-    expect(dir).toBe(path.join(groupsDir, "whatsapp_123_s_whatsapp_net"));
+    expect(dir).toBe(path.join(spacesDir, "main"));
     expect(fs.existsSync(dir)).toBe(true);
     expect(fs.existsSync(path.join(dir, "AGENTS.md"))).toBe(true);
     expect(fs.existsSync(path.join(dir, ".pi/extensions"))).toBe(true);
@@ -68,45 +68,45 @@ describe("ensureGroupWorkspace", () => {
     expect(fs.existsSync(path.join(dir, ".pi/prompts"))).toBe(true);
   });
 
-  test("sanitizes special characters in group ID", () => {
-    const groupsDir = path.join(tmpDir, "groups");
-    fs.mkdirSync(groupsDir, { recursive: true });
+  test("preserves the provided space slug", () => {
+    const spacesDir = path.join(tmpDir, "spaces");
+    fs.mkdirSync(spacesDir, { recursive: true });
 
-    const dir = ensureGroupWorkspace(groupsDir, "slack:C08ABC/DEF");
-    expect(path.basename(dir)).toBe("slack_C08ABC_DEF");
+    const dir = ensureSpaceWorkspace(spacesDir, "work-project");
+    expect(path.basename(dir)).toBe("work-project");
   });
 
   test("preserves safe characters", () => {
-    const groupsDir = path.join(tmpDir, "groups");
-    fs.mkdirSync(groupsDir, { recursive: true });
+    const spacesDir = path.join(tmpDir, "spaces");
+    fs.mkdirSync(spacesDir, { recursive: true });
 
-    const dir = ensureGroupWorkspace(groupsDir, "main");
+    const dir = ensureSpaceWorkspace(spacesDir, "main");
     expect(path.basename(dir)).toBe("main");
   });
 
-  test("does not overwrite existing group workspace", () => {
-    const groupsDir = path.join(tmpDir, "groups");
-    fs.mkdirSync(groupsDir, { recursive: true });
+  test("does not overwrite existing space workspace", () => {
+    const spacesDir = path.join(tmpDir, "spaces");
+    fs.mkdirSync(spacesDir, { recursive: true });
 
-    const dir = ensureGroupWorkspace(groupsDir, "test-group");
-    fs.writeFileSync(path.join(dir, "AGENTS.md"), "group instructions");
+    const dir = ensureSpaceWorkspace(spacesDir, "test-group");
+    fs.writeFileSync(path.join(dir, "AGENTS.md"), "space instructions");
 
-    const dir2 = ensureGroupWorkspace(groupsDir, "test-group");
+    const dir2 = ensureSpaceWorkspace(spacesDir, "test-group");
     expect(dir2).toBe(dir);
     expect(fs.readFileSync(path.join(dir2, "AGENTS.md"), "utf8")).toBe(
-      "group instructions",
+      "space instructions",
     );
   });
 });
 
 describe("full workspace structure", () => {
-  test("scaffolds global + groups + main correctly", () => {
+  test("scaffolds global + spaces + main correctly", () => {
     const dataDir = path.join(tmpDir, ".mercury");
     const globalDir = path.join(dataDir, "global");
-    const groupsDir = path.join(dataDir, "groups");
+    const spacesDir = path.join(dataDir, "spaces");
 
     ensurePiResourceDir(globalDir);
-    ensureGroupWorkspace(groupsDir, "main");
+    ensureSpaceWorkspace(spacesDir, "main");
 
     // Global
     expect(fs.existsSync(path.join(globalDir, "AGENTS.md"))).toBe(true);
@@ -114,19 +114,19 @@ describe("full workspace structure", () => {
     expect(fs.existsSync(path.join(globalDir, ".pi/skills"))).toBe(true);
 
     // Main
-    expect(fs.existsSync(path.join(groupsDir, "main/AGENTS.md"))).toBe(true);
-    expect(fs.existsSync(path.join(groupsDir, "main/.pi/extensions"))).toBe(
+    expect(fs.existsSync(path.join(spacesDir, "main/AGENTS.md"))).toBe(true);
+    expect(fs.existsSync(path.join(spacesDir, "main/.pi/extensions"))).toBe(
       true,
     );
 
-    // Groups root has no AGENTS.md (not scaffolded)
-    expect(fs.existsSync(path.join(groupsDir, "AGENTS.md"))).toBe(false);
+    // Spaces root has no AGENTS.md (not scaffolded)
+    expect(fs.existsSync(path.join(spacesDir, "AGENTS.md"))).toBe(false);
   });
 
-  test("adding a new group creates its workspace", () => {
-    const groupsDir = path.join(tmpDir, "groups");
+  test("adding a new space creates its workspace", () => {
+    const spacesDir = path.join(tmpDir, "spaces");
 
-    const dir = ensureGroupWorkspace(groupsDir, "new-chat");
+    const dir = ensureSpaceWorkspace(spacesDir, "new-chat");
 
     expect(fs.existsSync(path.join(dir, "AGENTS.md"))).toBe(true);
     expect(fs.existsSync(path.join(dir, ".pi/extensions"))).toBe(true);

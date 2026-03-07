@@ -11,7 +11,6 @@ import { createDashboardRoutes } from "./core/routes/dashboard.js";
 import type { MercuryCoreRuntime } from "./core/runtime.js";
 import type { ConfigRegistry } from "./extensions/config-registry.js";
 import type { ExtensionRegistry } from "./extensions/loader.js";
-import type { MercuryExtensionContext } from "./extensions/types.js";
 import { logger } from "./logger.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));

@@ -34,7 +34,7 @@ export interface MercuryEvents {
   startup: StartupEvent;
   /** Fired when Mercury is shutting down. */
   shutdown: ShutdownEvent;
-  /** Fired when a group workspace directory is created or ensured. */
+  /** Fired when a space workspace directory is created or ensured. */
   workspace_init: WorkspaceInitEvent;
   /** Fired just before a container is spawned for a message. */
   before_container: BeforeContainerEvent;
@@ -47,26 +47,26 @@ export type StartupEvent = Record<string, never>;
 export type ShutdownEvent = Record<string, never>;
 
 export interface WorkspaceInitEvent {
-  /** The group this workspace belongs to. */
-  groupId: string;
+  /** The space this workspace belongs to. */
+  spaceId: string;
   /** Absolute path to the workspace directory. */
   workspace: string;
 }
 
 export interface BeforeContainerEvent {
-  /** The group the message belongs to. */
-  groupId: string;
+  /** The space the message belongs to. */
+  spaceId: string;
   /** The user's prompt. */
   prompt: string;
   /** Platform-specific caller identifier. */
   callerId: string;
-  /** Absolute path to the group workspace. */
+  /** Absolute path to the space workspace. */
   workspace: string;
 }
 
 export interface AfterContainerEvent {
-  /** The group the message belongs to. */
-  groupId: string;
+  /** The space the message belongs to. */
+  spaceId: string;
   /** The original user prompt. */
   prompt: string;
   /** The agent's reply (empty string on error). */
@@ -137,7 +137,7 @@ export interface JobDef {
 // Config
 // ---------------------------------------------------------------------------
 
-/** Definition for a per-group config key registered by an extension. */
+/** Definition for a per-space config key registered by an extension. */
 export interface ConfigDef {
   /** Human-readable description shown in `mrctl config get`. */
   description: string;
@@ -230,7 +230,7 @@ export interface MercuryExtensionAPI {
   job(name: string, def: JobDef): void;
 
   /**
-   * Register a per-group config key. Namespaced to the extension automatically.
+   * Register a per-space config key. Namespaced to the extension automatically.
    *
    * @example
    * mercury.config("enabled", { description: "Enable for this group", default: "true" });

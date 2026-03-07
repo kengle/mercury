@@ -4,8 +4,8 @@ import path from "node:path";
 import type { MessageAttachment, StoredMessage } from "../types.js";
 
 type Payload = {
-  groupId: string;
-  groupWorkspace: string;
+  spaceId: string;
+  spaceWorkspace: string;
   messages: StoredMessage[];
   prompt: string;
   attachments?: MessageAttachment[];
@@ -47,7 +47,7 @@ function formatAttachments(
 
   const entries = attachments.map((att) => {
     // Convert host path to container path
-    const containerPath = att.path.replace(/^.*\/groups\//, "/groups/");
+    const containerPath = att.path.replace(/^.*\/spaces\//, "/spaces/");
 
     const attrs = [
       `type="${att.type}"`,
@@ -76,7 +76,7 @@ function buildPrompt(payload: Payload): string {
     .filter((m) => m.role === "ambient")
     .map((m) => {
       const ts = formatContextTimestamp(m.createdAt);
-      return `  <message role="group" timestamp="${ts}">\n${m.content}\n  </message>`;
+      return `  <message role="space" timestamp="${ts}">\n${m.content}\n  </message>`;
     });
 
   if (ambientEntries.length > 0) {
@@ -102,7 +102,7 @@ function buildPrompt(payload: Payload): string {
 function runPi(payload: Payload): Promise<string> {
   return new Promise((resolve, reject) => {
     const sessionFile = path.join(
-      payload.groupWorkspace,
+      payload.spaceWorkspace,
       ".mercury.session.jsonl",
     );
 
@@ -127,7 +127,7 @@ function runPi(payload: Payload): Promise<string> {
     ];
 
     const proc = spawn("pi", args, {
-      cwd: payload.groupWorkspace,
+      cwd: payload.spaceWorkspace,
       stdio: ["ignore", "pipe", "pipe"],
       env: process.env,
     });

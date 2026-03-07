@@ -87,7 +87,7 @@ const buffer = await downloadMediaMessage(
 createWhatsAppBaileysAdapter({
   mediaEnabled: true,
   mediaMaxSizeBytes: 10 * 1024 * 1024,
-  getGroupWorkspace: (groupId) => ensureGroupWorkspace(groupsDir, groupId),
+  getWorkspace: (spaceId) => ensureSpaceWorkspace(spacesDir, spaceId),
 });
 ```
 

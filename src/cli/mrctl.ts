@@ -4,7 +4,7 @@ import { RESERVED_EXTENSION_NAMES } from "../extensions/reserved.js";
 
 const API_URL = process.env.API_URL;
 const CALLER_ID = process.env.CALLER_ID;
-const GROUP_ID = process.env.GROUP_ID;
+const SPACE_ID = process.env.SPACE_ID;
 
 function fatal(msg: string): never {
   process.stderr.write(`error: ${msg}\n`);
@@ -13,11 +13,11 @@ function fatal(msg: string): never {
 
 if (!API_URL) fatal("API_URL not set");
 if (!CALLER_ID) fatal("CALLER_ID not set");
-if (!GROUP_ID) fatal("GROUP_ID not set");
+if (!SPACE_ID) fatal("SPACE_ID not set");
 
 const headers: Record<string, string> = {
   "x-mercury-caller": CALLER_ID,
-  "x-mercury-group": GROUP_ID,
+  "x-mercury-space": SPACE_ID,
   "content-type": "application/json",
 };
 
@@ -56,7 +56,8 @@ Built-in commands:
   mrctl config get|set
   mrctl roles list|grant|revoke
   mrctl permissions show|set
-  mrctl groups list|name|delete
+  mrctl spaces list|name|delete
+  mrctl conversations list
   mrctl stop
   mrctl compact
   mrctl ext list
@@ -69,7 +70,7 @@ Run 'mrctl ext list' to see installed extensions.
 Environment:
   API_URL       Host API base URL
   CALLER_ID     Platform user ID of the caller
-  GROUP_ID      Current group ID
+  SPACE_ID      Current space ID
 `);
   process.exit(1);
 }
@@ -324,40 +325,65 @@ async function main() {
       break;
     }
 
-    case "groups": {
+    case "spaces": {
       if (!sub) usage();
       switch (sub) {
         case "list": {
-          const data = (await api("GET", "/api/groups")) as {
-            groups: Array<{ id: string; title: string }>;
+          const data = (await api("GET", "/api/spaces")) as {
+            spaces: Array<{ id: string; name: string; tags: string | null }>;
           };
-          for (const g of data.groups) {
-            const name = g.title !== g.id ? g.title : "(unnamed)";
-            process.stdout.write(`${g.id}\t${name}\n`);
+          for (const s of data.spaces) {
+            const tags = s.tags ? ` [${s.tags}]` : "";
+            process.stdout.write(`${s.id}\t${s.name}${tags}\n`);
           }
           break;
         }
         case "name": {
           const name = args[2];
           if (name) {
-            print(await api("PUT", "/api/groups/current/name", { name }));
+            print(await api("PUT", "/api/spaces/current/name", { name }));
           } else {
-            const data = (await api("GET", "/api/groups/current")) as {
-              group: { id: string; title: string };
+            const data = (await api("GET", "/api/spaces/current")) as {
+              space: { id: string; name: string };
             };
-            const displayName =
-              data.group.title !== data.group.id
-                ? data.group.title
-                : "(unnamed)";
-            process.stdout.write(`${displayName}\n`);
+            process.stdout.write(`${data.space.name}\n`);
           }
           break;
         }
         case "delete":
-          print(await api("DELETE", "/api/groups/current"));
+          print(await api("DELETE", "/api/spaces/current"));
           break;
         default:
-          fatal(`Unknown groups subcommand: ${sub}`);
+          fatal(`Unknown spaces subcommand: ${sub}`);
+      }
+      break;
+    }
+
+    case "conversations": {
+      const action = sub ?? "list";
+      switch (action) {
+        case "list": {
+          const data = (await api("GET", "/api/conversations")) as {
+            conversations: Array<{
+              id: number;
+              platform: string;
+              externalId: string;
+              kind: string;
+              observedTitle: string | null;
+              spaceId: string | null;
+            }>;
+          };
+          for (const convo of data.conversations) {
+            const title = convo.observedTitle || convo.externalId;
+            const status = convo.spaceId ? `→ ${convo.spaceId}` : "(unlinked)";
+            process.stdout.write(
+              `${convo.id}\t${convo.platform}\t${title}\t${status}\n`,
+            );
+          }
+          break;
+        }
+        default:
+          fatal(`Unknown conversations subcommand: ${action}`);
       }
       break;
     }

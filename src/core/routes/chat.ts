@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Hono } from "hono";
 import { logger } from "../../logger.js";
-import { ensureGroupWorkspace } from "../../storage/memory.js";
+import { ensureSpaceWorkspace } from "../../storage/memory.js";
 import type { IngressMessage, MessageAttachment } from "../../types.js";
 import { extToMime, mimeToMediaType } from "../media.js";
 import type { MercuryCoreRuntime } from "../runtime.js";
@@ -33,10 +33,10 @@ export function createChatRoute(core: MercuryCoreRuntime): Hono {
         ? body.callerId.trim()
         : "api:anonymous";
 
-    const groupId =
-      typeof body.groupId === "string" && body.groupId.trim()
-        ? body.groupId.trim()
-        : `api:${callerId}`;
+    const spaceId =
+      typeof body.spaceId === "string" && body.spaceId.trim()
+        ? body.spaceId.trim()
+        : "main";
 
     const authorName =
       typeof body.authorName === "string" ? body.authorName.trim() : undefined;
@@ -44,7 +44,7 @@ export function createChatRoute(core: MercuryCoreRuntime): Hono {
     // Save incoming files to inbox/
     const attachments: MessageAttachment[] = [];
     if (Array.isArray(body.files)) {
-      const workspace = ensureGroupWorkspace(core.config.groupsDir, groupId);
+      const workspace = ensureSpaceWorkspace(core.config.spacesDir, spaceId);
       const inboxDir = path.join(workspace, "inbox");
       fs.mkdirSync(inboxDir, { recursive: true });
 
@@ -73,9 +73,14 @@ export function createChatRoute(core: MercuryCoreRuntime): Hono {
       }
     }
 
+    if (!core.db.getSpace(spaceId)) {
+      return c.json({ error: "Space not found" }, 404);
+    }
+
     const ingress: IngressMessage = {
       platform: "api",
-      groupId,
+      spaceId,
+      conversationExternalId: `api:${callerId}`,
       callerId,
       authorName,
       text: body.text.trim(),
@@ -86,7 +91,7 @@ export function createChatRoute(core: MercuryCoreRuntime): Hono {
 
     logger.info("API chat inbound", {
       callerId,
-      groupId,
+      spaceId,
       preview: ingress.text.slice(0, 80),
       fileCount: attachments.length,
     });
@@ -124,7 +129,7 @@ export function createChatRoute(core: MercuryCoreRuntime): Hono {
     }
 
     logger.info("API chat outbound", {
-      groupId,
+      spaceId,
       preview: reply.slice(0, 80),
       fileCount: outputFiles.length,
     });

@@ -4,10 +4,10 @@ Mercury uses an Obsidian-compatible vault for persistent memory. The agent reads
 
 ## How It Works
 
-Each group workspace is a valid Obsidian vault. The agent uses [napkin](https://github.com/michaelliv/napkin-ai) CLI to read, write, and query files.
+Each space workspace is a valid Obsidian vault. The agent uses [napkin](https://github.com/michaelliv/napkin-ai) CLI to read, write, and query files.
 
 ```
-.mercury/groups/<group-id>/
+.mercury/spaces/<space-id>/
 ├── .obsidian/          # Makes it a valid Obsidian vault
 ├── entities/           # Entity pages (people, projects, things)
 ├── daily/              # Daily conversation logs
@@ -25,7 +25,7 @@ Each group workspace is a valid Obsidian vault. The agent uses [napkin](https://
 | `entities/` | Entity files (people, places, projects, concepts) |
 | `daily/` | Daily notes for conversation logs |
 
-The structure is created automatically by the napkin extension's `workspace_init` hook when a group workspace is initialized. See `src/extensions/napkin/index.ts`.
+The structure is created automatically by the napkin extension's `workspace_init` hook when a space workspace is initialized. Conversations do not get their own vaults — multiple platform conversations can link into the same space. See `src/extensions/napkin/index.ts`.
 
 ## Agent Capabilities
 
@@ -112,5 +112,5 @@ No additional configuration needed. The napkin extension is a built-in extension
 To use a shared Obsidian vault across tools, symlink or mount it:
 
 ```bash
-ln -s /path/to/your/vault .mercury/groups/my-group
+ln -s /path/to/your/vault .mercury/spaces/main
 ```

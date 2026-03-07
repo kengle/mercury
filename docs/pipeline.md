@@ -3,7 +3,7 @@
 Mercury connects to chat platforms through **adapters** and **bridges**. Messages flow through a standardized pipeline regardless of platform:
 
 ```
-Platform → Adapter → PlatformBridge.normalize() → handleRawInput() → Container → PlatformBridge.sendReply()
+Platform → Adapter → parseThread() → resolveConversation() → PlatformBridge.normalize() → handleRawInput() → Container → PlatformBridge.sendReply()
 ```
 
 ## Architecture
@@ -18,9 +18,12 @@ Platform (WhatsApp / Slack / Discord)
   │     • Passes data via message metadata
   │
   ├─► Unified handler (src/core/handler.ts)
+  │     • Parse platform thread into an external conversation ID
+  │     • Resolve/create conversation in DB
+  │     • Ignore unlinked conversations
   │     • Pre-route trigger check (cheap, sync)
   │     • Start typing indicator if matched
-  │     • Call bridge.normalize() → IngressMessage
+  │     • Call bridge.normalize(..., spaceId) → IngressMessage
   │     • Start typing for reply-to-bot (detected during normalize)
   │
   ├─► core.handleRawInput(IngressMessage)
@@ -42,9 +45,8 @@ Each platform implements a single `PlatformBridge` interface covering both ingre
 ```typescript
 interface PlatformBridge {
   readonly platform: string;
-  groupId(threadId: string): string;     // Thread → group mapping
-  isDM(threadId: string): boolean;       // DM detection
-  normalize(threadId, message, ctx): Promise<IngressMessage | null>;
+  parseThread(threadId: string): { externalId: string; isDM: boolean };
+  normalize(threadId, message, ctx, spaceId): Promise<IngressMessage | null>;
   sendReply(threadId, text, files?): Promise<void>;
 }
 ```
@@ -66,7 +68,8 @@ Every adapter produces a normalized `IngressMessage`:
 ```typescript
 interface IngressMessage {
   platform: string;
-  groupId: string;
+  spaceId: string;
+  conversationExternalId: string;
   callerId: string;        // "whatsapp:jid", "discord:123", "slack:U123"
   authorName?: string;
   text: string;
@@ -76,7 +79,7 @@ interface IngressMessage {
 }
 ```
 
-All fields are required — no optional booleans or arrays.
+All fields are required — no optional booleans or arrays. `spaceId` is the resolved memory boundary; `conversationExternalId` is the platform-native conversation key used for routing.
 
 ### inbox/ directory
 
@@ -135,7 +138,7 @@ Uses [Baileys](https://github.com/WhiskeySockets/Baileys) for a direct WebSocket
 | Detail | Value |
 |--------|-------|
 | **Connection** | WebSocket (Baileys) |
-| **Group ID** | Full thread ID (e.g., `whatsapp:12345@g.us:12345@g.us`) |
+| **Space ID** | Full thread ID (e.g., `whatsapp:12345@g.us:12345@g.us`) |
 | **DM detection** | Thread ID does not contain `@g.us` |
 | **@mention** | Bot JID mention replaced with configured `userName` in adapter |
 | **Reply-to-bot** | Quoted message participant matches bot JID |
@@ -148,7 +151,7 @@ Uses discord.js with persistent WebSocket gateway.
 | Detail | Value |
 |--------|-------|
 | **Connection** | WebSocket (discord.js) |
-| **Group ID** | Full thread ID (e.g., `discord:guild:channel[:thread]`) |
+| **Space ID** | Full thread ID (e.g., `discord:guild:channel[:thread]`) |
 | **DM detection** | Guild ID is `@me` |
 | **@mention** | `<@botId>` converted to `@userName` in bridge |
 | **Reply-to-bot** | Replied-to message author matches bot ID |
@@ -161,7 +164,7 @@ Uses `@chat-adapter/slack` with webhook-based event delivery.
 | Detail | Value |
 |--------|-------|
 | **Connection** | Webhook (`POST /webhooks/slack`) |
-| **Group ID** | `slack:<channelId>` (channel-level, threads share a group) |
+| **Conversation external ID** | `slack:<channelId>` or `slack:<channelId>:<threadTs>` |
 | **DM detection** | Channel starts with `D` or `G` |
 | **Reply-to-bot** | Not implemented (Slack threading model) |
 | **Media** | Downloaded from `url_private` with bot token auth to `inbox/` |
@@ -189,16 +192,16 @@ Replying to a bot message triggers a response without explicit `@mention`. Works
 ```bash
 mercury chat "hello"
 mercury chat --file photo.jpg "what's in this?"
-mercury chat --group my-project "check status"
+mercury chat --space my-project "check status"
 echo "summarize" | mercury chat
 curl -X POST localhost:8787/chat -H 'Content-Type: application/json' \
   -d '{"text": "hello", "callerId": "api:my-agent"}'
 ```
 
-Request: `{ text, callerId?, groupId?, authorName?, files?: [{ name, data(base64) }] }`
+Request: `{ text, callerId?, spaceId?, authorName?, files?: [{ name, data(base64) }] }`
 Response: `{ reply, files: [{ filename, mimeType, sizeBytes, data(base64) }] }`
 
-Input files are saved to the group's `inbox/`. Output files are read from `outbox/` and returned as base64. Messages are always treated as DMs with `isReplyToBot: true`, so they always trigger a response regardless of trigger mode.
+Input files are saved to the target space's `inbox/`. Output files are read from `outbox/` and returned as base64. Messages are always treated as DMs with `isReplyToBot: true`, so they always trigger a response regardless of trigger mode.
 
 ## Adding a New Platform
 

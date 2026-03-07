@@ -21,16 +21,16 @@ function mockBridge(
     [];
   return {
     platform: "test",
-    groupId: (threadId) => threadId,
-    isDM: () => false,
-    normalize: async (_threadId, message) => {
+    parseThread: (threadId) => ({ externalId: threadId, isDM: false }),
+    normalize: async (_threadId, message, _ctx, spaceId) => {
       if ("normalizeResult" in (overrides ?? {})) {
-        return overrides!.normalizeResult!;
+        return overrides?.normalizeResult ?? null;
       }
       const msg = message as Message;
       return {
         platform: "test",
-        groupId: "test-group",
+        spaceId,
+        conversationExternalId: "test-thread",
         callerId: "test:user1",
         authorName: msg.author.userName,
         text: msg.text,
@@ -58,7 +58,21 @@ function mockCore(handleResult?: {
   return {
     core: {
       db: {
-        getGroupConfig: () => null,
+        getSpaceConfig: () => null,
+        ensureConversation: (
+          _platform: string,
+          externalId: string,
+          kind: string,
+        ) => ({
+          id: 1,
+          platform: "test",
+          externalId,
+          kind,
+          observedTitle: null,
+          spaceId: "space1",
+          firstSeenAt: Date.now(),
+          lastSeenAt: Date.now(),
+        }),
       },
       handleRawInput: async (message: IngressMessage, source: string) => {
         handleCalls.push({ message, source });
@@ -122,7 +136,7 @@ const defaultConfig = {
 
 const defaultCtx: NormalizeContext = {
   botUserName: "mercury",
-  getWorkspace: () => null,
+  getWorkspace: () => "/tmp/test-workspace",
   media: { enabled: false, maxSizeBytes: 0 },
 };
 
@@ -289,7 +303,7 @@ describe("createMessageHandler", () => {
     const bridge = mockBridge({
       normalizeResult: {
         platform: "test",
-        groupId: "test-group",
+        spaceId: "test-group",
         callerId: "test:user1",
         authorName: "User",
         text: "some reply",

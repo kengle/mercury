@@ -41,7 +41,7 @@ export default function(mercury: MercuryExtensionAPI) {
   });
 
   mercury.config("enabled", {
-    description: "Enable napkin for this group",
+    description: "Enable napkin for this space",
     default: "true",
   });
 
@@ -82,7 +82,7 @@ mercury.permission({ defaultRoles: ["admin", "member"] });
 - Permission name = extension name (e.g., `napkin`)
 - `defaultRoles` — roles that get this permission by default
 - `admin` always gets all permissions automatically
-- Per-group overrides in `group_config` take precedence
+- Per-space overrides in `space_config` take precedence
 
 Can only be called once per extension.
 
@@ -114,7 +114,7 @@ mercury.on("workspace_init", async (event, ctx) => {
 |-------|------|-------------|
 | `startup` | After extensions loaded, runtime ready | No |
 | `shutdown` | Mercury shutting down | No |
-| `workspace_init` | Group workspace created/ensured | No |
+| `workspace_init` | Space workspace created/ensured | No |
 | `before_container` | About to spawn container | Yes |
 | `after_container` | Container finished | Yes |
 
@@ -163,11 +163,11 @@ Must specify either `interval` or `cron`, not both. Jobs are started after exten
 
 ### `mercury.config(key, def)`
 
-Register a per-group config key.
+Register a per-space config key.
 
 ```typescript
 mercury.config("enabled", {
-  description: "Enable napkin for this group",
+  description: "Enable napkin for this space",
   default: "true",
   validate: (v) => v === "true" || v === "false",
 });
@@ -262,7 +262,7 @@ mrctl ext list                 # list installed extensions
 
 | Type | Examples | How it works |
 |------|----------|--------------|
-| **Built-in** | `tasks`, `roles`, `permissions`, `config`, `groups`, `stop`, `compact` | HTTP calls to host API |
+| **Built-in** | `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` | HTTP calls to host API |
 | **Extension** | `napkin`, `kb-distill`, any custom | Permission check via API, then local CLI exec |
 
 Built-in names are reserved — extension registration fails on collision.
@@ -276,7 +276,7 @@ mercury.permission({ defaultRoles: ["admin", "member"] });
 ```
 
 - `admin` always gets all permissions
-- Per-group overrides via `mrctl permissions set <role> prompt,napkin,...`
+- Per-space overrides via `mrctl permissions set <role> prompt,napkin,...`
 - See [permissions.md](permissions.md) for the full RBAC system
 
 ## Installation

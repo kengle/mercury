@@ -1,6 +1,6 @@
 # Permissions
 
-Mercury uses role-based access control (RBAC) per group. Each user has a role, and each role has a set of permissions.
+Mercury uses role-based access control (RBAC) per space. Each user has a role, and each role has a set of permissions.
 
 ## How It Works
 
@@ -14,7 +14,7 @@ Message arrives
   │     • Otherwise → "member"
   │
   ├─► Load role's permissions
-  │     • Check group_config for override
+  │     • Check space_config for override
   │     • Fall back to built-in defaults
   │
   └─► Check permission for action
@@ -27,7 +27,7 @@ Message arrives
 | Role | Default Permissions | Description |
 |------|---------------------|-------------|
 | `system` | All | Internal system caller (scheduler, etc.) — not assignable |
-| `admin` | All | Full control over the group |
+| `admin` | All | Full control over the space |
 | `member` | `prompt` | Can chat with the assistant (default for new users) |
 
 Custom roles can be created by assigning permissions to any role name.
@@ -44,23 +44,23 @@ Custom roles can be created by assigning permissions to any role name.
 | `tasks.pause` | Pause scheduled tasks |
 | `tasks.resume` | Resume paused tasks |
 | `tasks.delete` | Delete scheduled tasks |
-| `config.get` | Read group configuration |
-| `config.set` | Modify group configuration |
-| `roles.list` | View roles in the group |
+| `config.get` | Read space configuration |
+| `config.set` | Modify space configuration |
+| `roles.list` | View roles in the space |
 | `roles.grant` | Assign roles to users |
 | `roles.revoke` | Remove roles from users |
 | `permissions.get` | View role permissions |
 | `permissions.set` | Modify role permissions |
-| `groups.list` | View all groups |
-| `groups.rename` | Set group display name |
-| `groups.delete` | Delete current group and all related DB data |
+| `spaces.list` | View all spaces |
+| `spaces.rename` | Rename a space and link/unlink conversations |
+| `spaces.delete` | Delete current space and all related DB data |
 
 ## Managing Roles
 
 The agent uses `mrctl` to manage roles:
 
 ```bash
-# List all roles in the current group
+# List all roles in the current space
 mrctl roles list
 
 # Grant admin role to a user
@@ -75,7 +75,7 @@ mrctl roles revoke 1234567890@s.whatsapp.net
 
 ## Managing Permissions
 
-Permissions are per-role, per-group:
+Permissions are per-role, per-space:
 
 ```bash
 # Show permissions for all roles
@@ -94,29 +94,35 @@ mrctl permissions set moderator prompt,stop,tasks.list,tasks.pause,tasks.resume
 mrctl permissions set taskmaster prompt,tasks.list,tasks.create,tasks.pause,tasks.resume,tasks.delete
 ```
 
-## Managing Groups
+## Managing Spaces
 
-Groups can be listed and renamed via `mrctl`:
+Spaces can be listed and managed via `mrctl`:
 
 ```bash
-# List all groups with their names
-mrctl groups list
+# List all spaces with their names
+mrctl spaces list
 
-# Get current group's display name
-mrctl groups name
+# Get current space's display name
+mrctl spaces name
 
-# Set current group's display name
-mrctl groups name "Startup Buddies"
+# Set current space's display name
+mrctl spaces name "Startup Buddies"
 
-# Delete current group (tasks, messages, roles, config)
-mrctl groups delete
+# Delete current space (tasks, messages, roles, config)
+mrctl spaces delete
+
+# List discovered conversations
+mrctl conversations list
+
+# Show only conversations that are not yet linked
+mrctl conversations list --unlinked
 ```
 
-Group names are stored in the database and shown in logs/dashboard for easier identification (instead of raw IDs like `whatsapp:120363404922156552@g.us`).
+Space names are stored in the database and shown in logs/dashboard for easier identification. Conversations remain platform-native and are linked into spaces. Conversation listing uses `spaces.list`; linking and unlinking use `spaces.rename`.
 
 ## Seeding Admins
 
-Pre-configure admin users via environment variable. They're granted admin on first interaction with each group:
+Pre-configure admin users via environment variable. They're granted admin on first interaction with each space:
 
 ```bash
 MERCURY_ADMINS=1234567890@s.whatsapp.net,0987654321@s.whatsapp.net
@@ -130,8 +136,8 @@ Roles and permissions are stored in SQLite:
 
 | Table | Purpose |
 |-------|---------|
-| `group_roles` | Maps `(group_id, platform_user_id)` → `role` |
-| `group_config` | Stores `role.<name>.permissions` overrides |
+| `space_roles` | Maps `(space_id, platform_user_id)` → `role` |
+| `space_config` | Stores `role.<name>.permissions` overrides |
 
 Built-in defaults (`admin` = all, `member` = prompt) are not stored — they're applied when no override exists.
 
@@ -159,7 +165,7 @@ This registers a permission named after the extension (e.g., `napkin`). The beha
 
 - **Admin** always gets all permissions (built-in + extension)
 - **Extension `defaultRoles`** are respected — if `["member"]` is specified, members get that permission by default
-- **Per-group overrides** still take precedence over defaults
+- **Per-space overrides** still take precedence over defaults
 - **Built-in permission names** cannot be overridden by extensions
 
 The agent uses `mrctl ext list` to discover available extensions, and `mrctl <ext-name> <args>` to run extension CLIs. Permission is checked before execution.
@@ -175,15 +181,15 @@ resetPermissions()                            // Clear registered (test isolatio
 
 ## Scope
 
-Permissions are **per-group**:
+Permissions are **per-space**:
 
-- A user can be `admin` in one group and `member` in another
-- Custom role permissions are group-specific
-- No global roles (except seeded admins, which apply on first interaction per group)
+- A user can be `admin` in one space and `member` in another
+- Custom role permissions are space-specific
+- No global roles (except seeded admins, which apply on first interaction per space)
 
 ## API
 
-### `resolveRole(db, groupId, platformUserId, seededAdmins)`
+### `resolveRole(db, spaceId, platformUserId, seededAdmins)`
 
 Determines a caller's role:
 1. System caller → `"system"`
@@ -191,13 +197,13 @@ Determines a caller's role:
 3. Upsert member record
 4. Return stored role or `"member"`
 
-### `getRolePermissions(db, groupId, role)`
+### `getRolePermissions(db, spaceId, role)`
 
 Returns the permission set for a role:
 1. System role → all permissions
-2. Check `group_config` for `role.<name>.permissions`
+2. Check `space_config` for `role.<name>.permissions`
 3. Fall back to built-in defaults
 
-### `hasPermission(db, groupId, role, permission)`
+### `hasPermission(db, spaceId, role, permission)`
 
 Returns `true` if the role has the specified permission.

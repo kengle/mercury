@@ -29,12 +29,12 @@ const PACKAGE_ROOT = path.join(__dirname, "../..");
 const OOM_EXIT_CODE = 137;
 
 export class AgentContainerRunner {
-  private readonly runningByGroup = new Map<
+  private readonly runningBySpace = new Map<
     string,
     { proc: ChildProcessWithoutNullStreams; containerName: string }
   >();
-  private readonly abortedGroups = new Set<string>();
-  private readonly timedOutGroups = new Set<string>();
+  private readonly abortedSpaces = new Set<string>();
+  private readonly timedOutSpaces = new Set<string>();
   private containerCounter = 0;
   private imageOverride: string | undefined;
 
@@ -75,8 +75,8 @@ export class AgentContainerRunner {
     });
   }
 
-  isRunning(groupId: string): boolean {
-    return this.runningByGroup.has(groupId);
+  isRunning(spaceId: string): boolean {
+    return this.runningBySpace.has(spaceId);
   }
 
   /**
@@ -126,13 +126,13 @@ export class AgentContainerRunner {
 
   /**
    * Kill all running containers using docker kill for reliable termination.
-   * Note: runningByGroup entries are cleaned up by each process's 'close' handler.
+   * Note: runningBySpace entries are cleaned up by each process's 'close' handler.
    * During shutdown the process may exit before those fire, but that's fine —
    * Docker cleans up --rm containers regardless.
    */
   killAll(): void {
-    for (const [groupId, { proc, containerName }] of this.runningByGroup) {
-      this.abortedGroups.add(groupId);
+    for (const [spaceId, { proc, containerName }] of this.runningBySpace) {
+      this.abortedSpaces.add(spaceId);
       try {
         execSync(`docker kill ${containerName}`, { timeout: 5000 });
       } catch {
@@ -143,18 +143,18 @@ export class AgentContainerRunner {
   }
 
   get activeCount(): number {
-    return this.runningByGroup.size;
+    return this.runningBySpace.size;
   }
 
-  getActiveGroups(): string[] {
-    return [...this.runningByGroup.keys()];
+  getActiveSpaces(): string[] {
+    return [...this.runningBySpace.keys()];
   }
 
-  abort(groupId: string): boolean {
-    const entry = this.runningByGroup.get(groupId);
+  abort(spaceId: string): boolean {
+    const entry = this.runningBySpace.get(spaceId);
     if (!entry) return false;
 
-    this.abortedGroups.add(groupId);
+    this.abortedSpaces.add(spaceId);
 
     // Use docker kill for reliable container termination
     try {
@@ -173,8 +173,8 @@ export class AgentContainerRunner {
   }
 
   async reply(input: {
-    groupId: string;
-    groupWorkspace: string;
+    spaceId: string;
+    spaceWorkspace: string;
     messages: StoredMessage[];
     prompt: string;
     callerId: string;
@@ -182,10 +182,10 @@ export class AgentContainerRunner {
     extraEnv?: Record<string, string>;
   }): Promise<ContainerResult> {
     const globalDir = path.resolve(this.config.globalDir);
-    const groupsRoot = path.resolve(this.config.groupsDir);
+    const spacesRoot = path.resolve(this.config.spacesDir);
 
     fs.mkdirSync(globalDir, { recursive: true });
-    fs.mkdirSync(groupsRoot, { recursive: true });
+    fs.mkdirSync(spacesRoot, { recursive: true });
 
     const authFromPi = await getApiKeyFromPiAuthFile({
       provider: this.config.modelProvider,
@@ -224,7 +224,7 @@ export class AgentContainerRunner {
       { key: "HOME", value: "/home/node" },
       { key: "PI_CODING_AGENT_DIR", value: "/home/node/.pi/agent" },
       { key: "CALLER_ID", value: input.callerId },
-      { key: "GROUP_ID", value: input.groupId },
+      { key: "SPACE_ID", value: input.spaceId },
       {
         key: "API_URL",
         value: `http://host.docker.internal:${this.config.chatSdkPort}`,
@@ -248,7 +248,7 @@ export class AgentContainerRunner {
       "--label",
       CONTAINER_LABEL,
       "-v",
-      `${groupsRoot}:/groups`,
+      `${spacesRoot}:/spaces`,
       "-v",
       `${globalDir}:/home/node/.pi/agent`,
       "-v",
@@ -272,12 +272,12 @@ export class AgentContainerRunner {
 
     const payload = {
       ...input,
-      groupWorkspace: input.groupWorkspace.replace(groupsRoot, "/groups"),
+      spaceWorkspace: input.spaceWorkspace.replace(spacesRoot, "/spaces"),
     };
 
     // Create child logger with context for this container run
     const log: Logger = logger.child({
-      groupId: input.groupId,
+      spaceId: input.spaceId,
       container: containerName,
     });
 
@@ -288,7 +288,7 @@ export class AgentContainerRunner {
         stdio: ["pipe", "pipe", "pipe"],
       });
 
-      this.runningByGroup.set(input.groupId, { proc, containerName });
+      this.runningBySpace.set(input.spaceId, { proc, containerName });
 
       // Log container start
       log.info("Container started", { event: "container.start" });
@@ -299,8 +299,8 @@ export class AgentContainerRunner {
 
       // Set up timeout
       timeoutTimer = setTimeout(() => {
-        if (this.runningByGroup.has(input.groupId)) {
-          this.timedOutGroups.add(input.groupId);
+        if (this.runningBySpace.has(input.spaceId)) {
+          this.timedOutSpaces.add(input.spaceId);
           log.warn("Container timeout, killing", {
             event: "container.timeout",
           });
@@ -320,7 +320,7 @@ export class AgentContainerRunner {
           clearTimeout(timeoutTimer);
           timeoutTimer = null;
         }
-        this.runningByGroup.delete(input.groupId);
+        this.runningBySpace.delete(input.spaceId);
       };
 
       proc.stdout.on("data", (chunk: Buffer) => {
@@ -342,27 +342,27 @@ export class AgentContainerRunner {
         const durationMs = Date.now() - startTime;
 
         // Check timeout first (before abort check since timeout sets its own state)
-        if (this.timedOutGroups.has(input.groupId)) {
-          this.timedOutGroups.delete(input.groupId);
+        if (this.timedOutSpaces.has(input.spaceId)) {
+          this.timedOutSpaces.delete(input.spaceId);
           log.warn("Container exited", {
             event: "container.end",
             exitCode: code,
             durationMs,
             reason: "timeout",
           });
-          reject(ContainerError.timeout(input.groupId));
+          reject(ContainerError.timeout(input.spaceId));
           return;
         }
 
-        if (this.abortedGroups.has(input.groupId)) {
-          this.abortedGroups.delete(input.groupId);
+        if (this.abortedSpaces.has(input.spaceId)) {
+          this.abortedSpaces.delete(input.spaceId);
           log.info("Container exited", {
             event: "container.end",
             exitCode: code,
             durationMs,
             reason: "aborted",
           });
-          reject(ContainerError.aborted(input.groupId));
+          reject(ContainerError.aborted(input.spaceId));
           return;
         }
 
@@ -375,7 +375,7 @@ export class AgentContainerRunner {
               durationMs,
               reason: "oom",
             });
-            reject(ContainerError.oom(input.groupId, code));
+            reject(ContainerError.oom(input.spaceId, code));
             return;
           }
 
@@ -417,7 +417,7 @@ export class AgentContainerRunner {
         }
 
         const replyText = parsed.reply ?? "Done.";
-        const files = scanOutbox(input.groupWorkspace, startTime);
+        const files = scanOutbox(input.spaceWorkspace, startTime);
         resolve({ reply: replyText, files });
       });
 

@@ -16,19 +16,18 @@ export class DiscordBridge implements PlatformBridge {
 
   constructor(private readonly adapter: DiscordNativeAdapter) {}
 
-  groupId(threadId: string): string {
-    return threadId;
-  }
-
-  isDM(threadId: string): boolean {
+  parseThread(threadId: string): { externalId: string; isDM: boolean } {
     const parts = threadId.split(":");
-    return parts.length >= 2 && parts[0] === "discord" && parts[1] === "@me";
+    const externalId = parts.slice(1).join(":");
+    const isDM = parts.length >= 2 && parts[1] === "@me";
+    return { externalId, isDM };
   }
 
   async normalize(
     threadId: string,
     message: unknown,
     ctx: NormalizeContext,
+    spaceId: string,
   ): Promise<IngressMessage | null> {
     const msg = message as Message;
     if (msg.author.isMe) return null;
@@ -50,34 +49,35 @@ export class DiscordBridge implements PlatformBridge {
 
     const attachments: MessageAttachment[] = [];
     if (ctx.media.enabled && rawAttachments.length > 0) {
-      const workspace = ctx.getWorkspace(this.groupId(threadId));
-      if (workspace) {
-        const inboxDir = path.join(workspace, "inbox");
-        for (const att of rawAttachments) {
-          if (!att.url) continue;
-          const type = mimeToMediaType(
-            att.mimeType || "application/octet-stream",
-          );
-          const result = await downloadMediaFromUrl(att.url, {
-            type,
-            mimeType: att.mimeType || "application/octet-stream",
-            filename: att.name,
-            expectedSizeBytes: att.size,
-            maxSizeBytes: ctx.media.maxSizeBytes,
-            outputDir: inboxDir,
-          });
-          if (result) attachments.push(result);
-        }
+      const workspace = ctx.getWorkspace(spaceId);
+      const inboxDir = path.join(workspace, "inbox");
+      for (const att of rawAttachments) {
+        if (!att.url) continue;
+        const type = mimeToMediaType(
+          att.mimeType || "application/octet-stream",
+        );
+        const result = await downloadMediaFromUrl(att.url, {
+          type,
+          mimeType: att.mimeType || "application/octet-stream",
+          filename: att.name,
+          expectedSizeBytes: att.size,
+          maxSizeBytes: ctx.media.maxSizeBytes,
+          outputDir: inboxDir,
+        });
+        if (result) attachments.push(result);
       }
     }
 
+    const { externalId, isDM } = this.parseThread(threadId);
+
     return {
       platform: "discord",
-      groupId: this.groupId(threadId),
+      spaceId,
+      conversationExternalId: externalId,
       callerId: `discord:${msg.author.userId || "unknown"}`,
       authorName: msg.author.userName,
       text,
-      isDM: this.isDM(threadId),
+      isDM,
       isReplyToBot,
       attachments,
     };

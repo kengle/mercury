@@ -10,7 +10,7 @@ import {
   registerPermission,
   resetPermissions,
   resolveRole,
-  seededGroups,
+  seededSpaces,
 } from "../src/core/permissions.js";
 import { Db } from "../src/storage/db.js";
 
@@ -20,8 +20,8 @@ let db: Db;
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-test-"));
   db = new Db(path.join(tmpDir, "state.db"));
-  db.ensureGroup("g1");
-  seededGroups.clear();
+  db.ensureSpace("g1");
+  seededSpaces.clear();
   resetPermissions();
 });
 
@@ -71,7 +71,7 @@ describe("getRolePermissions", () => {
   });
 
   test("per-group override replaces defaults", () => {
-    db.setGroupConfig(
+    db.setSpaceConfig(
       "g1",
       "role.member.permissions",
       "prompt,stop,compact",
@@ -86,7 +86,7 @@ describe("getRolePermissions", () => {
   });
 
   test("per-group override ignores invalid permissions", () => {
-    db.setGroupConfig(
+    db.setSpaceConfig(
       "g1",
       "role.member.permissions",
       "prompt,invalid,stop",
@@ -100,7 +100,7 @@ describe("getRolePermissions", () => {
   });
 
   test("custom role with per-group config", () => {
-    db.setGroupConfig(
+    db.setSpaceConfig(
       "g1",
       "role.moderator.permissions",
       "prompt,stop,compact,tasks.list",
@@ -116,14 +116,14 @@ describe("getRolePermissions", () => {
   });
 
   test("empty permissions string results in zero permissions", () => {
-    db.setGroupConfig("g1", "role.member.permissions", "", "system");
+    db.setSpaceConfig("g1", "role.member.permissions", "", "system");
     const perms = getRolePermissions(db, "g1", "member");
     expect(perms.size).toBe(0);
   });
 
   test("override for one group does not affect another", () => {
-    db.ensureGroup("g2");
-    db.setGroupConfig("g1", "role.member.permissions", "prompt,stop", "system");
+    db.ensureSpace("g2");
+    db.setSpaceConfig("g1", "role.member.permissions", "prompt,stop", "system");
 
     const g1perms = getRolePermissions(db, "g1", "member");
     const g2perms = getRolePermissions(db, "g2", "member");
@@ -188,7 +188,7 @@ describe("dynamic permissions", () => {
   test("per-group override takes precedence over extension defaults", () => {
     registerPermission("napkin", { defaultRoles: ["member"] });
     // Override member to only have prompt (no napkin)
-    db.setGroupConfig("g1", "role.member.permissions", "prompt", "system");
+    db.setSpaceConfig("g1", "role.member.permissions", "prompt", "system");
     const perms = getRolePermissions(db, "g1", "member");
     expect(perms.has("prompt")).toBe(true);
     expect(perms.has("napkin")).toBe(false);
@@ -196,7 +196,7 @@ describe("dynamic permissions", () => {
 
   test("per-group override can include extension permissions", () => {
     registerPermission("napkin", { defaultRoles: [] });
-    db.setGroupConfig(
+    db.setSpaceConfig(
       "g1",
       "role.member.permissions",
       "prompt,napkin",

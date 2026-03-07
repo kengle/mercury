@@ -20,7 +20,7 @@ const CHAT_COMMANDS: Record<string, string> = {
 
 export function routeInput(input: {
   text: string;
-  groupId: string;
+  spaceId: string;
   callerId: string;
   isDM: boolean;
   isReplyToBot: boolean;
@@ -37,12 +37,12 @@ export function routeInput(input: {
         .filter(Boolean)
     : [];
 
-  input.db.ensureGroup(input.groupId);
+  input.db.ensureSpace(input.spaceId);
 
   // Resolve role (seeds admins + auto-upserts member)
   const role = resolveRole(
     input.db,
-    input.groupId,
+    input.spaceId,
     input.callerId,
     seededAdmins,
   );
@@ -52,7 +52,7 @@ export function routeInput(input: {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const triggerConfig = loadTriggerConfig(input.db, input.groupId, {
+  const triggerConfig = loadTriggerConfig(input.db, input.spaceId, {
     patterns: defaultPatterns,
     match: input.config.triggerMatch,
   });
@@ -68,11 +68,11 @@ export function routeInput(input: {
   // Check for commands after trigger (e.g. "@Pi stop", "Pi compact")
   const cmdWord = prompt.toLowerCase().trim();
   if (cmdWord in CHAT_COMMANDS) {
-    return gateCommand(input.db, input.groupId, cmdWord, role, input.callerId);
+    return gateCommand(input.db, input.spaceId, cmdWord, role, input.callerId);
   }
 
   // Check prompt permission
-  if (!hasPermission(input.db, input.groupId, role, "prompt")) {
+  if (!hasPermission(input.db, input.spaceId, role, "prompt")) {
     return {
       type: "denied",
       reason: "You don't have permission to use the agent in this group.",
@@ -89,7 +89,7 @@ export function routeInput(input: {
 
 function gateCommand(
   db: Db,
-  groupId: string,
+  spaceId: string,
   command: string,
   role: string,
   callerId: string,
@@ -97,7 +97,7 @@ function gateCommand(
   const permission = CHAT_COMMANDS[command];
   if (!permission) return { type: "ignore" };
 
-  if (!hasPermission(db, groupId, role, permission)) {
+  if (!hasPermission(db, spaceId, role, permission)) {
     return {
       type: "denied",
       reason: `You don't have permission to use '${command}'.`,

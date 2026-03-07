@@ -2,6 +2,7 @@ import type { Message, Thread } from "chat";
 import type { AppConfig } from "../config.js";
 import { logger } from "../logger.js";
 import type { NormalizeContext, PlatformBridge } from "../types.js";
+import { inferConversationKind, resolveConversation } from "./conversation.js";
 import type { MercuryCoreRuntime } from "./runtime.js";
 import { loadTriggerConfig, matchTrigger } from "./trigger.js";
 
@@ -32,10 +33,20 @@ export function createMessageHandler(opts: MessageHandlerOptions) {
         return;
       }
 
-      const groupId = bridge.groupId(thread.id);
-      const isDM = bridge.isDM(thread.id);
+      const { externalId, isDM } = bridge.parseThread(thread.id);
+      const kind = inferConversationKind(bridge.platform, externalId, isDM);
+      const resolution = resolveConversation(
+        core.db,
+        bridge.platform,
+        externalId,
+        kind,
+      );
 
-      const triggerConfig = loadTriggerConfig(core.db, groupId, {
+      if (!resolution) return;
+
+      const { spaceId } = resolution;
+
+      const triggerConfig = loadTriggerConfig(core.db, spaceId, {
         patterns: defaultPatterns,
         match: config.triggerMatch,
       });
@@ -46,7 +57,7 @@ export function createMessageHandler(opts: MessageHandlerOptions) {
         await thread.startTyping();
       }
 
-      const ingress = await bridge.normalize(thread.id, message, ctx);
+      const ingress = await bridge.normalize(thread.id, message, ctx, spaceId);
       if (!ingress) return;
 
       if (ingress.isReplyToBot && !isDM && !triggerResult.matched) {

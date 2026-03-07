@@ -178,24 +178,26 @@ export function createDashboardRoutes(ctx: DashboardContext) {
   });
 
   app.get("/page/overview", (c) => {
-    const activeGroups = core.containerRunner.getActiveGroups();
+    const activeSpaces = core.containerRunner.getActiveSpaces();
     const uptimeSeconds = Math.floor((Date.now() - startTime) / 1000);
 
     // Active runs
     const activeRunsHtml =
-      activeGroups.length > 0
-        ? activeGroups
-            .map((g) => {
-              const platform = g.split(":")[0];
-              const shortId = g.length > 30 ? `...${g.slice(-20)}` : g;
+      activeSpaces.length > 0
+        ? activeSpaces
+            .map((spaceId) => {
+              const space = core.db.getSpace(spaceId);
+              const linked = core.db.getSpaceConversations(spaceId);
+              const platform = linked[0]?.platform ?? "space";
+              const label = space?.name ?? spaceId;
               return `
               <div class="active-run">
                 <span class="badge">${platform}</span>
-                <span class="mono">${escapeHtml(shortId)}</span>
+                <span class="mono">${escapeHtml(label)}</span>
                 <span class="status active">running</span>
                 <button class="btn btn-sm btn-danger" 
                         hx-post="/dashboard/api/stop" 
-                        hx-headers='{"X-Mercury-Group": "${escapeHtml(g)}", "X-Mercury-Caller": "dashboard"}'
+                        hx-headers='{"X-Mercury-Space": "${escapeHtml(spaceId)}", "X-Mercury-Caller": "dashboard"}'
                         hx-swap="none">Stop</button>
               </div>
             `;
@@ -219,21 +221,24 @@ export function createDashboardRoutes(ctx: DashboardContext) {
       .join("");
 
     // Recent activity
-    const groups = core.db.listGroups();
+    const spaces = core.db.listSpaces();
     const activity: Array<{
-      groupId: string;
+      spaceId: string;
+      spaceName: string;
       platform: string;
       role: string;
       preview: string;
       time: number;
     }> = [];
 
-    for (const g of groups.slice(0, 5)) {
-      const msgs = core.db.getRecentMessages(g.id, 3);
-      const platform = g.id.split(":")[0];
+    for (const space of spaces.slice(0, 5)) {
+      const msgs = core.db.getRecentMessages(space.id, 3);
+      const linked = core.db.getSpaceConversations(space.id);
+      const platform = linked[0]?.platform ?? "space";
       for (const m of msgs) {
         activity.push({
-          groupId: g.id,
+          spaceId: space.id,
+          spaceName: space.name,
           platform,
           role: m.role,
           preview: m.content.slice(0, 60),
@@ -250,11 +255,12 @@ export function createDashboardRoutes(ctx: DashboardContext) {
             .map(
               (a) => `
               <div class="activity-row" 
-                   hx-get="/dashboard/page/groups/${encodeURIComponent(a.groupId)}" 
+                   hx-get="/dashboard/page/spaces/${encodeURIComponent(a.spaceId)}" 
                    hx-target="#main" 
                    hx-push-url="true">
                 <span class="time">${formatRelativeTime(a.time)}</span>
                 <span class="badge">${a.platform}</span>
+                <span class="mono">${escapeHtml(truncate(a.spaceName, 18))}</span>
                 <span class="role ${a.role}">${a.role}</span>
                 <span class="preview">${escapeHtml(a.preview)}</span>
               </div>
@@ -294,7 +300,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
         <div class="panel">
           <div class="panel-header">
             Active Work
-            <span class="badge">${activeGroups.length}</span>
+            <span class="badge">${activeSpaces.length}</span>
           </div>
           <div class="panel-body">${raw(activeRunsHtml)}</div>
         </div>
@@ -320,8 +326,8 @@ export function createDashboardRoutes(ctx: DashboardContext) {
           <div class="panel-header">Stats</div>
           <div class="panel-body stats">
             <div class="stat">
-              <div class="stat-value">${groups.length}</div>
-              <div class="stat-label">Groups</div>
+              <div class="stat-value">${spaces.length}</div>
+              <div class="stat-label">Spaces</div>
             </div>
             <div class="stat">
               <div class="stat-value">${core.queue.pendingCount}</div>
@@ -339,64 +345,62 @@ export function createDashboardRoutes(ctx: DashboardContext) {
     `);
   });
 
-  app.get("/page/groups", (c) => {
-    const groups = core.db
-      .listGroups()
-      .map((g) => {
-        const parts = g.id.split(":");
-        const platform = parts[0];
-        const msgCount = core.db.getRecentMessages(g.id, 1000).length;
-
+  app.get("/page/spaces", (c) => {
+    const spaces = core.db
+      .listSpaces()
+      .map((s) => {
+        const conversations = core.db.getSpaceConversations(s.id);
+        const msgCount = core.db.getRecentMessages(s.id, 1000).length;
         return {
-          id: g.id,
-          platform,
-          title: g.title !== g.id ? g.title : null,
-          lastActivity: g.updatedAt,
+          id: s.id,
+          name: s.name,
+          tags: s.tags,
+          conversationCount: conversations.length,
+          platforms: [...new Set(conversations.map((conv) => conv.platform))],
+          lastActivity: s.updatedAt,
           messageCount: msgCount,
         };
       })
       .sort((a, b) => b.lastActivity - a.lastActivity);
 
     const rowsHtml =
-      groups.length > 0
-        ? groups
+      spaces.length > 0
+        ? spaces
             .map(
-              (g) => `
+              (s) => `
               <tr class="clickable" 
-                  hx-get="/dashboard/page/groups/${encodeURIComponent(g.id)}" 
+                  hx-get="/dashboard/page/spaces/${encodeURIComponent(s.id)}" 
                   hx-target="#main" 
                   hx-push-url="true">
-                <td><span class="badge">${g.platform}</span></td>
-                <td class="mono">${escapeHtml(g.title || truncate(g.id, 30))}</td>
-                <td class="muted">${formatRelativeTime(g.lastActivity)}</td>
-                <td class="muted">${g.messageCount}</td>
-                <td>
-                  <button class="btn btn-sm" title="Settings">⚙</button>
-                </td>
+                <td class="mono">${escapeHtml(s.name)}</td>
+                <td>${s.platforms.map((p) => `<span class="badge">${escapeHtml(p)}</span>`).join(" ") || '<span class="muted">—</span>'}</td>
+                <td class="muted">${s.conversationCount}</td>
+                <td class="muted">${s.messageCount}</td>
+                <td class="muted">${formatRelativeTime(s.lastActivity)}</td>
               </tr>
             `,
             )
             .join("")
-        : '<tr><td colspan="5" class="empty">No groups yet</td></tr>';
+        : '<tr><td colspan="5" class="empty">No spaces yet</td></tr>';
 
     return c.html(html`
       <div class="page-header">
-        <h2>Groups</h2>
+        <h2>Spaces</h2>
         <div class="search-box">
-          <input type="text" placeholder="Search groups..." id="group-search"
-                 onkeyup="filterTable(this, 'groups-table')" />
+          <input type="text" placeholder="Search spaces..." id="space-search"
+                 onkeyup="filterTable(this, 'spaces-table')" />
         </div>
       </div>
 
       <div class="panel">
-        <table class="table" id="groups-table">
+        <table class="table" id="spaces-table">
           <thead>
             <tr>
-              <th>Platform</th>
               <th>Name</th>
-              <th>Last Active</th>
+              <th>Platforms</th>
+              <th>Conversations</th>
               <th>Messages</th>
-              <th>Actions</th>
+              <th>Last Active</th>
             </tr>
           </thead>
           <tbody>${raw(rowsHtml)}</tbody>
@@ -405,26 +409,27 @@ export function createDashboardRoutes(ctx: DashboardContext) {
     `);
   });
 
-  app.get("/page/groups/:id", (c) => {
-    const groupId = decodeURIComponent(c.req.param("id"));
-    const group = core.db.listGroups().find((g) => g.id === groupId);
+  app.get("/page/spaces/:id", (c) => {
+    const spaceId = decodeURIComponent(c.req.param("id"));
+    const group = core.db.listSpaces().find((g) => g.id === spaceId);
 
     if (!group) {
       return c.html(html`
         <div class="page-header">
-          <a href="#" hx-get="/dashboard/page/groups" hx-target="#main" hx-push-url="true" class="back">← Back</a>
-          <h2>Group not found</h2>
+          <a href="#" hx-get="/dashboard/page/spaces" hx-target="#main" hx-push-url="true" class="back">← Back</a>
+          <h2>Space not found</h2>
         </div>
         <div class="panel">
-          <div class="panel-body empty">Group "${escapeHtml(groupId)}" not found</div>
+          <div class="panel-body empty">Space "${escapeHtml(spaceId)}" not found</div>
         </div>
       `);
     }
 
-    const platform = groupId.split(":")[0];
-    const messages = core.db.getRecentMessages(groupId, 50);
-    const roles = core.db.listRoles(groupId);
-    const tasks = core.db.listTasks().filter((t) => t.groupId === groupId);
+    const linkedConversations = core.db.getSpaceConversations(spaceId);
+    const messages = core.db.getRecentMessages(spaceId, 50);
+    const roles = core.db.listRoles(spaceId);
+    const tasks = core.db.listTasks().filter((t) => t.spaceId === spaceId);
+    const configEntries = core.db.listSpaceConfig(spaceId);
 
     const messagesHtml =
       messages.length > 0
@@ -443,6 +448,24 @@ export function createDashboardRoutes(ctx: DashboardContext) {
             .join("")
         : '<div class="empty-small">No messages yet</div>';
 
+    const linkedConversationsHtml =
+      linkedConversations.length > 0
+        ? linkedConversations
+            .map(
+              (conv) => `
+              <div class="role-row">
+                <span><span class="badge">${escapeHtml(conv.platform)}</span> ${escapeHtml(conv.observedTitle || conv.externalId)}</span>
+                <span class="badge">${escapeHtml(conv.kind)}</span>
+                <button class="btn btn-sm btn-danger" 
+                        hx-post="/dashboard/api/conversations/${conv.id}/unlink"
+                        hx-swap="none"
+                        hx-confirm="Unlink this conversation from ${escapeHtml(group.name)}?">Unlink</button>
+              </div>
+            `,
+            )
+            .join("")
+        : '<div class="empty-small">No linked conversations</div>';
+
     const rolesHtml =
       roles.length > 0
         ? roles
@@ -452,7 +475,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
                 <span class="mono">${escapeHtml(r.platformUserId)}</span>
                 <span class="badge ${r.role === "admin" ? "green" : ""}">${r.role}</span>
                 <button class="btn btn-sm btn-danger" 
-                        hx-delete="/dashboard/api/roles?groupId=${encodeURIComponent(groupId)}&platformUserId=${encodeURIComponent(r.platformUserId)}"
+                        hx-delete="/dashboard/api/roles?spaceId=${encodeURIComponent(spaceId)}&platformUserId=${encodeURIComponent(r.platformUserId)}"
                         hx-swap="none"
                         hx-confirm="Remove role for ${escapeHtml(r.platformUserId)}?">✕</button>
               </div>
@@ -474,31 +497,117 @@ export function createDashboardRoutes(ctx: DashboardContext) {
             `,
             )
             .join("")
-        : '<div class="empty-small">No tasks for this group</div>';
+        : '<div class="empty-small">No tasks for this space</div>';
+
+    const configHtml =
+      configEntries.length > 0
+        ? configEntries
+            .map(
+              (entry) => `
+              <div class="task-row">
+                <span class="mono">${escapeHtml(entry.key)}</span>
+                <span>${escapeHtml(entry.value)}</span>
+              </div>
+            `,
+            )
+            .join("")
+        : '<div class="empty-small">No config overrides</div>';
 
     return c.html(html`
       <div class="page-header">
-        <a href="#" hx-get="/dashboard/page/groups" hx-target="#main" hx-push-url="true" class="back">← Back</a>
-        <h2>
-          <span class="badge">${platform}</span>
-          ${escapeHtml(group.title !== group.id ? group.title : truncate(groupId, 40))}
-        </h2>
+        <a href="#" hx-get="/dashboard/page/spaces" hx-target="#main" hx-push-url="true" class="back">← Back</a>
+        <h2>${escapeHtml(group.name)}</h2>
       </div>
 
       <div class="grid-2">
         <div class="panel">
+          <div class="panel-header">Linked Conversations</div>
+          <div class="panel-body">${raw(linkedConversationsHtml)}</div>
+        </div>
+        <div class="panel">
           <div class="panel-header">Roles</div>
           <div class="panel-body">${raw(rolesHtml)}</div>
         </div>
+      </div>
+
+      <div class="grid-2">
         <div class="panel">
           <div class="panel-header">Tasks</div>
           <div class="panel-body">${raw(tasksHtml)}</div>
+        </div>
+        <div class="panel">
+          <div class="panel-header">Config</div>
+          <div class="panel-body">${raw(configHtml)}</div>
         </div>
       </div>
 
       <div class="panel">
         <div class="panel-header">Recent Messages</div>
         <div class="panel-body messages-list">${raw(messagesHtml)}</div>
+      </div>
+    `);
+  });
+
+  app.get("/page/conversations", (c) => {
+    const spaces = core.db.listSpaces();
+    const conversations = core.db.listConversations();
+
+    const rowsHtml =
+      conversations.length > 0
+        ? conversations
+            .map((conv) => {
+              const title = conv.observedTitle || conv.externalId;
+              const linked = conv.spaceId
+                ? `<span class="badge green">${escapeHtml(conv.spaceId)}</span>`
+                : `
+                  <form hx-post="/dashboard/api/conversations/${conv.id}/link" hx-swap="none" style="display:flex; gap:8px; align-items:center;">
+                    <select name="spaceId" class="select">
+                      ${spaces
+                        .map(
+                          (space) =>
+                            `<option value="${escapeHtml(space.id)}">${escapeHtml(space.name)}</option>`,
+                        )
+                        .join("")}
+                    </select>
+                    <button class="btn btn-sm">Link</button>
+                  </form>
+                `;
+              const action = conv.spaceId
+                ? `<button class="btn btn-sm btn-danger" hx-post="/dashboard/api/conversations/${conv.id}/unlink" hx-swap="none">Unlink</button>`
+                : "";
+
+              return `
+                <tr>
+                  <td><span class="badge">${escapeHtml(conv.platform)}</span></td>
+                  <td>${escapeHtml(title)}</td>
+                  <td><span class="badge">${escapeHtml(conv.kind)}</span></td>
+                  <td>${linked}</td>
+                  <td class="muted">${formatRelativeTime(conv.lastSeenAt)}</td>
+                  <td>${action}</td>
+                </tr>
+              `;
+            })
+            .join("")
+        : '<tr><td colspan="6" class="empty">No conversations yet</td></tr>';
+
+    return c.html(html`
+      <div class="page-header">
+        <h2>Conversations</h2>
+      </div>
+      <div class="panel">
+        <table class="table">
+          <thead>
+            <tr>
+              <th>Platform</th>
+              <th>Title</th>
+              <th>Kind</th>
+              <th>Linked Space</th>
+              <th>Last Seen</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>${raw(rowsHtml)}</tbody>
+        </table>
       </div>
     `);
   });
@@ -556,9 +665,9 @@ export function createDashboardRoutes(ctx: DashboardContext) {
   });
 
   app.get("/page/permissions", (c) => {
-    const groups = core.db.listGroups();
+    const groups = core.db.listSpaces();
     const allRoles: Array<{
-      groupId: string;
+      spaceId: string;
       platform: string;
       userId: string;
       role: string;
@@ -569,7 +678,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
       const groupRoles = core.db.listRoles(g.id);
       for (const r of groupRoles) {
         allRoles.push({
-          groupId: g.id,
+          spaceId: g.id,
           platform,
           userId: r.platformUserId,
           role: r.role,
@@ -584,12 +693,12 @@ export function createDashboardRoutes(ctx: DashboardContext) {
               (r) => `
               <tr>
                 <td><span class="badge">${r.platform}</span></td>
-                <td class="mono truncate" title="${escapeHtml(r.groupId)}">${escapeHtml(truncate(r.groupId, 25))}</td>
+                <td class="mono truncate" title="${escapeHtml(r.spaceId)}">${escapeHtml(truncate(r.spaceId, 25))}</td>
                 <td class="mono">${escapeHtml(r.userId)}</td>
                 <td><span class="badge ${r.role === "admin" ? "green" : ""}">${r.role}</span></td>
                 <td>
                   <button class="btn btn-sm btn-danger" 
-                          hx-delete="/dashboard/api/roles?groupId=${encodeURIComponent(r.groupId)}&platformUserId=${encodeURIComponent(r.userId)}"
+                          hx-delete="/dashboard/api/roles?spaceId=${encodeURIComponent(r.spaceId)}&platformUserId=${encodeURIComponent(r.userId)}"
                           hx-swap="none"
                           hx-confirm="Remove ${r.role} role for ${escapeHtml(r.userId)}?">✕</button>
                 </td>
@@ -609,7 +718,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
           <thead>
             <tr>
               <th>Platform</th>
-              <th>Group</th>
+              <th>Space</th>
               <th>User</th>
               <th>Role</th>
               <th>Actions</th>
@@ -624,13 +733,13 @@ export function createDashboardRoutes(ctx: DashboardContext) {
   app.get("/page/logs", (c) => {
     // Aggregate recent messages as "logs" for now
     // In a real system, you'd have a proper log store
-    const groups = core.db.listGroups();
+    const groups = core.db.listSpaces();
     const logs: Array<{
       time: number;
       level: string;
       source: string;
       message: string;
-      groupId?: string;
+      spaceId?: string;
     }> = [];
 
     // Add message events as logs
@@ -643,7 +752,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
           level: "INFO",
           source: platform,
           message: `${m.role}: ${m.content.slice(0, 80)}`,
-          groupId: g.id,
+          spaceId: g.id,
         });
       }
     }
@@ -803,7 +912,7 @@ export function createDashboardRoutes(ctx: DashboardContext) {
       return c.json({ error: "Task not found" }, 404);
     }
 
-    const deleted = core.db.deleteTask(taskId, task.groupId);
+    const deleted = core.db.deleteTask(taskId, task.spaceId);
     if (!deleted) {
       return c.json({ error: "Failed to delete task" }, 500);
     }
@@ -812,25 +921,64 @@ export function createDashboardRoutes(ctx: DashboardContext) {
   });
 
   app.delete("/api/roles", (c) => {
-    const groupId = c.req.query("groupId");
+    const spaceId = c.req.query("spaceId");
     const platformUserId = c.req.query("platformUserId");
 
-    if (!groupId || !platformUserId) {
-      return c.json({ error: "Missing groupId or platformUserId" }, 400);
+    if (!spaceId || !platformUserId) {
+      return c.json({ error: "Missing spaceId or platformUserId" }, 400);
     }
 
-    core.db.deleteRole(groupId, platformUserId);
+    core.db.deleteRole(spaceId, platformUserId);
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/conversations/:id/link", async (c) => {
+    const conversationId = Number.parseInt(c.req.param("id"), 10);
+    if (!Number.isFinite(conversationId) || conversationId < 1) {
+      return c.json({ error: "Invalid conversation ID" }, 400);
+    }
+
+    const form = await c.req.parseBody();
+    const spaceId = typeof form.spaceId === "string" ? form.spaceId : undefined;
+    if (!spaceId) {
+      return c.json({ error: "Missing spaceId" }, 400);
+    }
+
+    const space = core.db.getSpace(spaceId);
+    if (!space) {
+      return c.json({ error: "Space not found" }, 404);
+    }
+
+    const linked = core.db.linkConversation(conversationId, spaceId);
+    if (!linked) {
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+
+    return c.json({ ok: true });
+  });
+
+  app.post("/api/conversations/:id/unlink", (c) => {
+    const conversationId = Number.parseInt(c.req.param("id"), 10);
+    if (!Number.isFinite(conversationId) || conversationId < 1) {
+      return c.json({ error: "Invalid conversation ID" }, 400);
+    }
+
+    const unlinked = core.db.unlinkConversation(conversationId);
+    if (!unlinked) {
+      return c.json({ error: "Conversation not found" }, 404);
+    }
+
     return c.json({ ok: true });
   });
 
   app.post("/api/stop", (c) => {
-    const groupId = c.req.header("X-Mercury-Group");
+    const spaceId = c.req.header("X-Mercury-Space");
 
-    if (!groupId) {
-      return c.json({ error: "Missing X-Mercury-Group header" }, 400);
+    if (!spaceId) {
+      return c.json({ error: "Missing X-Mercury-Space header" }, 400);
     }
 
-    core.containerRunner.abort(groupId);
+    core.containerRunner.abort(spaceId);
     return c.json({ ok: true });
   });
 

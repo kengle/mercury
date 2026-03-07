@@ -25,7 +25,7 @@ export interface MessageAttachment {
 
 export interface StoredMessage {
   id: number;
-  groupId: string;
+  spaceId: string;
   role: MessageRole;
   content: string;
   /** Attachments (images, voice notes, documents, etc.) */
@@ -36,7 +36,7 @@ export interface StoredMessage {
 
 export interface ScheduledTask {
   id: number;
-  groupId: string;
+  spaceId: string;
   cron: string | null; // null for at-tasks
   at: string | null; // ISO 8601 timestamp, null for cron-tasks
   prompt: string;
@@ -48,15 +48,35 @@ export interface ScheduledTask {
   updatedAt: number;
 }
 
-export interface Group {
+export interface Space {
+  /** User-chosen slug, primary key. e.g. "family", "work" */
   id: string;
-  title: string;
+  /** Human display name. e.g. "Family Ops" */
+  name: string;
+  /** Comma-separated tags for metadata grouping */
+  tags: string | null;
   createdAt: number;
   updatedAt: number;
 }
 
-export interface GroupRole {
-  groupId: string;
+export interface Conversation {
+  id: number;
+  /** "whatsapp" | "discord" | "slack" | "api" */
+  platform: string;
+  /** Platform-native ID (WhatsApp JID, Discord channel ID, etc.) */
+  externalId: string;
+  /** "dm" | "group" | "channel" | "thread" */
+  kind: string;
+  /** Title observed from platform, if available */
+  observedTitle: string | null;
+  /** Linked space slug, or null if unlinked */
+  spaceId: string | null;
+  firstSeenAt: number;
+  lastSeenAt: number;
+}
+
+export interface SpaceRole {
+  spaceId: string;
   platformUserId: string;
   role: string;
   grantedBy: string | null;
@@ -64,8 +84,8 @@ export interface GroupRole {
   updatedAt: number;
 }
 
-export interface GroupConfigEntry {
-  groupId: string;
+export interface SpaceConfigEntry {
+  spaceId: string;
   key: string;
   value: string;
   updatedBy: string | null;
@@ -105,8 +125,10 @@ export interface MessageSender {
 export interface IngressMessage {
   /** Platform identifier: "whatsapp" | "slack" | "discord" */
   platform: string;
-  /** Platform-specific group ID */
-  groupId: string;
+  /** Resolved space ID */
+  spaceId: string;
+  /** Platform-native conversation ID (NOT the space ID) */
+  conversationExternalId: string;
   /** Platform-qualified caller: "whatsapp:jid", "discord:123", "slack:U123" */
   callerId: string;
   /** Display name of the message author */
@@ -152,8 +174,8 @@ export interface ContainerResult {
 export interface NormalizeContext {
   /** Bot's display name (for mention normalization) */
   botUserName: string;
-  /** Get workspace path for a group (for media download destination) */
-  getWorkspace: (groupId: string) => string | null;
+  /** Get workspace path for a space (for media download destination) */
+  getWorkspace: (spaceId: string) => string;
   /** Media download settings */
   media: { enabled: boolean; maxSizeBytes: number };
 }
@@ -169,11 +191,8 @@ export interface PlatformBridge {
 
   // --- Pure helpers (used before full normalize, e.g. for typing indicator) ---
 
-  /** Extract the group ID from a thread ID */
-  groupId(threadId: string): string;
-
-  /** Check if a thread is a direct message */
-  isDM(threadId: string): boolean;
+  /** Extract conversation identity and DM state from a thread ID */
+  parseThread(threadId: string): { externalId: string; isDM: boolean };
 
   // --- Ingress ---
 
@@ -186,6 +205,7 @@ export interface PlatformBridge {
     threadId: string,
     message: unknown,
     ctx: NormalizeContext,
+    spaceId: string,
   ): Promise<IngressMessage | null>;
 
   // --- Egress ---

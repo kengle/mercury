@@ -52,7 +52,8 @@ src/
 │   ├── runtime.ts              # Main orchestrator
 │   ├── handler.ts              # Unified message handler
 │   ├── router.ts               # Message routing
-│   ├── group-queue.ts          # Per-group concurrency
+│   ├── conversation.ts         # Conversation → space resolution
+│   ├── space-queue.ts          # Per-space concurrency
 │   ├── task-scheduler.ts       # Task scheduling (cron + at)
 │   ├── permissions.ts          # RBAC
 │   ├── trigger.ts              # Pattern matching
@@ -65,7 +66,8 @@ src/
 │       ├── tasks.ts                # /api/tasks/*
 │       ├── roles.ts                # /api/roles/* + /api/permissions/*
 │       ├── config.ts               # /api/config/*
-│       ├── groups.ts               # /api/groups/*
+│       ├── spaces.ts               # /api/spaces/*
+│       ├── conversations.ts        # /api/conversations/*
 │       ├── control.ts              # /api/whoami, /api/stop, /api/compact
 │       ├── extensions.ts           # /api/ext/*
 │       └── chat.ts                 # /chat (direct agent bridge)
@@ -76,8 +78,8 @@ src/
 │   └── container-error.ts      # Error types
 │
 ├── storage/
-│   ├── db.ts                   # SQLite schema + queries
-│   ├── memory.ts               # Workspace management
+│   ├── db.ts                   # SQLite schema + queries (spaces + conversations)
+│   ├── memory.ts               # Workspace management (ensureSpaceWorkspace)
 │   └── pi-auth.ts              # Pi OAuth tokens
 │
 ├── extensions/
@@ -117,7 +119,7 @@ resources/
 │   ├── roles/SKILL.md
 │   ├── permissions/SKILL.md
 │   ├── config/SKILL.md
-│   └── groups/SKILL.md
+│   └── spaces/SKILL.md
 └── extensions/             # Pi extensions (subagent)
 ```
 
@@ -128,7 +130,7 @@ resources/
 | `main.ts` | Entry point — initializes runtime, adapters, server |
 | `server.ts` | Creates Hono app with all routes (dashboard, API, webhooks) |
 | `runtime.ts` | Orchestrates message → container → reply flow |
-| `db.ts` | All SQLite: groups, messages, tasks, roles, config |
+| `db.ts` | All SQLite: spaces, conversations, messages, tasks, roles, config |
 | `container-runner.ts` | Docker spawn, timeout, cleanup |
 | `config.ts` | Environment parsing with Zod |
 | `core/api.ts` | Creates API app, mounts route handlers |
@@ -151,11 +153,12 @@ resources/
 ## Database Schema
 
 Tables in `state.db`:
-- `groups` — Chat groups/channels
+- `spaces` — User-defined memory boundaries
+- `conversations` — Discovered platform conversations that may be linked to a space
 - `messages` — Message history (for ambient context)
 - `tasks` — Scheduled tasks (cron + one-shot at)
-- `group_roles` — User role assignments per group
-- `group_config` — Per-group config overrides + role permission sets
+- `space_roles` — User role assignments per space
+- `space_config` — Per-space config overrides + role permission sets
 - `extension_state` — Scoped key-value store for extensions `(extension, key) → value`
 
 ## API
@@ -165,20 +168,25 @@ Internal API used by `mrctl` from inside containers:
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/health` | GET | Health check |
-| `/api/whoami` | GET | Caller + group info |
+| `/api/whoami` | GET | Caller + space info |
 | `/api/tasks` | GET/POST | List/create tasks |
 | `/api/tasks/:id` | DELETE | Delete task |
 | `/api/tasks/:id/pause` | POST | Pause task |
 | `/api/tasks/:id/resume` | POST | Resume task |
 | `/api/roles` | GET/POST/DELETE | Role management |
 | `/api/permissions` | GET/POST | Permission management |
-| `/api/config` | GET/POST | Group config |
+| `/api/config` | GET/POST | Space config |
+| `/api/spaces` | GET | List spaces |
+| `/api/spaces/current` | GET/PUT/DELETE | Current space operations |
+| `/api/conversations` | GET | List conversations |
+| `/api/conversations/:id/link` | POST | Link conversation to a space |
+| `/api/conversations/:id/unlink` | POST | Unlink conversation from its space |
 | `/api/stop` | POST | Abort current run |
 | `/api/compact` | POST | Session boundary |
 | `/api/ext` | GET | List installed extensions |
 | `/api/ext/:name/auth` | POST | Permission check for extension CLI |
 
-Auth: `X-Mercury-Caller` + `X-Mercury-Group` headers.
+Auth: `X-Mercury-Caller` + `X-Mercury-Space` headers.
 
 ### Chat API (direct bridge)
 
@@ -186,9 +194,9 @@ Auth: `X-Mercury-Caller` + `X-Mercury-Group` headers.
 |----------|--------|-------------|
 | `/chat` | POST | Send a message and get a synchronous reply |
 
-No auth required. Request body: `{ text, callerId?, groupId?, authorName?, files?: [{ name, data(base64) }] }`. Returns `{ reply, files: [{ filename, mimeType, sizeBytes, data(base64) }] }`.
+No auth required. Request body: `{ text, callerId?, spaceId?, authorName?, files?: [{ name, data(base64) }] }`. Returns `{ reply, files: [{ filename, mimeType, sizeBytes, data(base64) }] }`.
 
-Input files are saved to the group's `inbox/`. Output files are read from `outbox/` and returned as base64.
+Input files are saved to the space's `inbox/`. Output files are read from `outbox/` and returned as base64.
 
 CLI wrapper:
 ```bash
@@ -221,7 +229,7 @@ Key types are in `src/extensions/types.ts`. See [docs/extensions.md](docs/extens
 ### Built-in vs extension commands
 
 `mrctl` has two types of commands:
-- **Built-in**: `tasks`, `roles`, `permissions`, `config`, `groups`, `stop`, `compact` — HTTP calls to host API
+- **Built-in**: `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` — HTTP calls to host API
 - **Extension**: `mrctl <ext-name> <args>` — permission check then local CLI exec in container
 
 Built-in names are reserved — extensions cannot collide with them.

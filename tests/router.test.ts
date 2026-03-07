@@ -3,7 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { type AppConfig, loadConfig } from "../src/config.js";
-import { seededGroups } from "../src/core/permissions.js";
+import { seededSpaces } from "../src/core/permissions.js";
 import { type RouteResult, routeInput } from "../src/core/router.js";
 import { Db } from "../src/storage/db.js";
 
@@ -20,7 +20,7 @@ beforeEach(() => {
     triggerPatterns: "@Pi,Pi",
     triggerMatch: "mention",
   };
-  seededGroups.clear();
+  seededSpaces.clear();
 });
 
 afterEach(() => {
@@ -32,7 +32,7 @@ function route(
 ): RouteResult {
   return routeInput({
     text: "@Pi hello",
-    groupId: "g1",
+    spaceId: "g1",
     callerId: "admin1",
     isDM: false,
     isReplyToBot: false,
@@ -124,8 +124,8 @@ describe("routeInput — permission gating", () => {
   });
 
   test("member without prompt permission is denied", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "role.member.permissions", "stop", "system");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "role.member.permissions", "stop", "system");
 
     const r = route({ callerId: "user1" });
     expect(r.type).toBe("denied");
@@ -155,8 +155,8 @@ describe("routeInput — chat commands", () => {
   });
 
   test("member with stop permission can execute stop", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "role.member.permissions", "prompt,stop", "system");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "role.member.permissions", "prompt,stop", "system");
 
     const r = route({ text: "@Pi stop", callerId: "user1" });
     expect(r.type).toBe("command");
@@ -196,8 +196,8 @@ describe("routeInput — edge cases", () => {
 
 describe("routeInput — per-group trigger config", () => {
   test("per-group trigger pattern override", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "trigger.patterns", "Hey Bot", "system");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "trigger.patterns", "Hey Bot", "system");
 
     const r = route({ text: "Hey Bot do stuff" });
     expect(r.type).toBe("assistant");
@@ -207,8 +207,8 @@ describe("routeInput — per-group trigger config", () => {
   });
 
   test("per-group trigger mode override to always", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "trigger.match", "always", "system");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "trigger.match", "always", "system");
 
     const r = route({ text: "random message no trigger" });
     expect(r.type).toBe("assistant");
@@ -218,8 +218,8 @@ describe("routeInput — per-group trigger config", () => {
   });
 
   test("per-group trigger mode override to prefix", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "trigger.match", "prefix", "system");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "trigger.match", "prefix", "system");
 
     // @Pi at start works
     const r1 = route({ text: "@Pi hello" });

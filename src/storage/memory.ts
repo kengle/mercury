@@ -21,15 +21,14 @@ export function ensurePiResourceDir(dir: string): void {
 }
 
 /**
- * Ensure a per-group workspace exists with the pi resource structure.
- * Vault structure (napkin dirs) is handled by the napkin extension's workspace_init hook.
+ * Ensure a per-space workspace exists with the pi resource structure.
+ * Vault structure is handled by extensions via workspace_init hooks.
  */
-export function ensureGroupWorkspace(
-  groupsDir: string,
-  groupId: string,
+export function ensureSpaceWorkspace(
+  spacesDir: string,
+  spaceId: string,
 ): string {
-  const safeGroup = groupId.replace(/[^a-zA-Z0-9-_]/g, "_");
-  const dir = path.join(groupsDir, safeGroup);
+  const dir = path.join(spacesDir, spaceId);
 
   ensurePiResourceDir(dir);
 

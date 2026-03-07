@@ -41,7 +41,7 @@ describe("loadConfig", () => {
     const config = loadConfig();
     expect(config.dbPath).toBe("/custom/data/state.db");
     expect(config.globalDir).toBe("/custom/data/global");
-    expect(config.groupsDir).toBe("/custom/data/groups");
+    expect(config.spacesDir).toBe("/custom/data/spaces");
     expect(config.whatsappAuthDir).toBe("/custom/data/whatsapp-auth");
   });
 

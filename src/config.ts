@@ -67,21 +67,13 @@ const schema = z.object({
 
   // ─── Permissions ────────────────────────────────────────────────────
   admins: z.string().default(""),
-
-  // ─── KB Distillation ────────────────────────────────────────────────
-  kbDistillIntervalMs: z.coerce
-    .number()
-    .int()
-    .min(0)
-    .max(24 * 60 * 60 * 1000)
-    .default(0), // 0 = disabled
 });
 
 export type AppConfig = z.infer<typeof schema> & {
   /** Derived paths from dataDir */
   dbPath: string;
   globalDir: string;
-  groupsDir: string;
+  spacesDir: string;
   whatsappAuthDir: string;
 };
 
@@ -133,9 +125,6 @@ export function loadConfig(): AppConfig {
 
     // Permissions
     admins: process.env.MERCURY_ADMINS,
-
-    // KB Distillation
-    kbDistillIntervalMs: process.env.MERCURY_KB_DISTILL_INTERVAL_MS,
   });
 
   const dataDir = base.dataDir;
@@ -144,7 +133,7 @@ export function loadConfig(): AppConfig {
     ...base,
     dbPath: path.join(dataDir, "state.db"),
     globalDir: path.join(dataDir, "global"),
-    groupsDir: path.join(dataDir, "groups"),
+    spacesDir: path.join(dataDir, "spaces"),
     whatsappAuthDir:
       process.env.MERCURY_WHATSAPP_AUTH_DIR ??
       path.join(dataDir, "whatsapp-auth"),

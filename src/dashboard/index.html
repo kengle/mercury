@@ -483,10 +483,15 @@
          hx-push-url="true"
          onclick="setActiveNav(this)">Overview</a>
       <a class="nav-item" 
-         hx-get="/dashboard/page/groups" 
+         hx-get="/dashboard/page/spaces" 
          hx-target="#main" 
          hx-push-url="true"
-         onclick="setActiveNav(this)">Groups</a>
+         onclick="setActiveNav(this)">Spaces</a>
+      <a class="nav-item" 
+         hx-get="/dashboard/page/conversations" 
+         hx-target="#main" 
+         hx-push-url="true"
+         onclick="setActiveNav(this)">Conversations</a>
       <a class="nav-item" 
          hx-get="/dashboard/page/tasks" 
          hx-target="#main" 
@@ -512,7 +517,7 @@
 
   <script>
     // Navigation
-    function setActiveNav(el) {
+    function _setActiveNav(el) {
       for (const item of document.querySelectorAll('.nav-item')) {
         item.classList.remove('active');
       }
@@ -552,7 +557,7 @@
     });
 
     // Table search filter
-    function filterTable(input, tableId) {
+    function _filterTable(input, tableId) {
       const filter = input.value.toLowerCase();
       const table = document.getElementById(tableId);
       const rows = table.querySelectorAll('tbody tr');
@@ -602,7 +607,7 @@
         let found = false;
         for (const item of navItems) {
           const href = item.getAttribute('hx-get');
-          if (href && href.includes(hash.split('/')[0])) {
+          if (href?.includes(hash.split('/')[0])) {
             item.click();
             found = true;
             break;

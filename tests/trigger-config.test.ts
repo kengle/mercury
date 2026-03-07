@@ -11,7 +11,7 @@ let db: Db;
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-test-"));
   db = new Db(path.join(tmpDir, "state.db"));
-  db.ensureGroup("g1");
+  db.ensureSpace("g1");
 });
 
 afterEach(() => {
@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("loadTriggerConfig", () => {
   test("invalid match mode in DB falls back to default", () => {
-    db.setGroupConfig("g1", "trigger.match", "invalid", "admin");
+    db.setSpaceConfig("g1", "trigger.match", "invalid", "admin");
     const config = loadTriggerConfig(db, "g1", {
       patterns: ["@Pi"],
       match: "mention",
@@ -37,7 +37,7 @@ describe("loadTriggerConfig", () => {
   });
 
   test("valid match mode from DB is used", () => {
-    db.setGroupConfig("g1", "trigger.match", "always", "admin");
+    db.setSpaceConfig("g1", "trigger.match", "always", "admin");
     const config = loadTriggerConfig(db, "g1", {
       patterns: ["@Pi"],
       match: "mention",
@@ -46,7 +46,7 @@ describe("loadTriggerConfig", () => {
   });
 
   test("patterns from DB override defaults", () => {
-    db.setGroupConfig("g1", "trigger.patterns", "@Bot,Bot", "admin");
+    db.setSpaceConfig("g1", "trigger.patterns", "@Bot,Bot", "admin");
     const config = loadTriggerConfig(db, "g1", {
       patterns: ["@Pi"],
       match: "mention",
@@ -55,7 +55,7 @@ describe("loadTriggerConfig", () => {
   });
 
   test("empty patterns string falls back to defaults", () => {
-    db.setGroupConfig("g1", "trigger.patterns", "", "admin");
+    db.setSpaceConfig("g1", "trigger.patterns", "", "admin");
     const config = loadTriggerConfig(db, "g1", {
       patterns: ["@Pi"],
       match: "mention",
@@ -64,7 +64,7 @@ describe("loadTriggerConfig", () => {
   });
 
   test("case_sensitive from DB", () => {
-    db.setGroupConfig("g1", "trigger.case_sensitive", "true", "admin");
+    db.setSpaceConfig("g1", "trigger.case_sensitive", "true", "admin");
     const config = loadTriggerConfig(db, "g1", {
       patterns: ["@Pi"],
       match: "mention",

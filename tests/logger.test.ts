@@ -83,7 +83,7 @@ describe("logger", () => {
     const { logger, configureLogger } = await import("../src/logger.js");
     configureLogger({ level: "info", format: "json" });
 
-    const childLogger = logger.child({ groupId: "group-123" });
+    const childLogger = logger.child({ spaceId: "group-123" });
     childLogger.info("Child log", { extra: "data" });
 
     expect(consoleLog).toHaveBeenCalledTimes(1);
@@ -91,7 +91,7 @@ describe("logger", () => {
 
     const parsed = JSON.parse(output);
     expect(parsed.msg).toBe("Child log");
-    expect(parsed.groupId).toBe("group-123");
+    expect(parsed.spaceId).toBe("group-123");
     expect(parsed.extra).toBe("data");
   });
 
@@ -103,7 +103,7 @@ describe("logger", () => {
     configureLogger({ level: "info", format: "json" });
 
     const childLogger = logger
-      .child({ groupId: "group-123" })
+      .child({ spaceId: "group-123" })
       .child({ userId: "user-456" });
 
     childLogger.info("Nested child log");
@@ -111,7 +111,7 @@ describe("logger", () => {
     const output = consoleLog.mock.calls[0][0] as string;
     const parsed = JSON.parse(output);
 
-    expect(parsed.groupId).toBe("group-123");
+    expect(parsed.spaceId).toBe("group-123");
     expect(parsed.userId).toBe("user-456");
   });
 
@@ -187,7 +187,7 @@ describe("logger", () => {
     configureLogger({ level: "info", format: "text" });
 
     const childLogger = logger.child({
-      groupId: "abc123",
+      spaceId: "abc123",
       container: "mercury-123-1",
     });
 
@@ -196,7 +196,7 @@ describe("logger", () => {
     const output = consoleLog.mock.calls[0][0] as string;
 
     expect(output).toContain("Container started");
-    expect(output).toContain("groupId=abc123");
+    expect(output).toContain("spaceId=abc123");
     expect(output).toContain("container=mercury-123-1");
   });
 
@@ -224,7 +224,7 @@ describe("logger", () => {
     configureLogger({ level: "info", format: "json" });
 
     const containerLog = logger.child({
-      groupId: "abc123",
+      spaceId: "abc123",
       container: "mercury-1705312200-1",
     });
 
@@ -234,7 +234,7 @@ describe("logger", () => {
     const startParsed = JSON.parse(startOutput);
 
     expect(startParsed.msg).toBe("Container started");
-    expect(startParsed.groupId).toBe("abc123");
+    expect(startParsed.spaceId).toBe("abc123");
     expect(startParsed.container).toBe("mercury-1705312200-1");
     expect(startParsed.event).toBe("container.start");
 

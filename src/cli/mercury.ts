@@ -18,7 +18,7 @@ import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Command } from "commander";
 import { RESERVED_EXTENSION_NAMES } from "../extensions/reserved.js";
-import { kbDistill } from "./kb-distill.js";
+import { Db } from "../storage/db.js";
 import { authenticate } from "./whatsapp-auth.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -70,6 +70,25 @@ function loadEnvFile(envPath: string): Record<string, string> {
   return vars;
 }
 
+function getProjectDataDir(): string {
+  const envPath = join(CWD, ".env");
+  if (existsSync(envPath)) {
+    const envVars = loadEnvFile(envPath);
+    if (envVars.MERCURY_DATA_DIR) return envVars.MERCURY_DATA_DIR;
+  }
+  return ".mercury";
+}
+
+function withProjectDb<T>(fn: (db: Db) => T): T {
+  const dbPath = join(CWD, getProjectDataDir(), "state.db");
+  const db = new Db(dbPath);
+  try {
+    return fn(db);
+  } finally {
+    db.close();
+  }
+}
+
 // Commands
 function initAction(): void {
   console.log("🪽 Initializing mercury project...\n");
@@ -84,7 +103,7 @@ function initAction(): void {
   }
 
   // Create data directories
-  const dirs = [".mercury", ".mercury/groups", ".mercury/global"];
+  const dirs = [".mercury", ".mercury/spaces", ".mercury/global"];
   for (const dir of dirs) {
     const fullPath = join(CWD, dir);
     if (!existsSync(fullPath)) {
@@ -359,30 +378,6 @@ authCommand
       console.error("Authentication failed:", message);
       process.exit(1);
     }
-  });
-
-// KB Distillation command
-program
-  .command("kb-distill")
-  .description("Export messages and run kb-distiller")
-  .option("--backfill", "Process all historical messages, not just today")
-  .option("--dry-run", "Show what would be done without running distiller")
-  .action(async (options: { backfill?: boolean; dryRun?: boolean }) => {
-    const envPath = join(CWD, ".env");
-    let dataDir = ".mercury";
-
-    if (existsSync(envPath)) {
-      const envVars = loadEnvFile(envPath);
-      if (envVars.MERCURY_DATA_DIR) {
-        dataDir = envVars.MERCURY_DATA_DIR;
-      }
-    }
-
-    await kbDistill({
-      dataDir: join(CWD, dataDir),
-      backfill: options.backfill,
-      dryRun: options.dryRun,
-    });
   });
 
 // Service management commands
@@ -804,7 +799,8 @@ function resolveExtensionSource(source: string): {
   // npm: prefix
   if (source.startsWith("npm:")) {
     const pkg = source.slice(4);
-    const name = pkg.includes("/") ? pkg.split("/").pop()! : pkg;
+    const maybeName = pkg.includes("/") ? pkg.split("/").pop() : pkg;
+    const name = maybeName || pkg;
     const tmp = join(tmpdir(), `mercury-ext-npm-${Date.now()}`);
     mkdirSync(tmp, { recursive: true });
 
@@ -1192,7 +1188,7 @@ program
   .command("chat [text...]")
   .description("Send a message to Mercury and get a reply")
   .option("-p, --port <port>", "Mercury server port", "8787")
-  .option("-g, --group <groupId>", "Group ID for the conversation")
+  .option("-s, --space <spaceId>", "Space to route the message to", "main")
   .option("-f, --file <paths...>", "Attach files to the message")
   .option("--caller <callerId>", "Caller ID", "cli:user")
   .option("--json", "Output raw JSON response")
@@ -1201,7 +1197,7 @@ program
       textParts: string[],
       options: {
         port: string;
-        group?: string;
+        space: string;
         file?: string[];
         caller: string;
         json?: boolean;
@@ -1227,8 +1223,8 @@ program
       const body: Record<string, unknown> = {
         text,
         callerId: options.caller,
+        spaceId: options.space,
       };
-      if (options.group) body.groupId = options.group;
 
       if (options.file && options.file.length > 0) {
         const files: Array<{ name: string; data: string }> = [];
@@ -1304,6 +1300,106 @@ program
       }
     },
   );
+
+const spacesCommand = program.command("spaces").description("Manage spaces");
+
+spacesCommand
+  .command("list")
+  .description("List all spaces")
+  .action(() => {
+    const spaces = withProjectDb((db) => db.listSpaces());
+    if (spaces.length === 0) {
+      console.log("No spaces found.");
+      return;
+    }
+    for (const space of spaces) {
+      const tags = space.tags ? ` [${space.tags}]` : "";
+      console.log(`${space.id}\t${space.name}${tags}`);
+    }
+  });
+
+spacesCommand
+  .command("create <id>")
+  .description("Create a new space")
+  .option("-n, --name <name>", "Display name (defaults to id)")
+  .option("-t, --tags <tags>", "Comma-separated tags")
+  .action((id: string, options: { name?: string; tags?: string }) => {
+    const name = options.name?.trim() || id;
+    const space = withProjectDb((db) => db.createSpace(id, name, options.tags));
+    console.log(`Created space '${space.id}' (${space.name})`);
+  });
+
+program
+  .command("conversations")
+  .alias("convos")
+  .description("List conversations")
+  .option("--unlinked", "Show only unlinked conversations")
+  .action((options: { unlinked?: boolean }) => {
+    const conversations = withProjectDb((db) =>
+      db.listConversations(options.unlinked ? { linked: false } : undefined),
+    );
+    if (conversations.length === 0) {
+      console.log("No conversations found.");
+      return;
+    }
+    for (const convo of conversations) {
+      const title = convo.observedTitle || convo.externalId;
+      const status = convo.spaceId ? `→ ${convo.spaceId}` : "(unlinked)";
+      console.log(`${convo.id}\t${convo.platform}\t${title}\t${status}`);
+    }
+  });
+
+program
+  .command("link <conversation> <space>")
+  .description("Link a conversation to a space")
+  .action((conversation: string, space: string) => {
+    withProjectDb((db) => {
+      const targetSpace = db.getSpace(space);
+      if (!targetSpace) {
+        console.error(`Error: space not found: ${space}`);
+        process.exit(1);
+      }
+
+      let target = Number.isFinite(Number(conversation))
+        ? db.listConversations().find((c) => c.id === Number(conversation))
+        : null;
+
+      if (!target) {
+        const q = conversation.toLowerCase();
+        const matches = db.listConversations().filter((c) => {
+          const observed = c.observedTitle?.toLowerCase() ?? "";
+          const external = c.externalId.toLowerCase();
+          return observed.includes(q) || external.includes(q);
+        });
+
+        if (matches.length === 0) {
+          console.error(`Error: conversation not found: ${conversation}`);
+          process.exit(1);
+        }
+        if (matches.length > 1) {
+          console.error("Error: conversation is ambiguous. Matches:");
+          for (const match of matches) {
+            const title = match.observedTitle || match.externalId;
+            const status = match.spaceId ? `→ ${match.spaceId}` : "(unlinked)";
+            console.error(
+              `  ${match.id}\t${match.platform}\t${title}\t${status}`,
+            );
+          }
+          process.exit(1);
+        }
+        target = matches[0];
+      }
+
+      const ok = db.linkConversation(target.id, space);
+      if (!ok) {
+        console.error(`Error: failed to link conversation ${target.id}`);
+        process.exit(1);
+      }
+
+      const title = target.observedTitle || target.externalId;
+      console.log(`Linked conversation ${target.id} (${title}) → ${space}`);
+    });
+  });
 
 // Extension commands
 program

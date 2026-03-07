@@ -69,11 +69,11 @@ Scan the QR code with WhatsApp. You're live.
                     │  ┌─────────────┐  │
                     │  │   pi CLI    │  │
                     │  └─────────────┘  │
-                    │  /groups/<id>     │
+                    │  /spaces/<space-id> │
                     └───────────────────┘
 ```
 
-Each chat group gets its own workspace and pi session. Messages are routed, queued, and executed in isolated containers.
+Each space is a user-defined memory boundary with its own workspace and pi session. Incoming platform conversations are discovered automatically, then linked into spaces.
 
 ---
 
@@ -82,7 +82,7 @@ Each chat group gets its own workspace and pi session. Messages are routed, queu
 | Feature | Description | Docs |
 |---------|-------------|------|
 | **Multi-platform** | WhatsApp, Slack, Discord | [docs/pipeline.md](docs/pipeline.md) |
-| **Memory** | Obsidian-compatible vault per group | [docs/memory.md](docs/memory.md) |
+| **Memory** | Obsidian-compatible vault per space | [docs/memory.md](docs/memory.md) |
 | **Scheduled Tasks** | Cron-based recurring prompts | [docs/scheduler.md](docs/scheduler.md) |
 | **Permissions** | Role-based access control | [docs/permissions.md](docs/permissions.md) |
 | **Media** | Images, documents, voice notes | [docs/media/overview.md](docs/media/overview.md) |
@@ -94,11 +94,11 @@ Each chat group gets its own workspace and pi session. Messages are routed, queu
 
 ## Workspaces
 
-Each group gets an Obsidian-compatible workspace:
+Each space gets an Obsidian-compatible workspace:
 
 ```
-.mercury/groups/<group-id>/
-├── AGENTS.md              # Group instructions
+.mercury/spaces/<space-id>/
+├── AGENTS.md              # Space instructions
 ├── .mercury.session.jsonl # pi session
 ├── .obsidian/             # Vault marker
 ├── entities/              # Memory pages
@@ -107,7 +107,7 @@ Each group gets an Obsidian-compatible workspace:
 └── outbox/                # Files produced by the agent
 ```
 
-The agent can read/write files. You can open it in Obsidian.
+The agent can read/write files. You can open it in Obsidian. Multiple platform conversations can point at the same space.
 
 ---
 
@@ -122,9 +122,14 @@ mercury build     # Rebuild container image
 mercury status    # Show status
 mercury chat "hello"             # Send a message to the running instance
 mercury chat --file photo.jpg "what's in this?"
-mercury chat --group my-project "check status"
+mercury chat --space my-project "check status"
 echo "summarize" | mercury chat  # Pipe input
 mercury kb-distill [--backfill]  # Run KB distillation
+mercury spaces list             # List spaces
+mercury spaces create <id>      # Create a space
+mercury conversations           # List linked conversations
+mercury conversations --unlinked # List unlinked conversations
+mercury link <conversation-id> <space-id>  # Link a conversation to a space
 
 # Extension management
 mercury add ./path/to/extension   # Install from local path
@@ -150,7 +155,8 @@ mrctl tasks list|create|pause|resume|delete
 mrctl roles list|grant|revoke
 mrctl permissions show|set
 mrctl config get|set
-mrctl groups list|name|delete
+mrctl spaces list|name|delete
+mrctl conversations list [--unlinked]
 mrctl stop
 mrctl compact
 mrctl ext list                # List installed extensions
@@ -245,7 +251,9 @@ See [docs/extensions.md](docs/extensions.md) for the full guide.
 | `MERCURY_TRIGGER_PATTERNS` | `@Mercury,Mercury` | Trigger patterns |
 | `MERCURY_ADMINS` | — | Pre-seeded admin user IDs |
 
-### Per-group Config
+### Per-space Config
+
+Conversations are discovered from incoming traffic. Unlinked conversations stay idle until you attach them to a space via `mercury link <conversation-id> <space-id>` or the dashboard.
 
 ```bash
 mrctl config set trigger_match always

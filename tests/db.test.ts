@@ -16,33 +16,49 @@ afterEach(() => {
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
-describe("groups", () => {
-  test("ensureGroup creates and returns group", () => {
-    const g = db.ensureGroup("g1");
+describe("spaces", () => {
+  test("createSpace creates and returns space", () => {
+    const g = db.createSpace("g1", "Space 1");
     expect(g.id).toBe("g1");
-    expect(g.title).toBe("g1");
+    expect(g.name).toBe("Space 1");
     expect(g.createdAt).toBeGreaterThan(0);
     expect(g.updatedAt).toBeGreaterThan(0);
   });
 
+  test("createSpace rejects invalid slug", () => {
+    expect(() => db.createSpace("bad:slug", "Bad")).toThrow();
+  });
+
   test("ensureGroup is idempotent", () => {
-    const g1 = db.ensureGroup("g1");
-    const g2 = db.ensureGroup("g1");
+    const g1 = db.ensureSpace("g1");
+    const g2 = db.ensureSpace("g1");
     expect(g1.id).toBe(g2.id);
   });
 
-  test("listGroups returns all groups", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
-    const groups = db.listGroups();
-    expect(groups.length).toBe(2);
-    expect(groups.map((g) => g.id)).toEqual(["g1", "g2"]);
+  test("listGroups returns all spaces", () => {
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
+    const spaces = db.listSpaces();
+    expect(spaces.length).toBe(2);
+    expect(spaces.map((g) => g.id)).toEqual(["g1", "g2"]);
+  });
+
+  test("deleteSpace unlinks conversations", () => {
+    db.createSpace("g1", "Space 1");
+    const convo = db.ensureConversation("whatsapp", "chat-1", "group");
+    db.linkConversation(convo.id, "g1");
+
+    const result = db.deleteSpace("g1");
+    expect(result.deleted).toBe(true);
+
+    const updated = db.findConversation("whatsapp", "chat-1");
+    expect(updated?.spaceId).toBeNull();
   });
 });
 
 describe("messages", () => {
   test("addMessage and getRecentMessages", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "hello");
     db.addMessage("g1", "assistant", "hi there");
 
@@ -55,7 +71,7 @@ describe("messages", () => {
   });
 
   test("getRecentMessages respects limit", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     for (let i = 0; i < 10; i++) {
       db.addMessage("g1", "user", `msg ${i}`);
     }
@@ -67,14 +83,14 @@ describe("messages", () => {
   });
 
   test("clearMessages removes all messages", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "hello");
     db.clearMessages("g1");
     expect(db.getRecentMessages("g1").length).toBe(0);
   });
 
   test("session boundary filters old messages", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "old message");
     db.setSessionBoundaryToLatest("g1");
     db.addMessage("g1", "user", "new message");
@@ -84,9 +100,9 @@ describe("messages", () => {
     expect(msgs[0].content).toBe("new message");
   });
 
-  test("messages are isolated between groups", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
+  test("messages are isolated between spaces", () => {
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
     db.addMessage("g1", "user", "g1 message");
     db.addMessage("g2", "user", "g2 message");
 
@@ -95,10 +111,10 @@ describe("messages", () => {
   });
 
   test("addMessage stores and retrieves attachments", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const attachments = [
       {
-        path: "/groups/g1/media/123-image.jpg",
+        path: "/spaces/g1/media/123-image.jpg",
         type: "image" as const,
         mimeType: "image/jpeg",
         sizeBytes: 12345,
@@ -111,7 +127,7 @@ describe("messages", () => {
     expect(msgs[0].attachments).toBeDefined();
     expect(msgs[0].attachments?.length).toBe(1);
     expect(msgs[0].attachments?.[0].path).toBe(
-      "/groups/g1/media/123-image.jpg",
+      "/spaces/g1/media/123-image.jpg",
     );
     expect(msgs[0].attachments?.[0].type).toBe("image");
     expect(msgs[0].attachments?.[0].mimeType).toBe("image/jpeg");
@@ -119,7 +135,7 @@ describe("messages", () => {
   });
 
   test("messages without attachments have undefined attachments", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "plain text");
 
     const msgs = db.getRecentMessages("g1");
@@ -129,7 +145,7 @@ describe("messages", () => {
 
 describe("tasks", () => {
   test("createTask and listTasks", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "*/5 * * * *" },
@@ -149,7 +165,7 @@ describe("tasks", () => {
   });
 
   test("getDueTasks returns only due tasks", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     db.createTask("g1", { cron: "* * * * *" }, "due", now - 1000, "user1");
     db.createTask("g1", { cron: "* * * * *" }, "not due", now + 60000, "user1");
@@ -160,7 +176,7 @@ describe("tasks", () => {
   });
 
   test("setTaskActive pauses/resumes task", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -177,7 +193,7 @@ describe("tasks", () => {
   });
 
   test("deleteTask removes task", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -191,8 +207,8 @@ describe("tasks", () => {
   });
 
   test("deleteTask fails for wrong group", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -206,7 +222,7 @@ describe("tasks", () => {
   });
 
   test("getTask returns task by id", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -226,7 +242,7 @@ describe("tasks", () => {
   });
 
   test("updateTaskNextRun updates next_run_at", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -241,7 +257,7 @@ describe("tasks", () => {
   });
 
   test("createTask with silent flag", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -256,7 +272,7 @@ describe("tasks", () => {
   });
 
   test("createTask defaults to not silent", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -270,7 +286,7 @@ describe("tasks", () => {
   });
 
   test("listTasks includes silent field", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.createTask(
       "g1",
       { cron: "* * * * *" },
@@ -295,7 +311,7 @@ describe("tasks", () => {
   });
 
   test("getDueTasks includes silent field", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     db.createTask(
       "g1",
@@ -314,14 +330,14 @@ describe("tasks", () => {
 
 describe("roles", () => {
   test("upsertMember creates member role", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.upsertMember("g1", "user1");
 
     expect(db.getRole("g1", "user1")).toBe("member");
   });
 
   test("upsertMember does not overwrite existing role", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.setRole("g1", "user1", "admin", "system");
     db.upsertMember("g1", "user1");
 
@@ -329,7 +345,7 @@ describe("roles", () => {
   });
 
   test("setRole creates or updates role", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.setRole("g1", "user1", "admin", "system");
     expect(db.getRole("g1", "user1")).toBe("admin");
 
@@ -338,12 +354,12 @@ describe("roles", () => {
   });
 
   test("getRole returns null for unknown user", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     expect(db.getRole("g1", "unknown")).toBeNull();
   });
 
   test("listRoles returns all roles for group", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.setRole("g1", "user1", "admin", "system");
     db.setRole("g1", "user2", "member", "system");
 
@@ -352,7 +368,7 @@ describe("roles", () => {
   });
 
   test("seedAdmins grants admin to listed users", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.seedAdmins("g1", ["user1", "user2"]);
 
     expect(db.getRole("g1", "user1")).toBe("admin");
@@ -360,16 +376,16 @@ describe("roles", () => {
   });
 
   test("seedAdmins does not downgrade existing admin", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.setRole("g1", "user1", "admin", "manual");
     db.seedAdmins("g1", ["user1"]);
 
     expect(db.getRole("g1", "user1")).toBe("admin");
   });
 
-  test("roles are isolated between groups", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
+  test("roles are isolated between spaces", () => {
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
     db.setRole("g1", "user1", "admin", "system");
 
     expect(db.getRole("g1", "user1")).toBe("admin");
@@ -378,52 +394,52 @@ describe("roles", () => {
 });
 
 describe("group config", () => {
-  test("getGroupConfig returns null for missing key", () => {
-    db.ensureGroup("g1");
-    expect(db.getGroupConfig("g1", "missing")).toBeNull();
+  test("getSpaceConfig returns null for missing key", () => {
+    db.ensureSpace("g1");
+    expect(db.getSpaceConfig("g1", "missing")).toBeNull();
   });
 
-  test("setGroupConfig and getGroupConfig", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "trigger.match", "always", "admin1");
+  test("setSpaceConfig and getSpaceConfig", () => {
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "trigger.match", "always", "admin1");
 
-    expect(db.getGroupConfig("g1", "trigger.match")).toBe("always");
+    expect(db.getSpaceConfig("g1", "trigger.match")).toBe("always");
   });
 
-  test("setGroupConfig overwrites existing value", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "key", "val1", "admin1");
-    db.setGroupConfig("g1", "key", "val2", "admin2");
+  test("setSpaceConfig overwrites existing value", () => {
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "key", "val1", "admin1");
+    db.setSpaceConfig("g1", "key", "val2", "admin2");
 
-    expect(db.getGroupConfig("g1", "key")).toBe("val2");
+    expect(db.getSpaceConfig("g1", "key")).toBe("val2");
   });
 
   test("listGroupConfig returns all config entries", () => {
-    db.ensureGroup("g1");
-    db.setGroupConfig("g1", "a", "1", "admin");
-    db.setGroupConfig("g1", "b", "2", "admin");
+    db.ensureSpace("g1");
+    db.setSpaceConfig("g1", "a", "1", "admin");
+    db.setSpaceConfig("g1", "b", "2", "admin");
 
-    const entries = db.listGroupConfig("g1");
+    const entries = db.listSpaceConfig("g1");
     expect(entries.length).toBe(2);
     expect(entries[0].key).toBe("a");
     expect(entries[1].key).toBe("b");
   });
 
-  test("config is isolated between groups", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
-    db.setGroupConfig("g1", "key", "g1val", "admin");
-    db.setGroupConfig("g2", "key", "g2val", "admin");
+  test("config is isolated between spaces", () => {
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
+    db.setSpaceConfig("g1", "key", "g1val", "admin");
+    db.setSpaceConfig("g2", "key", "g2val", "admin");
 
-    expect(db.getGroupConfig("g1", "key")).toBe("g1val");
-    expect(db.getGroupConfig("g2", "key")).toBe("g2val");
+    expect(db.getSpaceConfig("g1", "key")).toBe("g1val");
+    expect(db.getSpaceConfig("g2", "key")).toBe("g2val");
   });
 });
 
-describe("tasks — listTasks without groupId", () => {
-  test("returns all tasks across groups", () => {
-    db.ensureGroup("g1");
-    db.ensureGroup("g2");
+describe("tasks — listTasks without spaceId", () => {
+  test("returns all tasks across spaces", () => {
+    db.ensureSpace("g1");
+    db.ensureSpace("g2");
     db.createTask("g1", { cron: "* * * * *" }, "task1", Date.now(), "user1");
     db.createTask("g2", { cron: "* * * * *" }, "task2", Date.now(), "user2");
 
@@ -436,7 +452,7 @@ describe("tasks — listTasks without groupId", () => {
 
 describe("getMessagesSinceLastUserTrigger", () => {
   test("returns messages between last two user messages", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "first question");
     db.addMessage("g1", "assistant", "first answer");
     db.addMessage("g1", "user", "second question");
@@ -450,7 +466,7 @@ describe("getMessagesSinceLastUserTrigger", () => {
   });
 
   test("returns empty if no user messages", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "assistant", "unsolicited");
 
     const msgs = db.getMessagesSinceLastUserTrigger("g1");
@@ -458,7 +474,7 @@ describe("getMessagesSinceLastUserTrigger", () => {
   });
 
   test("respects session boundary", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     db.addMessage("g1", "user", "old");
     db.addMessage("g1", "assistant", "old response");
     db.setSessionBoundaryToLatest("g1");

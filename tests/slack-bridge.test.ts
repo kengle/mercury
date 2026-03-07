@@ -62,49 +62,32 @@ const defaultCtx: NormalizeContext = {
 // ─── Tests ──────────────────────────────────────────────────────────────
 
 describe("SlackBridge", () => {
-  describe("groupId", () => {
-    test("strips thread timestamp", () => {
+  describe("parseThread", () => {
+    test("parses threaded channel IDs", () => {
       const { adapter } = createMockAdapter();
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.groupId("slack:C123:1234.5678")).toBe("slack:C123");
+      expect(bridge.parseThread("slack:C123:1234.5678")).toEqual({
+        externalId: "C123:1234.5678",
+        isDM: false,
+      });
     });
 
-    test("handles thread ID without timestamp", () => {
+    test("parses channel IDs without thread timestamp", () => {
       const { adapter } = createMockAdapter();
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.groupId("slack:C123")).toBe("slack:C123");
+      expect(bridge.parseThread("slack:C123")).toEqual({
+        externalId: "C123",
+        isDM: false,
+      });
     });
 
-    test("returns raw ID for non-slack format", () => {
+    test("parses DM channels", () => {
       const { adapter } = createMockAdapter();
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.groupId("something-else")).toBe("something-else");
-    });
-  });
-
-  describe("isDM", () => {
-    test("returns true for D-prefixed channels", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.isDM("slack:D123:ts")).toBe(true);
-    });
-
-    test("returns true for G-prefixed channels (group DMs)", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.isDM("slack:G456:ts")).toBe(true);
-    });
-
-    test("returns false for C-prefixed channels", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.isDM("slack:C789:ts")).toBe(false);
-    });
-
-    test("returns false for non-slack format", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new SlackBridge(adapter as never, "xoxb-token");
-      expect(bridge.isDM("other:thing")).toBe(false);
+      expect(bridge.parseThread("slack:D123:ts")).toEqual({
+        externalId: "D123:ts",
+        isDM: true,
+      });
     });
   });
 
@@ -114,7 +97,7 @@ describe("SlackBridge", () => {
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
       const msg = makeMessage({ isMe: true });
       expect(
-        await bridge.normalize("slack:C123:ts", msg, defaultCtx),
+        await bridge.normalize("slack:C123:ts", msg, defaultCtx, "space1"),
       ).toBeNull();
     });
 
@@ -123,7 +106,7 @@ describe("SlackBridge", () => {
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
       const msg = makeMessage({ text: "" });
       expect(
-        await bridge.normalize("slack:C123:ts", msg, defaultCtx),
+        await bridge.normalize("slack:C123:ts", msg, defaultCtx, "space1"),
       ).toBeNull();
     });
 
@@ -131,8 +114,13 @@ describe("SlackBridge", () => {
       const { adapter } = createMockAdapter();
       const bridge = new SlackBridge(adapter as never, "xoxb-token");
       const msg = makeMessage({ text: "hello" });
-      const result = await bridge.normalize("slack:C123:ts", msg, defaultCtx);
-      expect(result!.isReplyToBot).toBe(false);
+      const result = await bridge.normalize(
+        "slack:C123:ts",
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.isReplyToBot).toBe(false);
     });
 
     test("builds correct IngressMessage", async () => {
@@ -147,10 +135,12 @@ describe("SlackBridge", () => {
         "slack:C123:1234.5678",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).toEqual({
         platform: "slack",
-        groupId: "slack:C123",
+        spaceId: "space1",
+        conversationExternalId: "C123:1234.5678",
         callerId: "slack:U789",
         authorName: "Bob",
         text: "hello",
@@ -168,8 +158,9 @@ describe("SlackBridge", () => {
         "slack:D123:1234.5678",
         msg,
         defaultCtx,
+        "space1",
       );
-      expect(result!.isDM).toBe(true);
+      expect(result?.isDM).toBe(true);
     });
   });
 

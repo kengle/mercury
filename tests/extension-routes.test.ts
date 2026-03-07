@@ -3,17 +3,31 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { Hono } from "hono";
+import type { AgentContainerRunner } from "../src/agent/container-runner.js";
 import type { AppConfig } from "../src/config.js";
 import { createApiApp, type Env } from "../src/core/api.js";
-import { GroupQueue } from "../src/core/group-queue.js";
-import {
-  registerPermission,
-  resetPermissions,
-  seededGroups,
-} from "../src/core/permissions.js";
+import { resetPermissions, seededSpaces } from "../src/core/permissions.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
+import type { TaskScheduler } from "../src/core/task-scheduler.js";
 import { ConfigRegistry } from "../src/extensions/config-registry.js";
 import { ExtensionRegistry } from "../src/extensions/loader.js";
 import { Db } from "../src/storage/db.js";
+
+type ExtensionSummary = {
+  name: string;
+  hasCli: boolean;
+  permission: string | null;
+};
+
+type ListExtensionsResponse = {
+  extensions: ExtensionSummary[];
+};
+
+type ExtensionAuthResponse = {
+  allowed?: boolean;
+  extension?: string;
+  error?: string;
+};
 
 let tmpDir: string;
 let db: Db;
@@ -22,7 +36,7 @@ let registry: ExtensionRegistry;
 
 const headers = (caller = "admin1", group = "test-group") => ({
   "x-mercury-caller": caller,
-  "x-mercury-group": group,
+  "x-mercury-space": group,
   "content-type": "application/json",
 });
 
@@ -31,17 +45,17 @@ const containerRunner = {
   abort: () => false,
   activeCount: 0,
   getActiveGroups: () => [],
-} as any;
+} as unknown as AgentContainerRunner;
 
 const scheduler = {
   start: () => {},
   stop: () => {},
   getUpcomingTasks: () => [],
-} as any;
+} as unknown as TaskScheduler;
 
 beforeEach(async () => {
   resetPermissions();
-  seededGroups.clear();
+  seededSpaces.clear();
 
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-ext-routes-"));
   db = new Db(path.join(tmpDir, "state.db"));
@@ -77,7 +91,7 @@ beforeEach(async () => {
     warn: () => {},
     error: () => {},
     debug: () => {},
-  } as any;
+  } as const;
   await registry.loadAll(extDir, db, log);
 
   const config = {
@@ -89,7 +103,7 @@ beforeEach(async () => {
     db,
     config,
     containerRunner,
-    queue: new GroupQueue(2),
+    queue: new SpaceQueue(2),
     scheduler,
     registry,
     configRegistry: new ConfigRegistry(),
@@ -107,22 +121,22 @@ describe("GET /ext", () => {
   test("lists all extensions", async () => {
     const res = await app.request("/ext", { headers: headers() });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ListExtensionsResponse;
     expect(body.extensions).toHaveLength(2);
 
-    const names = body.extensions.map((e: any) => e.name).sort();
+    const names = body.extensions.map((e) => e.name).sort();
     expect(names).toEqual(["kb-distill", "napkin"]);
   });
 
   test("includes CLI and permission info", async () => {
     const res = await app.request("/ext", { headers: headers() });
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ListExtensionsResponse;
 
-    const napkin = body.extensions.find((e: any) => e.name === "napkin");
+    const napkin = body.extensions.find((e) => e.name === "napkin");
     expect(napkin.hasCli).toBe(true);
     expect(napkin.permission).toBe("napkin");
 
-    const distill = body.extensions.find((e: any) => e.name === "kb-distill");
+    const distill = body.extensions.find((e) => e.name === "kb-distill");
     expect(distill.hasCli).toBe(false);
     expect(distill.permission).toBeNull();
   });
@@ -142,7 +156,7 @@ describe("POST /ext/:name/auth", () => {
       headers: headers("admin1"),
     });
     expect(res.status).toBe(200);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ExtensionAuthResponse;
     expect(body.allowed).toBe(true);
     expect(body.extension).toBe("napkin");
   });
@@ -153,7 +167,7 @@ describe("POST /ext/:name/auth", () => {
       headers: headers(),
     });
     expect(res.status).toBe(404);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ExtensionAuthResponse;
     expect(body.error).toContain("Unknown extension");
   });
 
@@ -163,7 +177,7 @@ describe("POST /ext/:name/auth", () => {
       headers: headers(),
     });
     expect(res.status).toBe(400);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ExtensionAuthResponse;
     expect(body.error).toContain("has no CLI");
   });
 
@@ -175,15 +189,15 @@ describe("POST /ext/:name/auth", () => {
     // whose role doesn't include the permission.
 
     // Override napkin permissions to admin-only for this test
-    db.ensureGroup("test-group");
-    db.setGroupConfig("test-group", "role.member.permissions", "prompt");
+    db.ensureSpace("test-group");
+    db.setSpaceConfig("test-group", "role.member.permissions", "prompt");
 
     const res = await app.request("/ext/napkin/auth", {
       method: "POST",
       headers: headers("nobody", "test-group"),
     });
     expect(res.status).toBe(403);
-    const body = (await res.json()) as any;
+    const body = (await res.json()) as ExtensionAuthResponse;
     expect(body.error).toContain("napkin");
   });
 });

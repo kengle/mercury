@@ -59,8 +59,8 @@ describe("ExtensionRegistry", () => {
 
     expect(registry.size).toBe(1);
     expect(registry.get("hello")).toBeDefined();
-    expect(registry.get("hello")!.name).toBe("hello");
-    expect(registry.get("hello")!.configs.get("foo")).toBeDefined();
+    expect(registry.get("hello")?.name).toBe("hello");
+    expect(registry.get("hello")?.configs.get("foo")).toBeDefined();
   });
 
   it("loads multiple extensions", async () => {
@@ -124,7 +124,7 @@ describe("ExtensionRegistry", () => {
       "roles",
       "permissions",
       "config",
-      "groups",
+      "spaces",
       "stop",
       "compact",
       "ext",
@@ -167,7 +167,8 @@ describe("ExtensionRegistry", () => {
       `export default function(m) { m.cli({ name: "my-tool", install: "npm i -g my-tool" }); }`,
     );
     await registry.loadAll(extDir, db, log);
-    const ext = registry.get("my-tool")!;
+    const ext = registry.get("my-tool");
+    expect(ext).toBeDefined();
     expect(ext.cli).toEqual({
       name: "my-tool",
       install: "npm i -g my-tool",
@@ -181,7 +182,8 @@ describe("ExtensionRegistry", () => {
       `export default function(m) { m.permission({ defaultRoles: ["admin", "member"] }); }`,
     );
     await registry.loadAll(extDir, db, log);
-    const ext = registry.get("my-tool")!;
+    const ext = registry.get("my-tool");
+    expect(ext).toBeDefined();
     expect(ext.permission).toEqual({
       defaultRoles: ["admin", "member"],
     });
@@ -193,7 +195,8 @@ describe("ExtensionRegistry", () => {
       `export default function(m) { m.skill("./skill"); }`,
     );
     await registry.loadAll(extDir, db, log);
-    const ext = registry.get("my-tool")!;
+    const ext = registry.get("my-tool");
+    expect(ext).toBeDefined();
     expect(ext.skillDir).toContain("my-tool");
     expect(ext.skillDir).toContain("skill");
   });
@@ -249,7 +252,8 @@ describe("ExtensionRegistry", () => {
 			}`,
     );
     await registry.loadAll(extDir, db, log);
-    const ext = registry.get("dash")!;
+    const ext = registry.get("dash");
+    expect(ext).toBeDefined();
     expect(ext.widgets).toHaveLength(1);
     expect(ext.widgets[0].label).toBe("Test");
   });
