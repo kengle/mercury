@@ -12,7 +12,7 @@ Extensions live in `.mercury/extensions/*/`. Each directory is an extension:
 │   ├── index.ts           # Required — setup function
 │   ├── skill/SKILL.md     # Optional — agent skill
 │   └── package.json       # Optional — dependencies
-└── kb-distill/
+└── gws/
     └── index.ts
 ```
 

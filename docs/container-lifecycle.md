@@ -112,7 +112,7 @@ Mercury publishes two image presets to GitHub Container Registry:
 | Preset | Size | Contents |
 |--------|------|----------|
 | `ghcr.io/michaelliv/mercury-agent:latest` | ~2.8GB | Full devcontainer: Bun, Node.js, Python, Go, git, build tools |
-| `ghcr.io/michaelliv/mercury-agent:minimal` | ~1.9GB | Bun only: Bun runtime, pi, agent-browser, napkin |
+| `ghcr.io/michaelliv/mercury-agent:minimal` | ~1.9GB | Lightweight runtime: Bun + pi + Chromium deps |
 
 Images are published on each release. Version-specific tags are also available (e.g., `:0.2.0`, `:0.2.0-minimal`).
 
@@ -136,9 +136,9 @@ You can use custom Docker images via `MERCURY_AGENT_IMAGE`.
 Your image **must** have:
 - `bun` runtime
 - `pi` CLI (`@mariozechner/pi-coding-agent`)
-- `agent-browser` CLI
-- `napkin` CLI (`napkin-ai`)
-- `mrctl` (copied during build)
+- `mrctl` wrapper (copied during build)
+
+Extension CLIs (e.g. `pinchtab`, `napkin`, `gws`) are installed in derived images at runtime based on `.mercury/extensions/*` declarations.
 
 ### Entry Point
 
@@ -169,7 +169,7 @@ RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl 
 
 Mercury mounts these paths into containers:
 - `/spaces` — Space workspaces (read/write)
-- `/home/node/.pi/agent` — Global agent config (read/write)
+- `/root/.pi/agent` — Global agent config, skills, auth (read/write)
 - `/docs/mercury/` — Self-documentation (read-only)
 
 ### Example Custom Dockerfile
@@ -182,9 +182,9 @@ RUN curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:$PATH"
 
 # Install required CLIs
-RUN bun add -g @mariozechner/pi-coding-agent agent-browser napkin-ai
+RUN bun add -g @mariozechner/pi-coding-agent
 
-# Install Playwright for browser automation (optional but recommended)
+# Optional: install Playwright/Chromium if your extensions need browser automation
 RUN bunx playwright install chromium
 
 WORKDIR /app
@@ -208,7 +208,7 @@ When using a custom image (not `mercury-agent:*`), Mercury logs a warning at sta
 ```
 WARN  Using custom agent image
       image: your-image:tag
-      note: Ensure image has: bun, pi, agent-browser, napkin, mrctl
+      note: Ensure image has: bun, pi, mrctl
 ```
 
 ## API

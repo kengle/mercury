@@ -1,35 +1,46 @@
 # Memory
 
-Mercury uses an Obsidian-compatible vault for persistent memory. The agent reads and writes markdown files with wikilinks, giving it structured, human-readable memory that survives sessions.
+Mercury stores memory per **space** in the space workspace directory. Memory behavior is extension-driven (for example, via a napkin extension).
 
 ## How It Works
 
-Each space workspace is a valid Obsidian vault. The agent uses [napkin](https://github.com/michaelliv/napkin-ai) CLI to read, write, and query files.
+Each space gets a workspace at:
 
-```
+```text
 .mercury/spaces/<space-id>/
-├── .obsidian/          # Makes it a valid Obsidian vault
-├── entities/           # Entity pages (people, projects, things)
-├── daily/              # Daily conversation logs
+```
+
+Core directories Mercury manages:
+
+```text
+.mercury/spaces/<space-id>/
 ├── inbox/              # Media received from users
 ├── outbox/             # Files produced by the agent
-├── AGENTS.md           # Persistent instructions (loaded by pi)
-└── .pi/                # pi resources
+├── AGENTS.md           # Space instructions
+└── .mercury.session.jsonl
 ```
+
+Additional vault structure (for example `.obsidian/`, `knowledge/`, `daily/`, `entities/`) is created by installed extensions.
 
 ## Vault Structure
 
-| Directory | Purpose |
-|-----------|---------|
-| `.obsidian/` | Marker directory — makes the workspace Obsidian-compatible |
-| `entities/` | Entity files (people, places, projects, concepts) |
-| `daily/` | Daily notes for conversation logs |
+There is no single required memory schema in core Mercury. The exact structure depends on your extension setup.
 
-The structure is created automatically by the napkin extension's `workspace_init` hook when a space workspace is initialized. Conversations do not get their own vaults — multiple platform conversations can link into the same space. See `src/extensions/napkin/index.ts`.
+A common pattern (napkin example) is:
+
+```text
+knowledge/
+├── people/
+├── projects/
+├── references/
+└── daily/
+```
+
+Conversations do not get their own vaults — multiple platform conversations can link into the same space.
 
 ## Agent Capabilities
 
-The agent discovers napkin commands via the napkin skill (`src/extensions/napkin/skill/SKILL.md`), which is loaded by pi on demand:
+The agent discovers extension commands via installed skills (for example `napkin` skill in `.mercury/extensions/napkin/skill/`).
 
 ### Reading
 
@@ -107,7 +118,7 @@ The vault is plain markdown. You can:
 
 ## Configuration
 
-No additional configuration needed. The napkin extension is a built-in extension that loads automatically. The vault structure is created by the extension's `workspace_init` hook.
+Memory behavior is controlled by installed extensions and their config.
 
 To use a shared Obsidian vault across tools, symlink or mount it:
 
