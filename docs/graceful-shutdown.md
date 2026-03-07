@@ -55,8 +55,8 @@ core.isShuttingDown              // boolean
 | Component | Method | What it does |
 |-----------|--------|-------------|
 | `TaskScheduler` | `stop()` | Clears the poll timer |
-| `GroupQueue` | `cancelAll()` | Drops all pending entries, returns count |
-| `GroupQueue` | `waitForActive(ms)` | Resolves when active count hits 0 or timeout |
+| `SpaceQueue` | `cancelAll()` | Drops all pending entries, returns count |
+| `SpaceQueue` | `waitForActive(ms)` | Resolves when active count hits 0 or timeout |
 | `AgentContainerRunner` | `killAll()` | Kill all running containers via `docker kill` |
 | `Db` | `close()` | Closes SQLite connection |
 | `WhatsAppBaileysAdapter` | `shutdown()` | Ends the Baileys socket |

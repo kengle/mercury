@@ -92,40 +92,30 @@ function makeMessage(overrides: {
 
 const defaultCtx: NormalizeContext = {
   botUserName: "mercury",
-  getWorkspace: () => null, // no workspace = no media download
+  getWorkspace: () => "/tmp/test-workspace",
   media: { enabled: true, maxSizeBytes: 10 * 1024 * 1024 },
 };
 
 // ─── Tests ──────────────────────────────────────────────────────────────
 
 describe("DiscordBridge", () => {
-  describe("groupId", () => {
-    test("returns threadId unchanged", () => {
+  describe("parseThread", () => {
+    test("extracts externalId and DM state for guild channels", () => {
       const { adapter } = createMockAdapter();
       const bridge = new DiscordBridge(adapter as never);
-      expect(bridge.groupId("discord:guild1:channel1")).toBe(
-        "discord:guild1:channel1",
-      );
-    });
-  });
-
-  describe("isDM", () => {
-    test("returns true for @me guild", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new DiscordBridge(adapter as never);
-      expect(bridge.isDM("discord:@me:channel1")).toBe(true);
+      expect(bridge.parseThread("discord:guild1:channel1")).toEqual({
+        externalId: "guild1:channel1",
+        isDM: false,
+      });
     });
 
-    test("returns false for regular guild", () => {
+    test("extracts externalId and DM state for DMs", () => {
       const { adapter } = createMockAdapter();
       const bridge = new DiscordBridge(adapter as never);
-      expect(bridge.isDM("discord:guild1:channel1")).toBe(false);
-    });
-
-    test("returns false for malformed thread ID", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new DiscordBridge(adapter as never);
-      expect(bridge.isDM("something")).toBe(false);
+      expect(bridge.parseThread("discord:@me:channel1")).toEqual({
+        externalId: "@me:channel1",
+        isDM: true,
+      });
     });
   });
 
@@ -134,30 +124,44 @@ describe("DiscordBridge", () => {
       const { adapter } = createMockAdapter();
       const bridge = new DiscordBridge(adapter as never);
       const msg = makeMessage({ isMe: true });
-      expect(await bridge.normalize("discord:g:c", msg, defaultCtx)).toBeNull();
+      expect(
+        await bridge.normalize("discord:g:c", msg, defaultCtx, "space1"),
+      ).toBeNull();
     });
 
     test("returns null for empty messages", async () => {
       const { adapter } = createMockAdapter();
       const bridge = new DiscordBridge(adapter as never);
       const msg = makeMessage({ text: "" });
-      expect(await bridge.normalize("discord:g:c", msg, defaultCtx)).toBeNull();
+      expect(
+        await bridge.normalize("discord:g:c", msg, defaultCtx, "space1"),
+      ).toBeNull();
     });
 
     test("converts bot mentions to @userName", async () => {
       const { adapter } = createMockAdapter({ botUserId: "bot123" });
       const bridge = new DiscordBridge(adapter as never);
       const msg = makeMessage({ text: "hey <@bot123> do something" });
-      const result = await bridge.normalize("discord:g:c", msg, defaultCtx);
-      expect(result!.text).toBe("hey @mercury do something");
+      const result = await bridge.normalize(
+        "discord:g:c",
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.text).toBe("hey @mercury do something");
     });
 
     test("converts bot mentions with ! format", async () => {
       const { adapter } = createMockAdapter({ botUserId: "bot123" });
       const bridge = new DiscordBridge(adapter as never);
       const msg = makeMessage({ text: "<@!bot123> help" });
-      const result = await bridge.normalize("discord:g:c", msg, defaultCtx);
-      expect(result!.text).toBe("@mercury help");
+      const result = await bridge.normalize(
+        "discord:g:c",
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.text).toBe("@mercury help");
     });
 
     test("extracts isReplyToBot from metadata", async () => {
@@ -167,16 +171,26 @@ describe("DiscordBridge", () => {
         text: "reply",
         metadata: { isReplyToBot: true },
       });
-      const result = await bridge.normalize("discord:g:c", msg, defaultCtx);
-      expect(result!.isReplyToBot).toBe(true);
+      const result = await bridge.normalize(
+        "discord:g:c",
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.isReplyToBot).toBe(true);
     });
 
     test("defaults isReplyToBot to false", async () => {
       const { adapter } = createMockAdapter();
       const bridge = new DiscordBridge(adapter as never);
       const msg = makeMessage({ text: "hello" });
-      const result = await bridge.normalize("discord:g:c", msg, defaultCtx);
-      expect(result!.isReplyToBot).toBe(false);
+      const result = await bridge.normalize(
+        "discord:g:c",
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.isReplyToBot).toBe(false);
     });
 
     test("builds correct IngressMessage", async () => {
@@ -191,10 +205,12 @@ describe("DiscordBridge", () => {
         "discord:guild1:channel1",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).toEqual({
         platform: "discord",
-        groupId: "discord:guild1:channel1",
+        spaceId: "space1",
+        conversationExternalId: "guild1:channel1",
         callerId: "discord:user789",
         authorName: "Alice",
         text: "hello",
@@ -212,8 +228,9 @@ describe("DiscordBridge", () => {
         "discord:@me:channel1",
         msg,
         defaultCtx,
+        "space1",
       );
-      expect(result!.isDM).toBe(true);
+      expect(result?.isDM).toBe(true);
     });
   });
 

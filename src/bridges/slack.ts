@@ -19,27 +19,19 @@ export class SlackBridge implements PlatformBridge {
     private readonly botToken: string,
   ) {}
 
-  groupId(threadId: string): string {
+  parseThread(threadId: string): { externalId: string; isDM: boolean } {
     const parts = threadId.split(":");
-    if (parts.length >= 2 && parts[0] === "slack") {
-      return `slack:${parts[1]}`;
-    }
-    return threadId;
-  }
-
-  isDM(threadId: string): boolean {
-    const parts = threadId.split(":");
-    if (parts.length >= 2 && parts[0] === "slack") {
-      const ch = parts[1];
-      return ch.startsWith("D") || ch.startsWith("G");
-    }
-    return false;
+    const externalId = parts.slice(1).join(":");
+    const ch = parts[1] || "";
+    const isDM = ch.startsWith("D") || ch.startsWith("G");
+    return { externalId, isDM };
   }
 
   async normalize(
     threadId: string,
     message: unknown,
     ctx: NormalizeContext,
+    spaceId: string,
   ): Promise<IngressMessage | null> {
     const msg = message as Message;
     if (msg.author.isMe) return null;
@@ -50,36 +42,37 @@ export class SlackBridge implements PlatformBridge {
 
     const attachments: MessageAttachment[] = [];
     if (ctx.media.enabled && rawAttachments.length > 0) {
-      const workspace = ctx.getWorkspace(this.groupId(threadId));
-      if (workspace) {
-        const inboxDir = path.join(workspace, "inbox");
-        for (const att of rawAttachments) {
-          const url = att.url || (att as { url_private?: string }).url_private;
-          if (!url) continue;
-          const type = mimeToMediaType(
-            att.mimeType || "application/octet-stream",
-          );
-          const result = await downloadMediaFromUrl(url, {
-            type,
-            mimeType: att.mimeType || "application/octet-stream",
-            filename: att.name,
-            expectedSizeBytes: att.size,
-            maxSizeBytes: ctx.media.maxSizeBytes,
-            outputDir: inboxDir,
-            headers: { Authorization: `Bearer ${this.botToken}` },
-          });
-          if (result) attachments.push(result);
-        }
+      const workspace = ctx.getWorkspace(spaceId);
+      const inboxDir = path.join(workspace, "inbox");
+      for (const att of rawAttachments) {
+        const url = att.url || (att as { url_private?: string }).url_private;
+        if (!url) continue;
+        const type = mimeToMediaType(
+          att.mimeType || "application/octet-stream",
+        );
+        const result = await downloadMediaFromUrl(url, {
+          type,
+          mimeType: att.mimeType || "application/octet-stream",
+          filename: att.name,
+          expectedSizeBytes: att.size,
+          maxSizeBytes: ctx.media.maxSizeBytes,
+          outputDir: inboxDir,
+          headers: { Authorization: `Bearer ${this.botToken}` },
+        });
+        if (result) attachments.push(result);
       }
     }
 
+    const { externalId, isDM } = this.parseThread(threadId);
+
     return {
       platform: "slack",
-      groupId: this.groupId(threadId),
+      spaceId,
+      conversationExternalId: externalId,
       callerId: `slack:${msg.author.userId || "unknown"}`,
       authorName: msg.author.userName,
       text,
-      isDM: this.isDM(threadId),
+      isDM,
       isReplyToBot: false,
       attachments,
     };

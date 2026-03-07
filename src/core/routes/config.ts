@@ -23,12 +23,12 @@ const BUILTIN_VALIDATORS: Record<string, (v: string) => string | null> = {
 export const config = new Hono<Env>();
 
 config.get("/", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "config.get");
   if (denied) return denied;
 
   const { db, configRegistry } = getApiCtx(c);
-  const entries = db.listGroupConfig(groupId);
+  const entries = db.listSpaceConfig(spaceId);
   const configMap: Record<string, string> = {};
   for (const e of entries) configMap[e.key] = e.value;
 
@@ -39,11 +39,11 @@ config.get("/", (c) => {
     default: rc.default,
   }));
 
-  return c.json({ groupId, config: configMap, available });
+  return c.json({ spaceId, config: configMap, available });
 });
 
 config.put("/", async (c) => {
-  const { groupId, callerId } = getAuth(c);
+  const { spaceId, callerId } = getAuth(c);
   const denied = checkPerm(c, "config.set");
   if (denied) return denied;
 
@@ -80,6 +80,6 @@ config.put("/", async (c) => {
     return c.json({ error: `Invalid value for ${body.key}` }, 400);
   }
 
-  db.setGroupConfig(groupId, body.key, body.value, callerId);
-  return c.json({ groupId, key: body.key, value: body.value });
+  db.setSpaceConfig(spaceId, body.key, body.value, callerId);
+  return c.json({ spaceId, key: body.key, value: body.value });
 });

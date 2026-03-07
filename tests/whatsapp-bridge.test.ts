@@ -85,35 +85,25 @@ const defaultCtx: NormalizeContext = {
 // ─── Tests ──────────────────────────────────────────────────────────────
 
 describe("WhatsAppBridge", () => {
-  describe("groupId", () => {
-    test("returns threadId unchanged", () => {
+  describe("parseThread", () => {
+    test("parses group threads", () => {
       const { adapter } = createMockAdapter();
       const bridge = new WhatsAppBridge(adapter as never);
-      expect(bridge.groupId("whatsapp:group@g.us:group@g.us")).toBe(
-        "whatsapp:group@g.us:group@g.us",
-      );
-    });
-  });
-
-  describe("isDM", () => {
-    test("returns false for group JIDs", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new WhatsAppBridge(adapter as never);
-      expect(bridge.isDM("whatsapp:123456@g.us:123456@g.us")).toBe(false);
+      expect(bridge.parseThread("whatsapp:123456@g.us:123456@g.us")).toEqual({
+        externalId: "123456@g.us:123456@g.us",
+        isDM: false,
+      });
     });
 
-    test("returns true for non-group JIDs", () => {
+    test("parses DM threads", () => {
       const { adapter } = createMockAdapter();
       const bridge = new WhatsAppBridge(adapter as never);
       expect(
-        bridge.isDM("whatsapp:123@s.whatsapp.net:123@s.whatsapp.net"),
-      ).toBe(true);
-    });
-
-    test("returns true for LID JIDs", () => {
-      const { adapter } = createMockAdapter();
-      const bridge = new WhatsAppBridge(adapter as never);
-      expect(bridge.isDM("whatsapp:123@lid:456@lid")).toBe(true);
+        bridge.parseThread("whatsapp:123@s.whatsapp.net:123@s.whatsapp.net"),
+      ).toEqual({
+        externalId: "123@s.whatsapp.net:123@s.whatsapp.net",
+        isDM: true,
+      });
     });
   });
 
@@ -126,6 +116,7 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).toBeNull();
     });
@@ -138,6 +129,7 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).toBeNull();
     });
@@ -150,6 +142,7 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).toBeNull();
     });
@@ -165,9 +158,10 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
       expect(result).not.toBeNull();
-      expect(result!.attachments).toEqual(attachments);
+      expect(result?.attachments).toEqual(attachments);
     });
 
     test("extracts isReplyToBot from metadata", async () => {
@@ -181,8 +175,9 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
-      expect(result!.isReplyToBot).toBe(true);
+      expect(result?.isReplyToBot).toBe(true);
     });
 
     test("defaults isReplyToBot to false when missing", async () => {
@@ -193,8 +188,9 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
-      expect(result!.isReplyToBot).toBe(false);
+      expect(result?.isReplyToBot).toBe(false);
     });
 
     test("defaults attachments to empty array when missing", async () => {
@@ -205,8 +201,9 @@ describe("WhatsAppBridge", () => {
         "whatsapp:group@g.us:group@g.us",
         msg,
         defaultCtx,
+        "space1",
       );
-      expect(result!.attachments).toEqual([]);
+      expect(result?.attachments).toEqual([]);
     });
 
     test("builds correct IngressMessage", async () => {
@@ -218,11 +215,17 @@ describe("WhatsAppBridge", () => {
         userId: "user1@s.whatsapp.net",
         userName: "Alice",
       });
-      const result = await bridge.normalize(threadId, msg, defaultCtx);
+      const result = await bridge.normalize(
+        threadId,
+        msg,
+        defaultCtx,
+        "space1",
+      );
 
       expect(result).toEqual({
         platform: "whatsapp",
-        groupId: threadId,
+        spaceId: "space1",
+        conversationExternalId: "group@g.us:group@g.us",
         callerId: "whatsapp:user1@s.whatsapp.net",
         authorName: "Alice",
         text: "hi there",
@@ -237,8 +240,13 @@ describe("WhatsAppBridge", () => {
       const bridge = new WhatsAppBridge(adapter as never);
       const threadId = "whatsapp:123@s.whatsapp.net:123@s.whatsapp.net";
       const msg = makeMessage({ text: "hello" });
-      const result = await bridge.normalize(threadId, msg, defaultCtx);
-      expect(result!.isDM).toBe(true);
+      const result = await bridge.normalize(
+        threadId,
+        msg,
+        defaultCtx,
+        "space1",
+      );
+      expect(result?.isDM).toBe(true);
     });
   });
 

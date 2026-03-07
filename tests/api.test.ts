@@ -5,29 +5,29 @@ import path from "node:path";
 import type { Hono } from "hono";
 import type { AppConfig } from "../src/config.js";
 import { createApiApp, type Env } from "../src/core/api.js";
-import { GroupQueue } from "../src/core/group-queue.js";
-import { seededGroups } from "../src/core/permissions.js";
+import { seededSpaces } from "../src/core/permissions.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
 import { ConfigRegistry } from "../src/extensions/config-registry.js";
 import { ExtensionRegistry } from "../src/extensions/loader.js";
 import { Db } from "../src/storage/db.js";
 
 let tmpDir: string;
 let db: Db;
-let queue: GroupQueue;
+let queue: SpaceQueue;
 let config: AppConfig;
 let triggeredTasks: number[];
 let app: Hono<Env>;
 
 // Minimal container runner - tracks abort calls
 const containerRunner = {
-  abortedGroups: new Set<string>(),
-  abort(groupId: string): boolean {
-    const wasRunning = this.abortedGroups.has(groupId);
-    this.abortedGroups.add(groupId);
+  abortedSpaces: new Set<string>(),
+  abort(spaceId: string): boolean {
+    const wasRunning = this.abortedSpaces.has(spaceId);
+    this.abortedSpaces.add(spaceId);
     return wasRunning;
   },
   reset() {
-    this.abortedGroups.clear();
+    this.abortedSpaces.clear();
   },
 };
 
@@ -43,7 +43,7 @@ async function api(
   pathname: string,
   options: {
     callerId?: string;
-    groupId?: string;
+    spaceId?: string;
     body?: unknown;
     skipAuth?: boolean;
   } = {},
@@ -53,7 +53,7 @@ async function api(
   };
   if (!options.skipAuth) {
     headers["x-mercury-caller"] = options.callerId ?? "admin1";
-    headers["x-mercury-group"] = options.groupId ?? "group1";
+    headers["x-mercury-space"] = options.spaceId ?? "group1";
   }
 
   // Strip /api prefix since routes are mounted without it
@@ -72,10 +72,10 @@ async function api(
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-api-test-"));
   db = new Db(path.join(tmpDir, "state.db"));
-  queue = new GroupQueue(2);
+  queue = new SpaceQueue(2);
   triggeredTasks = [];
   containerRunner.reset();
-  seededGroups.clear();
+  seededSpaces.clear();
 
   config = {
     logLevel: "silent",
@@ -101,7 +101,7 @@ beforeEach(() => {
     admins: "admin1",
     kbDistillIntervalMs: 0,
     globalDir: path.join(tmpDir, "global"),
-    groupsDir: path.join(tmpDir, "groups"),
+    spacesDir: path.join(tmpDir, "spaces"),
     whatsappAuthDir: path.join(tmpDir, "whatsapp"),
   } as AppConfig;
 
@@ -133,7 +133,7 @@ describe("API auth", () => {
 
   test("missing caller header returns 400", async () => {
     const res = await app.request("/whoami", {
-      headers: { "x-mercury-group": "group1" },
+      headers: { "x-mercury-space": "group1" },
     });
     expect(res.status).toBe(400);
   });
@@ -153,7 +153,7 @@ describe("GET /api/whoami", () => {
     const { status, data } = await api("GET", "/api/whoami");
     expect(status).toBe(200);
     expect(data.callerId).toBe("admin1");
-    expect(data.groupId).toBe("group1");
+    expect(data.spaceId).toBe("group1");
     expect(data.role).toBe("admin");
     expect(Array.isArray(data.permissions)).toBe(true);
   });
@@ -196,15 +196,15 @@ describe("GET /api/tasks", () => {
     // Create task in group1
     await api("POST", "/api/tasks", {
       body: { cron: "0 9 * * *", prompt: "task1" },
-      groupId: "group1",
+      spaceId: "group1",
     });
     // Create task in group2
     await api("POST", "/api/tasks", {
       body: { cron: "0 10 * * *", prompt: "task2" },
-      groupId: "group2",
+      spaceId: "group2",
     });
 
-    const { data } = await api("GET", "/api/tasks", { groupId: "group1" });
+    const { data } = await api("GET", "/api/tasks", { spaceId: "group1" });
     const tasks = data.tasks as Array<{ prompt: string }>;
     expect(tasks.length).toBe(1);
     expect(tasks[0].prompt).toBe("task1");
@@ -320,12 +320,12 @@ describe("POST /api/tasks/:id/pause", () => {
   test("returns 404 for task in different group", async () => {
     const create = await api("POST", "/api/tasks", {
       body: { cron: "0 9 * * *", prompt: "test" },
-      groupId: "group1",
+      spaceId: "group1",
     });
     const taskId = create.data.id;
 
     const { status } = await api("POST", `/api/tasks/${taskId}/pause`, {
-      groupId: "group2",
+      spaceId: "group2",
     });
     expect(status).toBe(404);
   });
@@ -657,7 +657,7 @@ describe("POST /api/compact", () => {
   test("sets session boundary", async () => {
     const { status, data } = await api("POST", "/api/compact");
     expect(status).toBe(200);
-    expect(data.groupId).toBe("group1");
+    expect(data.spaceId).toBe("group1");
   });
 
   test("member without permission is denied", async () => {
@@ -668,51 +668,51 @@ describe("POST /api/compact", () => {
 
 // ─── Groups ───────────────────────────────────────────────────────────────
 
-describe("GET /api/groups", () => {
-  test("returns all groups", async () => {
-    // Access multiple groups to create them
-    await api("GET", "/api/whoami", { groupId: "group1" });
-    await api("GET", "/api/whoami", { groupId: "group2" });
+describe("GET /api/spaces", () => {
+  test("returns all spaces", async () => {
+    // Access multiple spaces to create them
+    await api("GET", "/api/whoami", { spaceId: "group1" });
+    await api("GET", "/api/whoami", { spaceId: "group2" });
 
-    const { status, data } = await api("GET", "/api/groups");
+    const { status, data } = await api("GET", "/api/spaces");
     expect(status).toBe(200);
-    const groups = data.groups as Array<{ id: string }>;
-    expect(groups.length).toBeGreaterThanOrEqual(2);
+    const spaces = data.spaces as Array<{ id: string }>;
+    expect(spaces.length).toBeGreaterThanOrEqual(2);
   });
 });
 
-describe("GET /api/groups/current", () => {
-  test("returns current group", async () => {
-    const { status, data } = await api("GET", "/api/groups/current");
+describe("GET /api/spaces/current", () => {
+  test("returns current space", async () => {
+    const { status, data } = await api("GET", "/api/spaces/current");
     expect(status).toBe(200);
-    const group = data.group as { id: string };
-    expect(group.id).toBe("group1");
+    const space = data.space as { id: string };
+    expect(space.id).toBe("group1");
   });
 });
 
-describe("PUT /api/groups/current/name", () => {
-  test("sets group name", async () => {
-    const { status, data } = await api("PUT", "/api/groups/current/name", {
+describe("PUT /api/spaces/current/name", () => {
+  test("sets space name", async () => {
+    const { status, data } = await api("PUT", "/api/spaces/current/name", {
       body: { name: "My Group" },
     });
     expect(status).toBe(200);
     expect(data.name).toBe("My Group");
 
     // Verify it persisted
-    const get = await api("GET", "/api/groups/current");
-    const group = get.data.group as { title: string };
-    expect(group.title).toBe("My Group");
+    const get = await api("GET", "/api/spaces/current");
+    const space = get.data.space as { name: string };
+    expect(space.name).toBe("My Group");
   });
 
   test("rejects missing name", async () => {
-    const { status } = await api("PUT", "/api/groups/current/name", {
+    const { status } = await api("PUT", "/api/spaces/current/name", {
       body: {},
     });
     expect(status).toBe(400);
   });
 
   test("member without permission is denied", async () => {
-    const { status } = await api("PUT", "/api/groups/current/name", {
+    const { status } = await api("PUT", "/api/spaces/current/name", {
       callerId: "user1",
       body: { name: "Test" },
     });
@@ -720,8 +720,8 @@ describe("PUT /api/groups/current/name", () => {
   });
 });
 
-describe("DELETE /api/groups/current", () => {
-  test("deletes current group data", async () => {
+describe("DELETE /api/spaces/current", () => {
+  test("deletes current space data", async () => {
     await api("POST", "/api/tasks", {
       body: { cron: "0 * * * *", prompt: "ping" },
     });
@@ -732,23 +732,101 @@ describe("DELETE /api/groups/current", () => {
       body: { key: "trigger_match", value: "always" },
     });
 
-    const { status, data } = await api("DELETE", "/api/groups/current");
+    const { status, data } = await api("DELETE", "/api/spaces/current");
     expect(status).toBe(200);
     expect(data.deleted).toBe(true);
 
     const removed = data.removed as {
       tasks: number;
-      group: number;
+      space: number;
     };
-    expect(removed.group).toBe(1);
+    expect(removed.space).toBe(1);
     expect(removed.tasks).toBeGreaterThanOrEqual(1);
   });
 
   test("member without permission is denied", async () => {
-    const { status } = await api("DELETE", "/api/groups/current", {
+    const { status } = await api("DELETE", "/api/spaces/current", {
       callerId: "user1",
     });
     expect(status).toBe(403);
+  });
+});
+
+describe("GET /api/conversations", () => {
+  test("lists conversations", async () => {
+    db.ensureConversation("whatsapp", "chat-1", "group");
+    const { status, data } = await api("GET", "/api/conversations");
+    expect(status).toBe(200);
+    expect((data.conversations as unknown[]).length).toBe(1);
+  });
+
+  test("filters unlinked conversations", async () => {
+    db.createSpace("space1", "Space 1");
+    const c1 = db.ensureConversation("whatsapp", "chat-1", "group");
+    const c2 = db.ensureConversation("slack", "C123", "channel");
+    db.linkConversation(c1.id, "space1");
+
+    const { status, data } = await api(
+      "GET",
+      "/api/conversations?linked=false",
+    );
+    expect(status).toBe(200);
+    const conversations = data.conversations as Array<{ id: number }>;
+    expect(conversations.map((c) => c.id)).toEqual([c2.id]);
+  });
+});
+
+describe("POST /api/conversations/:id/link", () => {
+  test("links conversation to space", async () => {
+    db.createSpace("space1", "Space 1");
+    const convo = db.ensureConversation("whatsapp", "chat-1", "group");
+
+    const { status, data } = await api(
+      "POST",
+      `/api/conversations/${convo.id}/link`,
+      {
+        body: { spaceId: "space1" },
+      },
+    );
+    expect(status).toBe(200);
+    expect(data.linked).toBe(true);
+    expect(db.findConversation("whatsapp", "chat-1")?.spaceId).toBe("space1");
+  });
+
+  test("returns 404 for non-existent space", async () => {
+    const convo = db.ensureConversation("whatsapp", "chat-1", "group");
+    const { status } = await api(
+      "POST",
+      `/api/conversations/${convo.id}/link`,
+      {
+        body: { spaceId: "missing" },
+      },
+    );
+    expect(status).toBe(404);
+  });
+
+  test("returns 404 for non-existent conversation", async () => {
+    db.createSpace("space1", "Space 1");
+    const { status } = await api("POST", "/api/conversations/999/link", {
+      body: { spaceId: "space1" },
+    });
+    expect(status).toBe(404);
+  });
+});
+
+describe("POST /api/conversations/:id/unlink", () => {
+  test("unlinks conversation", async () => {
+    db.createSpace("space1", "Space 1");
+    const convo = db.ensureConversation("whatsapp", "chat-1", "group");
+    db.linkConversation(convo.id, "space1");
+
+    const { status, data } = await api(
+      "POST",
+      `/api/conversations/${convo.id}/unlink`,
+    );
+    expect(status).toBe(200);
+    expect(data.unlinked).toBe(true);
+    expect(db.findConversation("whatsapp", "chat-1")?.spaceId).toBeNull();
   });
 });
 

@@ -1,6 +1,6 @@
 # Rate Limiting
 
-Mercury rate limits messages per-user per-group to prevent abuse. This protects against users flooding the agent or bot loops exhausting resources.
+Mercury rate limits messages per-user per-space to prevent abuse. This protects against users flooding the agent or bot loops exhausting resources.
 
 ## How It Works
 
@@ -12,7 +12,7 @@ Message received
   ├─► Type = "assistant"?
   │     │
   │     ├─► Check rate limit
-  │     │     • Key: groupId:userId
+  │     │     • Key: spaceId:userId
   │     │     • Count requests in sliding window
   │     │     • Compare against effective limit
   │     │
@@ -32,28 +32,28 @@ Commands like `stop` and `compact` bypass rate limiting so users can always abor
 | `rateLimitWindowMs` | `MERCURY_RATE_LIMIT_WINDOW_MS` | 60000 (1 min) | 1s – 1h |
 
 ```bash
-# Allow 5 requests per user per group per minute
+# Allow 5 requests per user per space per minute
 export MERCURY_RATE_LIMIT_PER_USER=5
 export MERCURY_RATE_LIMIT_WINDOW_MS=60000
 ```
 
-## Per-Group Override
+## Per-Space Override
 
-Groups can set a custom limit via `mrctl` or the API:
+Spaces can set a custom limit via `mrctl` or the API:
 
 ```bash
-# Inside agent container (group context is automatic)
+# Inside agent container (space context is automatic)
 mrctl config set rate_limit 5
 
-# Via API with explicit group
+# Via API with explicit space
 curl -X PUT http://localhost:8787/api/config \
-  -H "X-Mercury-Group: slack:C123" \
+  -H "X-Mercury-Space: slack:C123" \
   -H "X-Mercury-Caller: slack:U456" \
   -H "Content-Type: application/json" \
   -d '{"key": "rate_limit", "value": "5"}'
 ```
 
-The per-group `rate_limit` config takes precedence over the global `MERCURY_RATE_LIMIT_PER_USER`.
+The per-space `rate_limit` config takes precedence over the global `MERCURY_RATE_LIMIT_PER_USER`.
 
 ## Behavior
 
@@ -64,13 +64,13 @@ The per-group `rate_limit` config takes precedence over the global `MERCURY_RATE
 | Command (stop, compact) | Always allowed, bypasses rate limit |
 | Ignored message | Not counted toward limit |
 | Different user | Separate limit bucket |
-| Different group | Separate limit bucket |
+| Different space | Separate limit bucket |
 
 ## Algorithm
 
 Uses a sliding window approach:
 
-1. Key is `${groupId}:${userId}`
+1. Key is `${spaceId}:${userId}`
 2. Each request timestamp is stored in an array
 3. On check: filter to timestamps within window, count
 4. If count < limit: record new timestamp, allow
@@ -85,14 +85,14 @@ Expired entries are cleaned up periodically (every 60s) to prevent memory leaks.
 ```ts
 const limiter = new RateLimiter(maxRequests, windowMs);
 
-limiter.isAllowed(groupId, userId)           // Check + record, returns boolean
-limiter.isAllowed(groupId, userId, override) // With per-call limit override
-limiter.getRemaining(groupId, userId)        // Requests left in window
+limiter.isAllowed(spaceId, userId)           // Check + record, returns boolean
+limiter.isAllowed(spaceId, userId, override) // With per-call limit override
+limiter.getRemaining(spaceId, userId)        // Requests left in window
 limiter.startCleanup(intervalMs?)            // Start periodic cleanup (default 60s)
 limiter.stopCleanup()                        // Stop cleanup timer
 limiter.cleanup()                            // Manual cleanup, returns removed count
 limiter.clear()                              // Reset all state
-limiter.bucketCount                          // Number of tracked user/group pairs
+limiter.bucketCount                          // Number of tracked user/space pairs
 ```
 
 ### `MercuryCoreRuntime`

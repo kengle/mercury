@@ -4,10 +4,11 @@ import { resolveRole } from "./permissions.js";
 import {
   config,
   control,
+  conversations,
   extensions,
-  groups,
   permissions,
   roles,
+  spaces,
   tasks,
 } from "./routes/index.js";
 
@@ -21,11 +22,11 @@ export function createApiApp(apiCtx: ApiContext): Hono<Env> {
   app.use("*", async (c, next) => {
     // Parse auth headers
     const callerId = c.req.header("x-mercury-caller");
-    const groupId = c.req.header("x-mercury-group");
+    const spaceId = c.req.header("x-mercury-space");
 
-    if (!callerId || !groupId) {
+    if (!callerId || !spaceId) {
       return c.json(
-        { error: "Missing X-Mercury-Caller or X-Mercury-Group headers" },
+        { error: "Missing X-Mercury-Caller or X-Mercury-Space headers" },
         400,
       );
     }
@@ -38,11 +39,11 @@ export function createApiApp(apiCtx: ApiContext): Hono<Env> {
           .filter(Boolean)
       : [];
 
-    apiCtx.db.ensureGroup(groupId);
-    const role = resolveRole(apiCtx.db, groupId, callerId, seededAdmins);
+    apiCtx.db.ensureSpace(spaceId);
+    const role = resolveRole(apiCtx.db, spaceId, callerId, seededAdmins);
 
     // Store in request context
-    c.set("auth", { callerId, groupId, role } as AuthContext);
+    c.set("auth", { callerId, spaceId, role } as AuthContext);
     c.set("apiCtx", apiCtx);
     await next();
   });
@@ -54,7 +55,8 @@ export function createApiApp(apiCtx: ApiContext): Hono<Env> {
   app.route("/config", config);
   app.route("/roles", roles);
   app.route("/permissions", permissions);
-  app.route("/groups", groups);
+  app.route("/spaces", spaces);
+  app.route("/conversations", conversations);
   app.route("/ext", extensions);
 
   // ─── Fallback ───────────────────────────────────────────────────────────

@@ -20,7 +20,7 @@ export interface CompactResult {
  */
 export async function compactSession(
   sessionFile: string,
-  config: AppConfig,
+  _config: AppConfig,
 ): Promise<CompactResult> {
   if (!existsSync(sessionFile)) {
     return { compacted: false, error: "No session file found" };

@@ -1,20 +1,20 @@
 import { describe, expect, test } from "bun:test";
-import { GroupQueue } from "../src/core/group-queue.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
 
-describe("GroupQueue", () => {
+describe("SpaceQueue", () => {
   test("cancelPending on non-existent group returns 0", () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     expect(q.cancelPending("nonexistent")).toBe(0);
   });
 
   test("enqueue executes work", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     const result = await q.enqueue("g1", async () => 42);
     expect(result).toBe(42);
   });
 
   test("same group runs serially", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
     const order: number[] = [];
 
     const p1 = q.enqueue("g1", async () => {
@@ -36,8 +36,8 @@ describe("GroupQueue", () => {
     expect(order).toEqual([1, 2, 3]);
   });
 
-  test("different groups run concurrently", async () => {
-    const q = new GroupQueue(2);
+  test("different spaces run concurrently", async () => {
+    const q = new SpaceQueue(2);
     const order: string[] = [];
 
     const p1 = q.enqueue("g1", async () => {
@@ -60,7 +60,7 @@ describe("GroupQueue", () => {
   });
 
   test("isActive returns true while running", async () => {
-    const q = new GroupQueue(2);
+    const q = new SpaceQueue(2);
 
     let wasActive = false;
     await q.enqueue("g1", async () => {
@@ -72,7 +72,7 @@ describe("GroupQueue", () => {
   });
 
   test("cancelPending drops queued work", async () => {
-    const q = new GroupQueue(1);
+    const q = new SpaceQueue(1);
     const results: string[] = [];
 
     // Fill the single slot
@@ -98,8 +98,8 @@ describe("GroupQueue", () => {
     expect(results).toEqual(["first"]);
   });
 
-  test("respects maxConcurrency across groups", async () => {
-    const q = new GroupQueue(1);
+  test("respects maxConcurrency across spaces", async () => {
+    const q = new SpaceQueue(1);
     const order: string[] = [];
 
     const p1 = q.enqueue("g1", async () => {

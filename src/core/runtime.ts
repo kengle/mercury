@@ -8,8 +8,8 @@ import type { MercuryExtensionContext } from "../extensions/types.js";
 import { logger } from "../logger.js";
 import { Db } from "../storage/db.js";
 import {
-  ensureGroupWorkspace,
   ensurePiResourceDir,
+  ensureSpaceWorkspace,
 } from "../storage/memory.js";
 import type {
   ContainerResult,
@@ -18,9 +18,9 @@ import type {
   MessageSender,
 } from "../types.js";
 import { compactSession } from "./compact.js";
-import { GroupQueue } from "./group-queue.js";
 import { RateLimiter } from "./rate-limiter.js";
 import { type RouteResult, routeInput } from "./router.js";
+import { SpaceQueue } from "./space-queue.js";
 import { TaskScheduler } from "./task-scheduler.js";
 
 export type InputSource = "cli" | "scheduler" | "chat-sdk";
@@ -30,7 +30,7 @@ export type ShutdownHook = () => Promise<void> | void;
 export class MercuryCoreRuntime {
   readonly db: Db;
   readonly scheduler: TaskScheduler;
-  readonly queue: GroupQueue;
+  readonly queue: SpaceQueue;
   readonly containerRunner: AgentContainerRunner;
   readonly rateLimiter: RateLimiter;
   hooks: HookDispatcher | null = null;
@@ -41,7 +41,7 @@ export class MercuryCoreRuntime {
 
   constructor(readonly config: AppConfig) {
     this.db = new Db(resolveProjectPath(config.dbPath));
-    this.queue = new GroupQueue(config.maxConcurrency);
+    this.queue = new SpaceQueue(config.maxConcurrency);
     this.scheduler = new TaskScheduler(this.db);
     this.containerRunner = new AgentContainerRunner(config);
     this.rateLimiter = new RateLimiter(
@@ -49,9 +49,9 @@ export class MercuryCoreRuntime {
       config.rateLimitWindowMs,
     );
 
-    // Scaffold global (pi agent dir) and "main" (admin DM workspace)
+    // Scaffold global (pi agent dir) and "main" (default space)
     ensurePiResourceDir(resolveProjectPath(config.globalDir));
-    ensureGroupWorkspace(resolveProjectPath(config.groupsDir), "main");
+    ensureSpaceWorkspace(resolveProjectPath(config.spacesDir), "main");
   }
 
   /**
@@ -79,13 +79,13 @@ export class MercuryCoreRuntime {
   startScheduler(sender?: MessageSender): void {
     this.scheduler.start(async (task) => {
       const result = await this.executePrompt(
-        task.groupId,
+        task.spaceId,
         task.prompt,
         "scheduler",
         task.createdBy,
       );
       if (!task.silent && sender) {
-        await sender.send(task.groupId, result.reply, result.files);
+        await sender.send(task.spaceId, result.reply, result.files);
       }
     });
   }
@@ -100,7 +100,7 @@ export class MercuryCoreRuntime {
   ): Promise<RouteResult & { result?: ContainerResult }> {
     const route = routeInput({
       text: message.text,
-      groupId: message.groupId,
+      spaceId: message.spaceId,
       callerId: message.callerId,
       isDM: message.isDM,
       isReplyToBot: message.isReplyToBot,
@@ -109,21 +109,21 @@ export class MercuryCoreRuntime {
     });
 
     if (route.type === "command") {
-      const reply = await this.executeCommand(message.groupId, route.command);
+      const reply = await this.executeCommand(message.spaceId, route.command);
       return { ...route, result: { reply, files: [] } };
     }
 
     // Check rate limit for assistant requests (not commands, not ignored messages)
     if (route.type === "assistant") {
       // Check per-group override first
-      const groupLimit = this.db.getGroupConfig(message.groupId, "rate_limit");
+      const groupLimit = this.db.getSpaceConfig(message.spaceId, "rate_limit");
       const effectiveLimit = groupLimit
         ? Number.parseInt(groupLimit, 10)
         : this.config.rateLimitPerUser;
 
       if (
         effectiveLimit > 0 &&
-        !this.checkRateLimit(message.groupId, message.callerId, effectiveLimit)
+        !this.checkRateLimit(message.spaceId, message.callerId, effectiveLimit)
       ) {
         return {
           type: "denied",
@@ -140,8 +140,8 @@ export class MercuryCoreRuntime {
           : message.text.trim();
 
         if (ambientText) {
-          this.db.ensureGroup(message.groupId);
-          this.db.addMessage(message.groupId, "ambient", ambientText);
+          this.db.ensureSpace(message.spaceId);
+          this.db.addMessage(message.spaceId, "ambient", ambientText);
         }
       }
 
@@ -150,7 +150,7 @@ export class MercuryCoreRuntime {
 
     try {
       const result = await this.executePrompt(
-        message.groupId,
+        message.spaceId,
         route.prompt,
         source,
         message.callerId,
@@ -186,32 +186,31 @@ export class MercuryCoreRuntime {
    * Uses per-group override if set, otherwise uses the default limit.
    */
   private checkRateLimit(
-    groupId: string,
+    spaceId: string,
     userId: string,
     effectiveLimit: number,
   ): boolean {
-    return this.rateLimiter.isAllowed(groupId, userId, effectiveLimit);
+    return this.rateLimiter.isAllowed(spaceId, userId, effectiveLimit);
   }
 
   private async executeCommand(
-    groupId: string,
+    spaceId: string,
     command: string,
   ): Promise<string> {
     switch (command) {
       case "stop": {
-        const stopped = this.containerRunner.abort(groupId);
-        const dropped = this.queue.cancelPending(groupId);
+        const stopped = this.containerRunner.abort(spaceId);
+        const dropped = this.queue.cancelPending(spaceId);
         if (stopped)
           return `Stopped.${dropped > 0 ? ` Dropped ${dropped} queued request(s).` : ""}`;
         if (dropped > 0) return `Dropped ${dropped} queued request(s).`;
         return "No active run.";
       }
       case "compact": {
-        const safeGroup = groupId.replace(/[^a-zA-Z0-9-_]/g, "_");
-        const workspace = path.resolve(this.config.groupsDir, safeGroup);
+        const workspace = path.resolve(this.config.spacesDir, spaceId);
         const sessionFile = path.join(workspace, ".mercury.session.jsonl");
         const result = await compactSession(sessionFile, this.config);
-        this.db.setSessionBoundaryToLatest(groupId);
+        this.db.setSessionBoundaryToLatest(spaceId);
         if (result.compacted) {
           return "Compacted.";
         }
@@ -331,26 +330,26 @@ export class MercuryCoreRuntime {
   }
 
   private async executePrompt(
-    groupId: string,
+    spaceId: string,
     prompt: string,
     _source: InputSource,
     callerId: string,
     attachments?: MessageAttachment[],
   ): Promise<ContainerResult> {
-    this.db.ensureGroup(groupId);
-    this.db.addMessage(groupId, "user", prompt, attachments);
+    this.db.ensureSpace(spaceId);
+    this.db.addMessage(spaceId, "user", prompt, attachments);
 
-    return this.queue.enqueue(groupId, async () => {
-      const workspace = ensureGroupWorkspace(
-        resolveProjectPath(this.config.groupsDir),
-        groupId,
+    return this.queue.enqueue(spaceId, async () => {
+      const workspace = ensureSpaceWorkspace(
+        resolveProjectPath(this.config.spacesDir),
+        spaceId,
       );
 
       // Emit workspace_init hook (extensions should be idempotent)
       if (this.hooks && this.extensionCtx) {
         await this.hooks.emit(
           "workspace_init",
-          { groupId, workspace },
+          { spaceId, workspace },
           this.extensionCtx,
         );
       }
@@ -359,7 +358,7 @@ export class MercuryCoreRuntime {
       let extraEnv: Record<string, string> | undefined;
       if (this.hooks && this.extensionCtx) {
         const result = await this.hooks.emitBeforeContainer(
-          { groupId, prompt, callerId, workspace },
+          { spaceId, prompt, callerId, workspace },
           this.extensionCtx,
         );
         if (result?.block) {
@@ -375,12 +374,12 @@ export class MercuryCoreRuntime {
         }
       }
 
-      const history = this.db.getMessagesSinceLastUserTrigger(groupId, 200);
+      const history = this.db.getMessagesSinceLastUserTrigger(spaceId, 200);
       const startTime = Date.now();
 
       const containerResult = await this.containerRunner.reply({
-        groupId,
-        groupWorkspace: workspace,
+        spaceId,
+        spaceWorkspace: workspace,
         messages: history,
         prompt,
         callerId,
@@ -393,7 +392,7 @@ export class MercuryCoreRuntime {
       // Emit after_container hook
       if (this.hooks && this.extensionCtx) {
         const hookResult = await this.hooks.emitAfterContainer(
-          { groupId, prompt, reply: containerResult.reply, durationMs },
+          { spaceId, prompt, reply: containerResult.reply, durationMs },
           this.extensionCtx,
         );
         if (hookResult?.suppress) {
@@ -404,7 +403,7 @@ export class MercuryCoreRuntime {
         }
       }
 
-      this.db.addMessage(groupId, "assistant", containerResult.reply);
+      this.db.addMessage(spaceId, "assistant", containerResult.reply);
 
       return containerResult;
     });

@@ -20,7 +20,7 @@ afterEach(() => {
 
 describe("at-tasks database", () => {
   test("createTask with at schedule", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const atTime = new Date(Date.now() + 60000).toISOString();
     const id = db.createTask(
       "g1",
@@ -39,7 +39,7 @@ describe("at-tasks database", () => {
   });
 
   test("createTask with cron schedule still works", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { cron: "*/5 * * * *" },
@@ -55,7 +55,7 @@ describe("at-tasks database", () => {
   });
 
   test("listTasks includes at field", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const atTime = new Date(Date.now() + 60000).toISOString();
     db.createTask("g1", { at: atTime }, "at-task", Date.now() + 60000, "user1");
     db.createTask(
@@ -79,7 +79,7 @@ describe("at-tasks database", () => {
   });
 
   test("getDueTasks includes at-tasks", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     const atTime = new Date(now - 1000).toISOString();
     db.createTask("g1", { at: atTime }, "due at-task", now - 1000, "user1");
@@ -90,8 +90,8 @@ describe("at-tasks database", () => {
     expect(due[0].prompt).toBe("due at-task");
   });
 
-  test("deleteTaskById removes task without groupId", () => {
-    db.ensureGroup("g1");
+  test("deleteTaskById removes task without spaceId", () => {
+    db.ensureSpace("g1");
     const id = db.createTask(
       "g1",
       { at: new Date(Date.now() + 60000).toISOString() },
@@ -109,7 +109,7 @@ describe("at-tasks database", () => {
   });
 
   test("at-task respects active flag", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     const id = db.createTask(
       "g1",
@@ -127,7 +127,7 @@ describe("at-tasks database", () => {
   });
 
   test("at-task with silent flag", () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const atTime = new Date(Date.now() + 60000).toISOString();
     const id = db.createTask(
       "g1",
@@ -145,7 +145,7 @@ describe("at-tasks database", () => {
 
 describe("at-tasks scheduler", () => {
   test("scheduler deletes at-task after execution", async () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     const atTime = new Date(now - 1000).toISOString();
     const taskId = db.createTask(
@@ -175,7 +175,7 @@ describe("at-tasks scheduler", () => {
   });
 
   test("scheduler keeps cron-task after execution", async () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     const taskId = db.createTask(
       "g1",
@@ -205,7 +205,7 @@ describe("at-tasks scheduler", () => {
   });
 
   test("at-task deleted even if handler throws", async () => {
-    db.ensureGroup("g1");
+    db.ensureSpace("g1");
     const now = Date.now();
     const atTime = new Date(now - 1000).toISOString();
     const taskId = db.createTask(

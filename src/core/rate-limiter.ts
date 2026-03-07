@@ -5,7 +5,7 @@
  * and counts how many fall within the current window.
  */
 export class RateLimiter {
-  /** Map of "groupId:userId" -> array of request timestamps */
+  /** Map of "spaceId:userId" -> array of request timestamps */
   private readonly buckets = new Map<string, number[]>();
   private cleanupTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -21,8 +21,8 @@ export class RateLimiter {
    * @param limitOverride - Optional per-group limit override
    * @returns true if allowed, false if rate limited
    */
-  isAllowed(groupId: string, userId: string, limitOverride?: number): boolean {
-    const key = `${groupId}:${userId}`;
+  isAllowed(spaceId: string, userId: string, limitOverride?: number): boolean {
+    const key = `${spaceId}:${userId}`;
     const now = Date.now();
     const windowStart = now - this.windowMs;
     const effectiveLimit = limitOverride ?? this.maxRequests;
@@ -51,8 +51,8 @@ export class RateLimiter {
   /**
    * Get remaining requests for a user in a group.
    */
-  getRemaining(groupId: string, userId: string): number {
-    const key = `${groupId}:${userId}`;
+  getRemaining(spaceId: string, userId: string): number {
+    const key = `${spaceId}:${userId}`;
     const now = Date.now();
     const windowStart = now - this.windowMs;
 

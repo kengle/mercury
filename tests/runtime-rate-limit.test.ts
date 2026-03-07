@@ -31,7 +31,7 @@ describe("Runtime rate limiting", () => {
       admins: "",
       dbPath: path.join(tempDir, "state.db"),
       globalDir: path.join(tempDir, "global"),
-      groupsDir: path.join(tempDir, "groups"),
+      spacesDir: path.join(tempDir, "spaces"),
       whatsappAuthDir: path.join(tempDir, "whatsapp-auth"),
     });
 
@@ -51,7 +51,7 @@ describe("Runtime rate limiting", () => {
   test("allows requests under rate limit", async () => {
     const message = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "user1",
       isDM: false,
@@ -73,7 +73,7 @@ describe("Runtime rate limiting", () => {
   test("blocks requests over rate limit", async () => {
     const message = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "user1",
       isDM: false,
@@ -95,7 +95,7 @@ describe("Runtime rate limiting", () => {
   test("different users have separate rate limits", async () => {
     const user1Message = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "user1",
       isDM: false,
@@ -105,7 +105,7 @@ describe("Runtime rate limiting", () => {
 
     const user2Message = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "user2",
       isDM: false,
@@ -128,12 +128,12 @@ describe("Runtime rate limiting", () => {
 
   test("commands bypass rate limit", async () => {
     // Seed admin so stop command is allowed
-    runtime.db.ensureGroup("test-group");
+    runtime.db.ensureSpace("test-group");
     runtime.db.setRole("test-group", "admin1", "admin", "test");
 
     const promptMessage = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "admin1",
       isDM: false,
@@ -143,7 +143,7 @@ describe("Runtime rate limiting", () => {
 
     const stopMessage = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi stop",
       callerId: "admin1",
       isDM: false,
@@ -168,7 +168,7 @@ describe("Runtime rate limiting", () => {
   test("per-group rate limit override", async () => {
     const message = {
       platform: "test",
-      groupId: "limited-group",
+      spaceId: "limited-group",
       text: "@Pi hello",
       callerId: "user1",
       isDM: false,
@@ -177,8 +177,8 @@ describe("Runtime rate limiting", () => {
     };
 
     // Set a lower limit for this group
-    runtime.db.ensureGroup("limited-group");
-    runtime.db.setGroupConfig("limited-group", "rate_limit", "1", "test");
+    runtime.db.ensureSpace("limited-group");
+    runtime.db.setSpaceConfig("limited-group", "rate_limit", "1", "test");
 
     // First request should be allowed
     const r1 = await runtime.handleRawInput(message, "chat-sdk");
@@ -193,7 +193,7 @@ describe("Runtime rate limiting", () => {
   test("ignored messages don't count toward rate limit", async () => {
     const ignoredMessage = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "just a regular message without trigger",
       callerId: "user1",
       isDM: false,
@@ -203,7 +203,7 @@ describe("Runtime rate limiting", () => {
 
     const triggeredMessage = {
       platform: "test",
-      groupId: "test-group",
+      spaceId: "test-group",
       text: "@Pi hello",
       callerId: "user1",
       isDM: false,

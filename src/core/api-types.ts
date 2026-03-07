@@ -4,8 +4,8 @@ import type { AppConfig } from "../config.js";
 import type { ConfigRegistry } from "../extensions/config-registry.js";
 import type { ExtensionRegistry } from "../extensions/loader.js";
 import type { Db } from "../storage/db.js";
-import type { GroupQueue } from "./group-queue.js";
 import { hasPermission } from "./permissions.js";
+import type { SpaceQueue } from "./space-queue.js";
 import type { TaskScheduler } from "./task-scheduler.js";
 
 // ─── Context Types ────────────────────────────────────────────────────────
@@ -14,7 +14,7 @@ export interface ApiContext {
   db: Db;
   config: AppConfig;
   containerRunner: AgentContainerRunner;
-  queue: GroupQueue;
+  queue: SpaceQueue;
   scheduler: TaskScheduler;
   registry: ExtensionRegistry;
   configRegistry: ConfigRegistry;
@@ -22,7 +22,7 @@ export interface ApiContext {
 
 export interface AuthContext {
   callerId: string;
-  groupId: string;
+  spaceId: string;
   role: string;
 }
 
@@ -42,10 +42,10 @@ export const checkPerm = (
   c: Context<Env>,
   permission: string,
 ): Response | null => {
-  const { groupId, role } = c.get("auth");
+  const { spaceId, role } = c.get("auth");
   const { db } = c.get("apiCtx");
 
-  if (!hasPermission(db, groupId, role, permission)) {
+  if (!hasPermission(db, spaceId, role, permission)) {
     return c.json(
       { error: `Forbidden: requires '${permission}' permission` },
       403,

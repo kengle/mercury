@@ -6,17 +6,17 @@ import { checkPerm, type Env, getApiCtx, getAuth } from "../api-types.js";
 export const tasks = new Hono<Env>();
 
 tasks.get("/", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "tasks.list");
   if (denied) return denied;
 
   const { db } = getApiCtx(c);
-  const taskList = db.listTasks(groupId);
+  const taskList = db.listTasks(spaceId);
   return c.json({ tasks: taskList });
 });
 
 tasks.post("/", async (c) => {
-  const { groupId, callerId } = getAuth(c);
+  const { spaceId, callerId } = getAuth(c);
   const denied = checkPerm(c, "tasks.create");
   if (denied) return denied;
 
@@ -66,7 +66,7 @@ tasks.post("/", async (c) => {
   }
 
   const id = db.createTask(
-    groupId,
+    spaceId,
     schedule,
     body.prompt,
     nextRunAt,
@@ -85,7 +85,7 @@ tasks.post("/", async (c) => {
 });
 
 tasks.post("/:id/pause", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "tasks.pause");
   if (denied) return denied;
 
@@ -96,7 +96,7 @@ tasks.post("/:id/pause", (c) => {
   }
 
   const task = db.getTask(taskId);
-  if (!task || task.groupId !== groupId) {
+  if (!task || task.spaceId !== spaceId) {
     return c.json({ error: "Task not found" }, 404);
   }
 
@@ -105,7 +105,7 @@ tasks.post("/:id/pause", (c) => {
 });
 
 tasks.post("/:id/resume", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "tasks.resume");
   if (denied) return denied;
 
@@ -116,7 +116,7 @@ tasks.post("/:id/resume", (c) => {
   }
 
   const task = db.getTask(taskId);
-  if (!task || task.groupId !== groupId) {
+  if (!task || task.spaceId !== spaceId) {
     return c.json({ error: "Task not found" }, 404);
   }
 
@@ -125,7 +125,7 @@ tasks.post("/:id/resume", (c) => {
 });
 
 tasks.post("/:id/run", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "tasks.create");
   if (denied) return denied;
 
@@ -136,7 +136,7 @@ tasks.post("/:id/run", (c) => {
   }
 
   const task = db.getTask(taskId);
-  if (!task || task.groupId !== groupId) {
+  if (!task || task.spaceId !== spaceId) {
     return c.json({ error: "Task not found" }, 404);
   }
 
@@ -153,7 +153,7 @@ tasks.post("/:id/run", (c) => {
 });
 
 tasks.delete("/:id", (c) => {
-  const { groupId } = getAuth(c);
+  const { spaceId } = getAuth(c);
   const denied = checkPerm(c, "tasks.delete");
   if (denied) return denied;
 
@@ -163,7 +163,7 @@ tasks.delete("/:id", (c) => {
     return c.json({ error: "Invalid task ID" }, 400);
   }
 
-  const deleted = db.deleteTask(taskId, groupId);
+  const deleted = db.deleteTask(taskId, spaceId);
   if (!deleted) {
     return c.json({ error: "Task not found" }, 404);
   }

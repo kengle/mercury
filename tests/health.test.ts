@@ -1,15 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { GroupQueue } from "../src/core/group-queue.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
 
 describe("Health endpoint dependencies", () => {
-  describe("GroupQueue.pendingCount", () => {
+  describe("SpaceQueue.pendingCount", () => {
     test("returns 0 when empty", () => {
-      const q = new GroupQueue(2);
+      const q = new SpaceQueue(2);
       expect(q.pendingCount).toBe(0);
     });
 
-    test("counts pending work across groups", async () => {
-      const q = new GroupQueue(1);
+    test("counts pending work across spaces", async () => {
+      const q = new SpaceQueue(1);
 
       // Fill the single slot with a long-running task
       let resolveFirst: () => void = () => {};

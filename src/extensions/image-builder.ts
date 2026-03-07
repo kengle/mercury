@@ -28,7 +28,7 @@ export function generateDockerfile(
   const lines = [`FROM ${baseImage}`];
   for (const ext of cliExtensions) {
     lines.push(`# Extension: ${ext.name}`);
-    lines.push(`RUN ${ext.cli!.install}`);
+    lines.push(`RUN ${ext.cli?.install}`);
   }
   return lines.join("\n");
 }
@@ -43,7 +43,7 @@ export function computeImageHash(
 ): string {
   const installCommands = extensions
     .filter((e) => e.cli)
-    .map((e) => e.cli!.install)
+    .map((e) => e.cli?.install)
     .sort()
     .join("\n");
 

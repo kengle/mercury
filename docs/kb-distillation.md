@@ -25,7 +25,7 @@ The distiller exports messages from the database to daily JSONL files. If a file
 Messages are exported to daily partition files:
 
 ```
-.mercury/groups/<group-id>/
+.mercury/spaces/<space-id>/
 ├── .messages/
 │   ├── 2026-02-28.jsonl
 │   └── 2026-03-01.jsonl
@@ -43,7 +43,7 @@ Each line in the JSONL file:
 
 | Role | Description |
 |------|-------------|
-| `ambient` | Group chat message (format: `Name: content`) |
+| `ambient` | Space message from the live conversation stream (format: `Name: content`) |
 | `user` | Message that triggered the assistant |
 | `assistant` | Assistant's response |
 
@@ -64,7 +64,7 @@ MERCURY_KB_DISTILL_INTERVAL_MS=0
 | `0` | Disabled (default) |
 | `> 0` | Runs on that interval in milliseconds |
 
-The extension also registers a per-group config key `kb-distill.interval_ms` via `mrctl config set`.
+The extension also registers a per-space config key `kb-distill.interval_ms` via `mrctl config set`.
 
 When enabled, the job runs immediately on startup, then every hour (checking the interval config on each tick to decide whether to actually distill).
 
@@ -120,9 +120,9 @@ Description of the tool.
 Context for why it was mentioned.
 ```
 
-### Group Knowledge
+### Space Knowledge
 
-Decisions and conclusions reached by the group.
+Decisions and conclusions reached inside the space.
 
 ```markdown
 # Architecture Decision
@@ -139,15 +139,15 @@ Go with approach A for reasons X, Y, Z.
 
 ## Vault Structure
 
-Distilled knowledge goes into the group's existing vault:
+Distilled knowledge goes into the space's existing vault:
 
 ```
-.mercury/groups/<group-id>/
+.mercury/spaces/<space-id>/
 ├── .messages/              # Input (JSONL files)
 ├── entities/
 │   ├── people/             # Person entities
 │   ├── resources/          # Tools, repos, articles
-│   └── group-knowledge/    # Decisions, conclusions
+│   └── space-knowledge/    # Decisions, conclusions
 ├── daily/                  # Daily notes
 └── .obsidian/              # Obsidian compatibility
 ```
@@ -232,6 +232,6 @@ The distiller only runs when file content has changed. If messages haven't chang
 Delete the JSONL files to force regeneration:
 
 ```bash
-rm .mercury/groups/<group-id>/.messages/*.jsonl
+rm .mercury/spaces/<space-id>/.messages/*.jsonl
 mercury kb-distill --backfill
 ```

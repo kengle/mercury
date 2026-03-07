@@ -1,42 +1,42 @@
 type Work<T> = () => Promise<T>;
 
-export class GroupQueue {
-  private readonly perGroupPending = new Map<string, Array<() => void>>();
-  private readonly activeGroups = new Set<string>();
+export class SpaceQueue {
+  private readonly perSpacePending = new Map<string, Array<() => void>>();
+  private readonly activeSpaces = new Set<string>();
   private activeGlobal = 0;
 
   constructor(private readonly maxConcurrency: number) {}
 
-  enqueue<T>(groupId: string, work: Work<T>): Promise<T> {
+  enqueue<T>(spaceId: string, work: Work<T>): Promise<T> {
     return new Promise<T>((resolve, reject) => {
       const run = async () => {
         this.activeGlobal += 1;
-        this.activeGroups.add(groupId);
+        this.activeSpaces.add(spaceId);
         try {
           resolve(await work());
         } catch (error) {
           reject(error);
         } finally {
           this.activeGlobal -= 1;
-          this.activeGroups.delete(groupId);
-          this.startNext(groupId);
-          this.drainOtherGroups();
+          this.activeSpaces.delete(spaceId);
+          this.startNext(spaceId);
+          this.drainOtherSpaces();
         }
       };
 
-      const queue = this.perGroupPending.get(groupId) ?? [];
+      const queue = this.perSpacePending.get(spaceId) ?? [];
       queue.push(run);
-      this.perGroupPending.set(groupId, queue);
-      this.drainOtherGroups();
+      this.perSpacePending.set(spaceId, queue);
+      this.drainOtherSpaces();
     });
   }
 
   cancelAll(): number {
     let total = 0;
-    for (const [_groupId, queue] of this.perGroupPending) {
+    for (const [_spaceId, queue] of this.perSpacePending) {
       total += queue.length;
     }
-    this.perGroupPending.clear();
+    this.perSpacePending.clear();
     return total;
   }
 
@@ -46,7 +46,7 @@ export class GroupQueue {
 
   get pendingCount(): number {
     let total = 0;
-    for (const queue of this.perGroupPending.values()) {
+    for (const queue of this.perSpacePending.values()) {
       total += queue.length;
     }
     return total;
@@ -68,36 +68,36 @@ export class GroupQueue {
     });
   }
 
-  cancelPending(groupId: string): number {
-    const queue = this.perGroupPending.get(groupId);
+  cancelPending(spaceId: string): number {
+    const queue = this.perSpacePending.get(spaceId);
     if (!queue || queue.length === 0) return 0;
     const count = queue.length;
-    this.perGroupPending.delete(groupId);
+    this.perSpacePending.delete(spaceId);
     return count;
   }
 
-  isActive(groupId: string): boolean {
-    return this.activeGroups.has(groupId);
+  isActive(spaceId: string): boolean {
+    return this.activeSpaces.has(spaceId);
   }
 
-  private canStart(groupId: string): boolean {
+  private canStart(spaceId: string): boolean {
     return (
-      this.activeGlobal < this.maxConcurrency && !this.activeGroups.has(groupId)
+      this.activeGlobal < this.maxConcurrency && !this.activeSpaces.has(spaceId)
     );
   }
 
-  private startNext(groupId: string): void {
-    const queue = this.perGroupPending.get(groupId);
-    if (!queue || queue.length === 0 || !this.canStart(groupId)) return;
+  private startNext(spaceId: string): void {
+    const queue = this.perSpacePending.get(spaceId);
+    if (!queue || queue.length === 0 || !this.canStart(spaceId)) return;
     const next = queue.shift();
-    if (queue.length === 0) this.perGroupPending.delete(groupId);
+    if (queue.length === 0) this.perSpacePending.delete(spaceId);
     next?.();
   }
 
-  private drainOtherGroups(): void {
-    for (const groupId of this.perGroupPending.keys()) {
+  private drainOtherSpaces(): void {
+    for (const spaceId of this.perSpacePending.keys()) {
       if (this.activeGlobal >= this.maxConcurrency) return;
-      this.startNext(groupId);
+      this.startNext(spaceId);
     }
   }
 }

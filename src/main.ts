@@ -1,7 +1,7 @@
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createMemoryState } from "@chat-adapter/state-memory";
-import { type Adapter, Chat, type Message, type Thread } from "chat";
+import { Chat, type Message, type Thread } from "chat";
 import type { DiscordNativeAdapter } from "./adapters/discord-native.js";
 import { setupAdapters } from "./adapters/setup.js";
 import type { WhatsAppBaileysAdapter } from "./adapters/whatsapp.js";
@@ -21,7 +21,7 @@ import {
 } from "./extensions/skills.js";
 import { configureLogger, logger } from "./logger.js";
 import { createApp } from "./server.js";
-import { ensureGroupWorkspace } from "./storage/memory.js";
+import { ensureSpaceWorkspace } from "./storage/memory.js";
 import type { NormalizeContext, PlatformBridge } from "./types.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -103,16 +103,17 @@ async function main() {
     );
   }
   if (adapters.slack) {
-    bridges.slack = new SlackBridge(
-      adapters.slack,
-      process.env.MERCURY_SLACK_BOT_TOKEN!,
-    );
+    const slackBotToken = process.env.MERCURY_SLACK_BOT_TOKEN;
+    if (!slackBotToken) {
+      throw new Error("Slack enabled but MERCURY_SLACK_BOT_TOKEN is missing");
+    }
+    bridges.slack = new SlackBridge(adapters.slack, slackBotToken);
   }
 
   const normalizeCtx: NormalizeContext = {
     botUserName: config.chatSdkUserName,
-    getWorkspace: (groupId) =>
-      ensureGroupWorkspace(resolveProjectPath(config.groupsDir), groupId),
+    getWorkspace: (spaceId) =>
+      ensureSpaceWorkspace(resolveProjectPath(config.spacesDir), spaceId),
     media: {
       enabled: config.mediaEnabled,
       maxSizeBytes: config.mediaMaxSizeMb * 1024 * 1024,

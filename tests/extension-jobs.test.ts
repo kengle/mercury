@@ -233,8 +233,9 @@ describe("getNextCronDelay", () => {
     const delay = getNextCronDelay("* * * * *");
     expect(delay).not.toBeNull();
     // Next minute should be within 60 seconds
-    expect(delay!).toBeLessThanOrEqual(60_000);
-    expect(delay!).toBeGreaterThanOrEqual(0);
+    expect(delay).not.toBeNull();
+    expect(delay ?? 0).toBeLessThanOrEqual(60_000);
+    expect(delay ?? 0).toBeGreaterThanOrEqual(0);
   });
 
   test("returns null for invalid cron", () => {
@@ -245,7 +246,8 @@ describe("getNextCronDelay", () => {
     // "0 0 1 1 *" = midnight, January 1st — always in the future
     const delay = getNextCronDelay("0 0 1 1 *");
     expect(delay).not.toBeNull();
-    expect(delay!).toBeGreaterThan(0);
+    expect(delay).not.toBeNull();
+    expect(delay ?? 0).toBeGreaterThan(0);
   });
 });
 
@@ -277,7 +279,7 @@ describe("cron job scheduling", () => {
     // Use a custom job runner where we directly call scheduleCron
     // via the public start() with a mock cron that fires immediately.
     // We can do this by monkey-patching getNextCronDelay temporarily.
-    const origModule = await import("../src/extensions/jobs.js");
+    const _origModule = await import("../src/extensions/jobs.js");
 
     // Create a job with interval-like behavior via very fast polling
     // Actually, we can test the setTimeout path fires by using
@@ -298,7 +300,6 @@ describe("cron job scheduling", () => {
 
     // Override the timer to fire immediately
     const originalSetTimeout = globalThis.setTimeout;
-    // biome-ignore lint/suspicious/noGlobalAssign: test override
     globalThis.setTimeout = ((
       fn: (...args: unknown[]) => void,
       _delay: number,
@@ -316,7 +317,6 @@ describe("cron job scheduling", () => {
       // Should still be active (rescheduled)
       expect(runner.activeCount).toBe(1);
     } finally {
-      // biome-ignore lint/suspicious/noGlobalAssign: test restore
       globalThis.setTimeout = originalSetTimeout;
     }
   });
@@ -356,7 +356,6 @@ describe("cron job scheduling", () => {
     });
 
     const originalSetTimeout = globalThis.setTimeout;
-    // biome-ignore lint/suspicious/noGlobalAssign: test override
     globalThis.setTimeout = ((
       fn: (...args: unknown[]) => void,
       _delay: number,
@@ -375,7 +374,6 @@ describe("cron job scheduling", () => {
       expect(runCount).toBe(countAtStop);
       expect(runner.activeCount).toBe(0);
     } finally {
-      // biome-ignore lint/suspicious/noGlobalAssign: test restore
       globalThis.setTimeout = originalSetTimeout;
     }
   });

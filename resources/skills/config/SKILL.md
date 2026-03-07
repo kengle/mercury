@@ -1,6 +1,6 @@
 ---
 name: config
-description: View and set per-group configuration. Use when the user asks to change trigger behavior, extension settings, or other group settings.
+description: View and set per-space configuration. Use when the user asks to change trigger behavior, extension settings, or other space settings.
 ---
 
 ## Commands

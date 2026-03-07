@@ -12,6 +12,8 @@ mrctl permissions set <role> <perm1,perm2,...>
 
 ## Built-in permissions
 
-`prompt`, `stop`, `compact`, `tasks.list`, `tasks.create`, `tasks.pause`, `tasks.resume`, `tasks.delete`, `config.get`, `config.set`, `roles.list`, `roles.grant`, `roles.revoke`, `permissions.get`, `permissions.set`, `groups.list`, `groups.rename`, `groups.delete`
+`prompt`, `stop`, `compact`, `tasks.list`, `tasks.create`, `tasks.pause`, `tasks.resume`, `tasks.delete`, `config.get`, `config.set`, `roles.list`, `roles.grant`, `roles.revoke`, `permissions.get`, `permissions.set`, `spaces.list`, `spaces.rename`, `spaces.delete`
+
+Conversation management uses the existing space permissions: `spaces.list` for listing conversations, `spaces.rename` for linking/unlinking, and `spaces.delete` for deleting the current space.
 
 Extension permissions are also available — run `mrctl ext list` to see installed extensions. Each extension adds its own permission (e.g., `napkin`).

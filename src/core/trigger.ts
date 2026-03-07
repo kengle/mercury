@@ -10,15 +10,15 @@ const VALID_MATCHES: Set<string> = new Set(["prefix", "mention", "always"]);
 
 export function loadTriggerConfig(
   db: Db,
-  groupId: string,
+  spaceId: string,
   defaults: { patterns: string[]; match: string },
 ): TriggerConfig {
-  const match = db.getGroupConfig(
-    groupId,
+  const match = db.getSpaceConfig(
+    spaceId,
     "trigger.match",
   ) as TriggerMatch | null;
-  const patternsRaw = db.getGroupConfig(groupId, "trigger.patterns");
-  const caseSensitive = db.getGroupConfig(groupId, "trigger.case_sensitive");
+  const patternsRaw = db.getSpaceConfig(spaceId, "trigger.patterns");
+  const caseSensitive = db.getSpaceConfig(spaceId, "trigger.case_sensitive");
 
   const defaultMatch = VALID_MATCHES.has(defaults.match)
     ? (defaults.match as TriggerMatch)

@@ -2,7 +2,7 @@ import { createSlackAdapter } from "@chat-adapter/slack";
 import type { Adapter } from "chat";
 import type { AppConfig } from "../config.js";
 import { resolveProjectPath } from "../config.js";
-import { ensureGroupWorkspace } from "../storage/memory.js";
+import { ensureSpaceWorkspace } from "../storage/memory.js";
 import { createDiscordNativeAdapter } from "./discord-native.js";
 import { createWhatsAppBaileysAdapter } from "./whatsapp.js";
 
@@ -44,8 +44,8 @@ export function setupAdapters(config: AppConfig): Record<string, Adapter> {
       mediaEnabled: config.mediaEnabled,
       mediaMaxSizeBytes: config.mediaMaxSizeMb * 1024 * 1024,
       getGroupWorkspace: (groupId: string) => {
-        return ensureGroupWorkspace(
-          resolveProjectPath(config.groupsDir),
+        return ensureSpaceWorkspace(
+          resolveProjectPath(config.spacesDir),
           groupId,
         );
       },

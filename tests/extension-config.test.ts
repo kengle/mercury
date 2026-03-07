@@ -5,8 +5,8 @@ import path from "node:path";
 import type { Hono } from "hono";
 import type { AppConfig } from "../src/config.js";
 import { createApiApp, type Env } from "../src/core/api.js";
-import { GroupQueue } from "../src/core/group-queue.js";
-import { resetPermissions, seededGroups } from "../src/core/permissions.js";
+import { resetPermissions, seededSpaces } from "../src/core/permissions.js";
+import { SpaceQueue } from "../src/core/space-queue.js";
 import { ConfigRegistry } from "../src/extensions/config-registry.js";
 import { ExtensionRegistry } from "../src/extensions/loader.js";
 import { Db } from "../src/storage/db.js";
@@ -22,11 +22,11 @@ const scheduler = { triggerTask: async () => false } as never;
 function req(
   method: string,
   path: string,
-  opts: { body?: unknown; caller?: string; group?: string } = {},
+  opts: { body?: unknown; caller?: string; space?: string } = {},
 ) {
   const headers: Record<string, string> = {
     "X-Mercury-Caller": opts.caller ?? "admin1",
-    "X-Mercury-Group": opts.group ?? "test:group",
+    "X-Mercury-Space": opts.space ?? "test-group",
     "Content-Type": "application/json",
   };
   return app.request(path, {
@@ -38,7 +38,7 @@ function req(
 
 beforeEach(() => {
   resetPermissions();
-  seededGroups.clear();
+  seededSpaces.clear();
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-config-test-"));
   db = new Db(path.join(tmpDir, "test.db"));
   configRegistry = new ConfigRegistry();
@@ -49,13 +49,13 @@ beforeEach(() => {
     admins: "admin1",
   } as AppConfig;
 
-  db.ensureGroup("test:group");
+  db.ensureSpace("test-group");
 
   app = createApiApp({
     db,
     config,
     containerRunner,
-    queue: new GroupQueue(2),
+    queue: new SpaceQueue(2),
     scheduler,
     registry: new ExtensionRegistry(),
     configRegistry,
@@ -81,9 +81,9 @@ describe("ConfigRegistry", () => {
 
     const cfg = configRegistry.get("napkin.enabled");
     expect(cfg).toBeDefined();
-    expect(cfg!.extension).toBe("napkin");
-    expect(cfg!.description).toBe("Enable napkin");
-    expect(cfg!.default).toBe("true");
+    expect(cfg?.extension).toBe("napkin");
+    expect(cfg?.description).toBe("Enable napkin");
+    expect(cfg?.default).toBe("true");
   });
 
   test("duplicate key throws", () => {

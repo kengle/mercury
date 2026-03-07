@@ -4,7 +4,7 @@ import type { Db } from "../storage/db.js";
 
 type TaskHandler = (task: {
   id: number;
-  groupId: string;
+  spaceId: string;
   prompt: string;
   createdBy: string;
   silent: boolean;
@@ -37,7 +37,7 @@ export class TaskScheduler {
           try {
             await handler({
               id: task.id,
-              groupId: task.groupId,
+              spaceId: task.spaceId,
               prompt: task.prompt,
               createdBy: task.createdBy,
               silent: task.silent === 1,
@@ -45,7 +45,7 @@ export class TaskScheduler {
           } catch (error) {
             logger.error("Scheduler task handler failed", {
               taskId: task.id,
-              groupId: task.groupId,
+              spaceId: task.spaceId,
               error: error instanceof Error ? error.message : String(error),
             });
           }
@@ -55,7 +55,7 @@ export class TaskScheduler {
             this.db.deleteTaskById(task.id);
             logger.info("One-shot task completed and deleted", {
               taskId: task.id,
-              groupId: task.groupId,
+              spaceId: task.spaceId,
             });
           }
         }
@@ -90,7 +90,7 @@ export class TaskScheduler {
 
     await this.handler({
       id: task.id,
-      groupId: task.groupId,
+      spaceId: task.spaceId,
       prompt: task.prompt,
       createdBy: task.createdBy,
       silent: task.silent === 1,

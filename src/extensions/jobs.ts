@@ -92,7 +92,7 @@ export class JobRunner {
   }
 
   private async runJob(
-    name: string,
+    _name: string,
     def: JobDef,
     ctx: MercuryExtensionContext,
     log: Logger,

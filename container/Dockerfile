@@ -35,7 +35,5 @@ COPY src/types.ts /app/src/types.ts
 
 RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
     chmod +x /usr/local/bin/mrctl
-# Keep old name as alias during transition
-RUN ln -s /usr/local/bin/mrctl /usr/local/bin/mercury-ctl
 
 ENTRYPOINT ["bun", "run", "/app/src/agent/container-entry.ts"]

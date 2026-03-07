@@ -63,7 +63,7 @@ Startup
 
 This ensures:
 - No zombie containers consuming resources
-- No blocked group queues from previous runs
+- No blocked space queues from previous runs
 - Clean state before accepting new work
 
 ## Lifecycle Diagram
@@ -71,7 +71,7 @@ This ensures:
 ```
 Message received
   │
-  ├─► Queue (one per group)
+  ├─► Queue (one per space)
   │
   ├─► Spawn container
   │     • --name mercury-<ts>-<id>
@@ -168,7 +168,7 @@ RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl 
 ### Volume Mounts
 
 Mercury mounts these paths into containers:
-- `/groups` — Group workspaces (read/write)
+- `/spaces` — Space workspaces (read/write)
 - `/home/node/.pi/agent` — Global agent config (read/write)
 - `/docs/mercury/` — Self-documentation (read-only)
 
@@ -218,9 +218,9 @@ WARN  Using custom agent image
 ```ts
 runner.cleanupOrphans()     // Remove orphaned containers (called on startup)
 runner.reply(input)         // Run container, returns ContainerResult (reply + outbox files)
-runner.abort(groupId)       // Kill container for a group
+runner.abort(spaceId)       // Kill container for a space
 runner.killAll()            // Kill all running containers (shutdown)
-runner.isRunning(groupId)   // Check if container is active
+runner.isRunning(spaceId)   // Check if container is active
 runner.activeCount          // Number of running containers
 ```
 
@@ -241,8 +241,8 @@ error.exitCode  // number | null
 error.message   // Human-readable description
 
 // Factory methods
-ContainerError.timeout(groupId)
-ContainerError.oom(groupId, exitCode)
-ContainerError.aborted(groupId)
+ContainerError.timeout(spaceId)
+ContainerError.oom(spaceId, exitCode)
+ContainerError.aborted(spaceId)
 ContainerError.error(exitCode, output)
 ```

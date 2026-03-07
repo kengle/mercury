@@ -9,6 +9,8 @@ import { ExtensionRegistry } from "../src/extensions/loader.js";
 import type { MercuryExtensionContext } from "../src/extensions/types.js";
 import { Db } from "../src/storage/db.js";
 
+const testGlobals = globalThis as Record<string, unknown>;
+
 let tmpDir: string;
 let db: Db;
 let extDir: string;
@@ -67,11 +69,11 @@ describe("HookDispatcher — non-mutating events", () => {
     dispatcher = new HookDispatcher(registry, log);
 
     await dispatcher.emit("startup", {}, ctx);
-    expect((globalThis as any).__hookA).toBe(true);
-    expect((globalThis as any).__hookB).toBe(true);
+    expect(testGlobals.__hookA).toBe(true);
+    expect(testGlobals.__hookB).toBe(true);
 
-    delete (globalThis as any).__hookA;
-    delete (globalThis as any).__hookB;
+    delete testGlobals.__hookA;
+    delete testGlobals.__hookB;
   });
 
   it("emits workspace_init with event data", async () => {
@@ -88,14 +90,14 @@ describe("HookDispatcher — non-mutating events", () => {
 
     await dispatcher.emit(
       "workspace_init",
-      { groupId: "g1", workspace: "/tmp/ws" },
+      { spaceId: "g1", workspace: "/tmp/ws" },
       ctx,
     );
-    expect((globalThis as any).__wsEvent).toEqual({
-      groupId: "g1",
+    expect(testGlobals.__wsEvent).toEqual({
+      spaceId: "g1",
       workspace: "/tmp/ws",
     });
-    delete (globalThis as any).__wsEvent;
+    delete testGlobals.__wsEvent;
   });
 
   it("continues after handler error", async () => {
@@ -116,8 +118,8 @@ describe("HookDispatcher — non-mutating events", () => {
 
     // Should not throw
     await dispatcher.emit("startup", {}, ctx);
-    expect((globalThis as any).__afterBad).toBe(true);
-    delete (globalThis as any).__afterBad;
+    expect(testGlobals.__afterBad).toBe(true);
+    delete testGlobals.__afterBad;
   });
 
   it("runs all registered handlers", async () => {
@@ -144,10 +146,10 @@ describe("HookDispatcher — non-mutating events", () => {
 
     await dispatcher.emit("startup", {}, ctx);
     // Both handlers ran (order depends on filesystem readdir)
-    expect((globalThis as any).__order).toHaveLength(2);
-    expect((globalThis as any).__order).toContain("a");
-    expect((globalThis as any).__order).toContain("b");
-    delete (globalThis as any).__order;
+    expect(testGlobals.__order).toHaveLength(2);
+    expect(testGlobals.__order).toContain("a");
+    expect(testGlobals.__order).toContain("b");
+    delete testGlobals.__order;
   });
 
   it("no handlers is a no-op", async () => {
@@ -166,7 +168,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -188,7 +190,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -212,7 +214,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -240,7 +242,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -274,7 +276,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -308,7 +310,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -317,7 +319,7 @@ describe("HookDispatcher — before_container", () => {
     );
     expect(result?.block).toEqual({ reason: "Rate limited" });
     expect(result?.systemPrompt).toBeUndefined();
-    expect((globalThis as any).__shouldNotRun).toBeUndefined();
+    expect(testGlobals.__shouldNotRun).toBeUndefined();
   });
 
   it("handler error is caught, other handlers still run", async () => {
@@ -338,7 +340,7 @@ describe("HookDispatcher — before_container", () => {
 
     const result = await dispatcher.emitBeforeContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         callerId: "user1",
         workspace: "/tmp",
@@ -356,7 +358,7 @@ describe("HookDispatcher — after_container", () => {
 
     const result = await dispatcher.emitAfterContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         reply: "world",
         durationMs: 100,
@@ -378,7 +380,7 @@ describe("HookDispatcher — after_container", () => {
 
     const result = await dispatcher.emitAfterContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         reply: "original",
         durationMs: 100,
@@ -406,7 +408,7 @@ describe("HookDispatcher — after_container", () => {
 
     const result = await dispatcher.emitAfterContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         reply: "original",
         durationMs: 100,
@@ -436,7 +438,7 @@ describe("HookDispatcher — after_container", () => {
 
     const result = await dispatcher.emitAfterContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         reply: "original",
         durationMs: 100,
@@ -458,7 +460,7 @@ describe("HookDispatcher — after_container", () => {
 
     const result = await dispatcher.emitAfterContainer(
       {
-        groupId: "g1",
+        spaceId: "g1",
         prompt: "hello",
         reply: "original",
         durationMs: 100,

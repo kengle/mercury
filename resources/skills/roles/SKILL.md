@@ -1,6 +1,6 @@
 ---
 name: roles
-description: Manage user roles in the current group. Use when the user asks to grant or revoke permissions, make someone an admin, or check who has access.
+description: Manage user roles in the current space. Use when the user asks to grant or revoke permissions, make someone an admin, or check who has access.
 ---
 
 ## Commands

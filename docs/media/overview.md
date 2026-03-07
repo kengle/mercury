@@ -1,6 +1,6 @@
 # Media Handling
 
-Mercury downloads and processes media attachments from chat platforms, saving them to group workspaces and passing them to pi for processing. Models can also produce files via the `outbox/` directory.
+Mercury downloads and processes media attachments from chat platforms, saving them to space workspaces and passing them to pi for processing. Models can also produce files via the `outbox/` directory.
 
 ## Supported Platforms
 
@@ -52,15 +52,15 @@ interface MessageAttachment {
 
 ### Ingress (inbox/)
 
-Incoming media files are saved to the group workspace:
+Incoming media files are saved to the space workspace:
 
 ```
-.mercury/groups/<group_id>/inbox/<timestamp>-<type>.<ext>
+.mercury/spaces/<space_id>/inbox/<timestamp>-<type>.<ext>
 ```
 
 Example:
 ```
-.mercury/groups/whatsapp_123456_g_us/inbox/
+.mercury/spaces/whatsapp_123456_g_us/inbox/
 ├── 1709012345-image.jpg
 ├── 1709012400-voice.ogg
 └── 1709012500-document.pdf
@@ -71,7 +71,7 @@ Example:
 The model writes files to `outbox/` during a container run. After exit, the runtime scans for files with `mtime >= startTime` and attaches them to the reply:
 
 ```
-.mercury/groups/<group_id>/outbox/
+.mercury/spaces/<space_id>/outbox/
 ├── chart.png
 └── summary.pdf
 ```
@@ -103,7 +103,7 @@ Attachments are passed to pi as XML:
 
 ```xml
 <attachments>
-  <attachment type="image" path="/groups/xxx/media/123-image.jpg" mime="image/jpeg" size="12345" />
+  <attachment type="image" path="/spaces/xxx/media/123-image.jpg" mime="image/jpeg" size="12345" />
 </attachments>
 
 @mercury what's in this image?

@@ -4,10 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import type { AppConfig } from "../src/config.js";
 import { MercuryExtensionAPIImpl } from "../src/extensions/api.js";
-import type {
-  ExtensionMeta,
-  MercuryExtensionContext,
-} from "../src/extensions/types.js";
+import type { MercuryExtensionContext } from "../src/extensions/types.js";
 import { Db } from "../src/storage/db.js";
 
 let tmpDir: string;

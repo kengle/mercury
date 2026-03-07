@@ -15,18 +15,18 @@ export class WhatsAppBridge implements PlatformBridge {
 
   constructor(private readonly adapter: WhatsAppBaileysAdapter) {}
 
-  groupId(threadId: string): string {
-    return threadId;
-  }
-
-  isDM(threadId: string): boolean {
-    return !threadId.includes("@g.us");
+  parseThread(threadId: string): { externalId: string; isDM: boolean } {
+    const parts = threadId.split(":");
+    const externalId = parts.slice(1).join(":");
+    const isDM = !threadId.includes("@g.us");
+    return { externalId, isDM };
   }
 
   async normalize(
     threadId: string,
     message: unknown,
     _ctx: NormalizeContext,
+    spaceId: string,
   ): Promise<IngressMessage | null> {
     const msg = message as Message;
     if (msg.author.isMe) return null;
@@ -43,13 +43,16 @@ export class WhatsAppBridge implements PlatformBridge {
 
     if (!text && attachments.length === 0) return null;
 
+    const { externalId, isDM } = this.parseThread(threadId);
+
     return {
       platform: "whatsapp",
-      groupId: this.groupId(threadId),
+      spaceId,
+      conversationExternalId: externalId,
       callerId: `whatsapp:${msg.author.userId || "unknown"}`,
       authorName: msg.author.userName,
       text,
-      isDM: this.isDM(threadId),
+      isDM,
       isReplyToBot,
       attachments,
     };

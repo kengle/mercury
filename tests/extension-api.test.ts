@@ -185,7 +185,7 @@ describe("MercuryExtensionAPI", () => {
     it("throws when run is not a function", () => {
       const api = createApi();
       expect(() =>
-        api.job("bad", { interval: 1000, run: "not a fn" as any }),
+        api.job("bad", { interval: 1000, run: "not a fn" as unknown as never }),
       ).toThrow("requires a run function");
     });
   });
@@ -199,8 +199,8 @@ describe("MercuryExtensionAPI", () => {
       });
       const cfg = api.getMeta().configs.get("enabled");
       expect(cfg).toBeDefined();
-      expect(cfg!.description).toBe("Enable this");
-      expect(cfg!.default).toBe("true");
+      expect(cfg?.description).toBe("Enable this");
+      expect(cfg?.default).toBe("true");
     });
 
     it("throws on duplicate key", () => {
@@ -251,7 +251,7 @@ describe("MercuryExtensionAPI", () => {
     it("throws when render is not a function", () => {
       const api = createApi();
       expect(() =>
-        api.widget({ label: "X", render: "not a fn" as any }),
+        api.widget({ label: "X", render: "not a fn" as unknown as never }),
       ).toThrow("requires a render function");
     });
   });

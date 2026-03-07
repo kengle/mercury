@@ -20,9 +20,9 @@ const BUILT_IN_PERMISSIONS = new Set([
   "roles.revoke",
   "permissions.get",
   "permissions.set",
-  "groups.list",
-  "groups.rename",
-  "groups.delete",
+  "spaces.list",
+  "spaces.rename",
+  "spaces.delete",
 ]);
 
 // ---------------------------------------------------------------------------
@@ -76,7 +76,7 @@ export function resetPermissions(): void {
  * Tracks which groups have had admins seeded to avoid redundant DB calls.
  * Exported for test isolation (tests should clear this in beforeEach).
  */
-export const seededGroups = new Set<string>();
+export const seededSpaces = new Set<string>();
 
 // ---------------------------------------------------------------------------
 // System callers
@@ -136,13 +136,13 @@ function getDefaultPermissions(role: string): Set<string> {
  */
 export function getRolePermissions(
   db: Db,
-  groupId: string,
+  spaceId: string,
   role: string,
 ): Set<string> {
   if (role === "system") return getDefaultPermissions("system");
 
   const key = `role.${role}.permissions`;
-  const stored = db.getGroupConfig(groupId, key);
+  const stored = db.getSpaceConfig(spaceId, key);
 
   if (stored !== null) {
     const perms = stored
@@ -157,28 +157,28 @@ export function getRolePermissions(
 
 export function hasPermission(
   db: Db,
-  groupId: string,
+  spaceId: string,
   role: string,
   permission: string,
 ): boolean {
-  return getRolePermissions(db, groupId, role).has(permission);
+  return getRolePermissions(db, spaceId, role).has(permission);
 }
 
 export function resolveRole(
   db: Db,
-  groupId: string,
+  spaceId: string,
   platformUserId: string,
   seededAdmins: string[],
 ): string {
   // System callers bypass DB entirely
   if (isSystemCaller(platformUserId)) return "system";
 
-  if (seededAdmins.length > 0 && !seededGroups.has(groupId)) {
-    db.seedAdmins(groupId, seededAdmins);
-    seededGroups.add(groupId);
+  if (seededAdmins.length > 0 && !seededSpaces.has(spaceId)) {
+    db.seedAdmins(spaceId, seededAdmins);
+    seededSpaces.add(spaceId);
   }
 
-  db.upsertMember(groupId, platformUserId);
+  db.upsertMember(spaceId, platformUserId);
 
-  return db.getRole(groupId, platformUserId) ?? "member";
+  return db.getRole(spaceId, platformUserId) ?? "member";
 }

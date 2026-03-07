@@ -39,7 +39,7 @@ describe("RateLimiter", () => {
     expect(limiter.isAllowed("group1", "user2")).toBe(false);
   });
 
-  test("different groups have separate limits", () => {
+  test("different spaces have separate limits", () => {
     expect(limiter.isAllowed("group1", "user1")).toBe(true);
     expect(limiter.isAllowed("group1", "user1")).toBe(true);
     expect(limiter.isAllowed("group1", "user1")).toBe(true);

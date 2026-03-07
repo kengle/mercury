@@ -42,7 +42,7 @@ Tasks can be marked as **silent** to execute without posting results to the chat
 - **Health checks** — periodic monitoring without noise
 - **Background updates** — knowledge base updates, data syncing
 
-The task executes normally but no message is sent to the group.
+The task executes normally but no message is sent to the space.
 
 ```bash
 # Create a silent cron task
@@ -116,7 +116,7 @@ mrctl tasks create --at "2026-03-10T09:00:00Z" --prompt "Check if the deployment
 ## Managing Tasks
 
 ```bash
-# List all tasks in the current group
+# List all tasks in the current space
 mrctl tasks list
 
 # Pause a task (stops execution, keeps definition)
@@ -163,7 +163,7 @@ Mercury uses [cron-parser](https://www.npmjs.com/package/cron-parser) for parsin
 
 When a task fires:
 
-1. The prompt is sent to the group as if from the task creator
+1. The prompt is sent to the space as if from the task creator
 2. Runs through the normal routing (trigger check bypassed for scheduled tasks)
 3. Caller ID is the `createdBy` user
 4. Permissions are checked against the creator's role at execution time
@@ -177,7 +177,7 @@ Tasks are stored in SQLite:
 ```sql
 CREATE TABLE tasks (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
-  group_id TEXT NOT NULL,
+  space_id TEXT NOT NULL,
   cron TEXT,                          -- Cron expression (null for at-tasks)
   at TEXT,                            -- ISO 8601 timestamp (null for cron-tasks)
   prompt TEXT NOT NULL,
@@ -253,7 +253,7 @@ scheduler.computeNextRun(cron, from);  // Get next run time for cron tasks
 ```typescript
 type TaskHandler = (task: {
   id: number;
-  groupId: string;
+  spaceId: string;
   prompt: string;
   createdBy: string;
   silent: boolean;
@@ -264,17 +264,17 @@ type TaskHandler = (task: {
 
 ```typescript
 // Create a cron task
-db.createTask(groupId, { cron: "0 9 * * *" }, prompt, nextRunAt, createdBy, silent);
+db.createTask(spaceId, { cron: "0 9 * * *" }, prompt, nextRunAt, createdBy, silent);
 
 // Create an at-task
-db.createTask(groupId, { at: "2026-03-02T14:00:00Z" }, prompt, nextRunAt, createdBy, silent);
+db.createTask(spaceId, { at: "2026-03-02T14:00:00Z" }, prompt, nextRunAt, createdBy, silent);
 
-db.listTasks(groupId?);       // List tasks (optionally filter by group)
+db.listTasks(spaceId?);       // List tasks (optionally filter by space)
 db.getDueTasks(now);          // Get tasks ready to run
 db.getTask(id);               // Get single task
 db.setTaskActive(id, active); // Pause/resume
-db.deleteTask(id, groupId);   // Delete task (with group check)
-db.deleteTaskById(id);        // Delete task (no group check, for scheduler)
+db.deleteTask(id, spaceId);   // Delete task (with space check)
+db.deleteTaskById(id);        // Delete task (no space check, for scheduler)
 db.updateTaskNextRun(id, nextRunAt);  // Update next execution time
 ```
 

@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import http from "node:http";
 import os from "node:os";
@@ -153,11 +153,11 @@ describe("downloadMediaFromUrl", () => {
     );
 
     expect(result).not.toBeNull();
-    expect(result!.type).toBe("image");
-    expect(result!.mimeType).toBe("image/png");
-    expect(result!.sizeBytes).toBe(content.length);
-    expect(fs.existsSync(result!.path)).toBe(true);
-    expect(fs.readFileSync(result!.path, "utf8")).toBe(content);
+    expect(result?.type).toBe("image");
+    expect(result?.mimeType).toBe("image/png");
+    expect(result?.sizeBytes).toBe(content.length);
+    expect(fs.existsSync(result?.path)).toBe(true);
+    expect(fs.readFileSync(result?.path, "utf8")).toBe(content);
   });
 
   test("skips file exceeding expected size", async () => {
@@ -279,7 +279,7 @@ describe("downloadMediaFromUrl", () => {
 
     expect(result).not.toBeNull();
     // Filename should be {timestamp}-image.jpg
-    expect(result!.path).toMatch(/\d+-image\.jpg$/);
+    expect(result?.path).toMatch(/\d+-image\.jpg$/);
   });
 
   test("creates output directory if it does not exist", async () => {

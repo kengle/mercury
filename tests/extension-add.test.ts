@@ -241,7 +241,7 @@ describe("extension listing", () => {
     const descMatch = content.match(/^description:\s*(.+?)(?:\n[a-z]|\n---)/ms);
 
     expect(descMatch).toBeTruthy();
-    expect(descMatch![1].replace(/\n\s*/g, " ").trim()).toBe(
+    expect(descMatch?.[1].replace(/\n\s*/g, " ").trim()).toBe(
       "Test extension for desc-ext",
     );
   });

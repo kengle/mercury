@@ -35,62 +35,64 @@ agent-browser get text body
 - Running in a container with limited resources
 - Long-running tasks may time out
 
-## Mercury Control (mercury-ctl)
+## Mercury Control (mrctl)
 
 Full command reference for managing Mercury from inside the container:
 
 ### Identity
 ```bash
-mercury-ctl whoami                    # Show caller, group, role, permissions
+mrctl whoami                    # Show caller, space, role, permissions
 ```
 
 ### Scheduled Tasks
 ```bash
-mercury-ctl tasks list                # List all tasks for this group
+mrctl tasks list                # List all tasks for this space
 
 # Recurring tasks (cron)
-mercury-ctl tasks create --cron "0 9 * * *" --prompt "Good morning!" [--silent]
+mrctl tasks create --cron "0 9 * * *" --prompt "Good morning!" [--silent]
 
 # One-shot tasks (at) — auto-delete after execution
-mercury-ctl tasks create --at "2026-03-02T14:00:00Z" --prompt "Reminder!" [--silent]
+mrctl tasks create --at "2026-03-02T14:00:00Z" --prompt "Reminder!" [--silent]
 
-mercury-ctl tasks run <id>            # Trigger task immediately
-mercury-ctl tasks pause <id>          # Pause a task
-mercury-ctl tasks resume <id>         # Resume a paused task
-mercury-ctl tasks delete <id>         # Delete a task
+mrctl tasks run <id>            # Trigger task immediately
+mrctl tasks pause <id>          # Pause a task
+mrctl tasks resume <id>         # Resume a paused task
+mrctl tasks delete <id>         # Delete a task
 ```
 
 **Note:** Use `--cron` for recurring tasks or `--at` for one-shot tasks (ISO 8601, must be in the future).
 
-### Group Configuration
+### Space Configuration
 ```bash
-mercury-ctl config get [key]          # Get config (all or specific key)
-mercury-ctl config set <key> <value>  # Set config value
+mrctl config get [key]          # Get config (all or specific key)
+mrctl config set <key> <value>  # Set config value
 # Valid keys: trigger.match, trigger.patterns, trigger.case_sensitive
 ```
 
-### Groups
+### Spaces
 ```bash
-mercury-ctl groups list               # List all groups with names
-mercury-ctl groups name               # Get current group's display name
-mercury-ctl groups name "My Group"    # Set current group's display name
-mercury-ctl groups delete             # Delete current group + tasks/messages/roles/config
+mrctl spaces list               # List all spaces with names
+mrctl spaces name               # Get current space's display name
+mrctl spaces name "My Space"    # Set current space's display name
+mrctl spaces delete             # Delete current space + tasks/messages/roles/config
+mrctl conversations list        # List known conversations
+mrctl conversations list --unlinked  # Show only unlinked conversations
 ```
 
 ### Roles & Permissions
 ```bash
-mercury-ctl roles list                # List roles in this group
-mercury-ctl roles grant <user-id> [--role admin]   # Grant role to user
-mercury-ctl roles revoke <user-id>    # Revoke role (becomes member)
+mrctl roles list                # List roles in this space
+mrctl roles grant <user-id> [--role admin]   # Grant role to user
+mrctl roles revoke <user-id>    # Revoke role (becomes member)
 
-mercury-ctl permissions show [--role <role>]       # Show permissions
-mercury-ctl permissions set <role> <perm1,perm2>   # Set role permissions
+mrctl permissions show [--role <role>]       # Show permissions
+mrctl permissions set <role> <perm1,perm2>   # Set role permissions
 ```
 
 ### Control
 ```bash
-mercury-ctl stop                      # Abort current run, clear queue
-mercury-ctl compact                   # Reset session (fresh context)
+mrctl stop                      # Abort current run, clear queue
+mrctl compact                   # Reset session (fresh context)
 ```
 
 ## Mercury Documentation
