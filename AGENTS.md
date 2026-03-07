@@ -96,7 +96,7 @@ src/
 │   └── reserved.ts             # Reserved extension names (shared constant)
 │
 ├── cli/
-│   ├── mercury.ts              # Main CLI (init, run, build, add, remove, ext list)
+│   ├── mercury.ts              # Main CLI (init, run, build, auth, add, remove, ext list)
 │   ├── mrctl.ts                # In-container CLI
 │   ├── kb-distill.ts           # Re-exports from extensions/kb-distill/
 │   └── whatsapp-auth.ts        # WhatsApp QR auth
@@ -237,6 +237,7 @@ Permissions are now dynamic. Built-in permissions are static; extensions registe
 
 | Doc | Topic |
 |-----|-------|
+| [auth/overview.md](docs/auth/overview.md) | Authentication (OAuth + API keys + platforms) |
 | [pipeline.md](docs/pipeline.md) | Message pipeline (ingress/egress) |
 | [memory.md](docs/memory.md) | Obsidian vault system |
 | [scheduler.md](docs/scheduler.md) | Task scheduling (cron + at) |
