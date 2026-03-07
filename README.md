@@ -23,10 +23,23 @@ mkdir my-assistant && cd my-assistant
 mercury init
 ```
 
-Edit `.env`:
+Authenticate:
+
+```bash
+mercury auth login              # Interactive OAuth (Anthropic, GitHub Copilot, etc.)
+mercury auth login anthropic    # Or specify provider directly
+mercury auth status             # Check what's configured
+```
+
+Or set an API key in `.env`:
 
 ```bash
 MERCURY_ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Configure identity and adapters in `.env`:
+
+```bash
 MERCURY_CHATSDK_USERNAME=Mercury
 MERCURY_TRIGGER_PATTERNS=@Mercury,Mercury
 
@@ -140,6 +153,10 @@ mercury init      # Initialize project
 mercury run       # Start the assistant
 mercury build     # Rebuild container image
 mercury status    # Show status
+mercury auth login [provider]    # OAuth login (anthropic, github-copilot, etc.)
+mercury auth logout [provider]   # Remove saved credentials
+mercury auth status              # Show auth status
+mercury auth whatsapp            # WhatsApp QR/pairing code auth
 mercury chat "hello"             # Send a message to the running instance
 mercury chat --file photo.jpg "what's in this?"
 mercury chat --space my-project "check status"
@@ -233,14 +250,22 @@ See [docs/extensions.md](docs/extensions.md) for the full guide.
 | `MERCURY_CHATSDK_PORT` | `3000` | API port |
 | `MERCURY_LOG_LEVEL` | `info` | Log level |
 
+**Auth:**
+
+Credentials are resolved in this order:
+1. OAuth credentials from `mercury auth login` (saved to `.mercury/global/auth.json`)
+2. API keys from `.env` (e.g., `MERCURY_ANTHROPIC_API_KEY`)
+
+Supported OAuth providers: Anthropic, GitHub Copilot, Google Gemini CLI, Antigravity, OpenAI Codex.
+
 **Model:**
 
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `MERCURY_MODEL_PROVIDER` | `anthropic` | Provider |
 | `MERCURY_MODEL` | `claude-opus-4-6` | Model |
-| `ANTHROPIC_API_KEY` | — | API key |
-| `ANTHROPIC_OAUTH_TOKEN` | — | OAuth token (alternative to API key) |
+| `MERCURY_ANTHROPIC_API_KEY` | — | API key |
+| `MERCURY_ANTHROPIC_OAUTH_TOKEN` | — | OAuth token (alternative) |
 
 **Adapters:**
 
@@ -287,6 +312,7 @@ mrctl config set trigger_patterns "@Bot,Bot"
 
 ## Docs
 
+- [Authentication](docs/auth/overview.md)
 - [Message pipeline](docs/pipeline.md)
 - [Memory system](docs/memory.md)
 - [Scheduled tasks](docs/scheduler.md)
