@@ -41,9 +41,9 @@ const schema = z.object({
     .max(60 * 60 * 1000)
     .default(60 * 1000), // 1 minute
 
-  // ─── Chat SDK Server ────────────────────────────────────────────────
-  chatSdkPort: z.coerce.number().int().min(1).max(65535).default(8787),
-  chatSdkUserName: z.string().default("mercury"),
+  // ─── Server ─────────────────────────────────────────────────────────
+  port: z.coerce.number().int().min(1).max(65535).default(8787),
+  botUsername: z.string().default("mercury"),
 
   // ─── Discord ────────────────────────────────────────────────────────
   enableDiscord: z.coerce.boolean().default(false),
@@ -107,9 +107,9 @@ export function loadConfig(): AppConfig {
     rateLimitPerUser: process.env.MERCURY_RATE_LIMIT_PER_USER,
     rateLimitWindowMs: process.env.MERCURY_RATE_LIMIT_WINDOW_MS,
 
-    // Chat SDK Server
-    chatSdkPort: process.env.MERCURY_CHATSDK_PORT,
-    chatSdkUserName: process.env.MERCURY_CHATSDK_USERNAME,
+    // Server
+    port: process.env.MERCURY_PORT,
+    botUsername: process.env.MERCURY_BOT_USERNAME,
 
     // Discord
     enableDiscord: process.env.MERCURY_ENABLE_DISCORD,

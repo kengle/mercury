@@ -23,8 +23,8 @@ describe("Runtime rate limiting", () => {
       maxConcurrency: 2,
       rateLimitPerUser: 3, // 3 requests per window
       rateLimitWindowMs: 60000,
-      chatSdkPort: 8787,
-      chatSdkUserName: "mercury",
+      port: 8787,
+      botUsername: "mercury",
       discordGatewayDurationMs: 600000,
       discordGatewaySecret: undefined,
       enableWhatsApp: false,

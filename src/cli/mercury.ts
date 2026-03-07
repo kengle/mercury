@@ -295,7 +295,7 @@ function statusAction(): void {
       `  Discord:  ${hasDiscord ? "✓ configured" : "○ not configured"}`,
     );
 
-    const portMatch = envContent.match(/MERCURY_CHATSDK_PORT\s*=\s*(\d+)/);
+    const portMatch = envContent.match(/MERCURY_PORT\s*=\s*(\d+)/);
     const port = portMatch ? portMatch[1] : "3000";
 
     const portCheck = spawnSync("lsof", ["-i", `:${port}`, "-t"], {

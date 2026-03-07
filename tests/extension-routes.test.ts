@@ -89,7 +89,7 @@ beforeEach(async () => {
   await registry.loadAll(extDir, db, log);
 
   const config = {
-    chatSdkPort: 8787,
+    port: 8787,
     admins: "admin1",
   } as AppConfig;
 

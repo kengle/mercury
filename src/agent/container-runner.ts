@@ -227,7 +227,7 @@ export class AgentContainerRunner {
       { key: "SPACE_ID", value: input.spaceId },
       {
         key: "API_URL",
-        value: `http://host.docker.internal:${this.config.chatSdkPort}`,
+        value: `http://host.docker.internal:${this.config.port}`,
       },
       // Passthrough vars (MERCURY_* with prefix stripped)
       ...passthroughEnvPairs,

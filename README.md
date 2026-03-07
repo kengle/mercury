@@ -40,7 +40,7 @@ MERCURY_ANTHROPIC_API_KEY=sk-ant-...
 Configure identity and adapters in `.env`:
 
 ```bash
-MERCURY_CHATSDK_USERNAME=Mercury
+MERCURY_BOT_USERNAME=Mercury
 MERCURY_TRIGGER_PATTERNS=@Mercury,Mercury
 
 # Enable adapters
@@ -121,7 +121,6 @@ Each space is a user-defined memory boundary with its own workspace and pi sessi
 | **Permissions** | Role-based access control | [docs/permissions.md](docs/permissions.md) |
 | **Media** | Images, documents, voice notes | [docs/media/overview.md](docs/media/overview.md) |
 | **KB Distillation** | Extract lasting knowledge from chats | [docs/kb-distillation.md](docs/kb-distillation.md) |
-| **Subagents** | Delegate tasks to specialized agents | [docs/subagents.md](docs/subagents.md) |
 | **Extensions** | TypeScript plugins for CLIs, skills, jobs, hooks | [docs/extensions.md](docs/extensions.md) |
 
 ---
@@ -246,7 +245,8 @@ See [docs/extensions.md](docs/extensions.md) for the full guide.
 |----------|---------|-------------|
 | `MERCURY_DATA_DIR` | `.mercury` | Data directory |
 | `MERCURY_MAX_CONCURRENCY` | `3` | Max concurrent runs |
-| `MERCURY_CHATSDK_PORT` | `3000` | API port |
+| `MERCURY_PORT` | `8787` | API port |
+| `MERCURY_BOT_USERNAME` | `mercury` | Bot display name |
 | `MERCURY_LOG_LEVEL` | `info` | Log level |
 
 **Auth:**
@@ -318,7 +318,6 @@ mrctl config set trigger_patterns "@Bot,Bot"
 - [Permissions](docs/permissions.md)
 - [Media handling](docs/media/overview.md)
 - [KB distillation](docs/kb-distillation.md)
-- [Subagents](docs/subagents.md)
 - [Container lifecycle](docs/container-lifecycle.md)
 - [Graceful shutdown](docs/graceful-shutdown.md)
 - [Rate limiting](docs/rate-limiting.md)

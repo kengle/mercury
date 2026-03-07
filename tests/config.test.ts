@@ -30,7 +30,7 @@ describe("loadConfig", () => {
     expect(config.triggerPatterns).toBe("@Pi,Pi");
     expect(config.triggerMatch).toBe("mention");
     expect(config.maxConcurrency).toBe(2);
-    expect(config.chatSdkPort).toBe(8787);
+    expect(config.port).toBe(8787);
     expect(config.containerTimeoutMs).toBe(5 * 60 * 1000);
     expect(config.logLevel).toBe("info");
     expect(config.logFormat).toBe("text");
