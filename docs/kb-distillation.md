@@ -1,39 +1,55 @@
 # KB Distillation
 
-Mercury can automatically extract lasting knowledge from conversations and save it to an Obsidian-compatible vault. KB distillation is a built-in extension (`src/extensions/kb-distill/`) that runs as a background job, processing daily message logs and updating entity files.
+KB distillation is **extension-based** in Mercury (not built-in).
 
-## How It Works
+As of v0.3.x, Mercury no longer ships a built-in `kb-distill` extension. The recommended approach is to use a user-installed extension (for example, `napkin`) that runs a background job and writes distilled knowledge into each space vault.
 
-```
-JobRunner (interval)
-  │
-  └─► kb-distill:distill job
-        │
-        ├─► Export messages to .messages/YYYY-MM-DD.jsonl
-        │
-        ├─► Compare MD5 hash before/after
-        │
-        ├─► If changed → run kb-distiller agent
-        │
-        └─► Agent updates vault (entities/, daily/)
-```
+---
 
-The distiller exports messages from the database to daily JSONL files. If a file's content changed (detected via MD5 hash), it runs an AI agent to extract knowledge and update the vault.
+## Recommended Setup
 
-## Message Export
+Use the real example extension at:
 
-Messages are exported to daily partition files:
+- `examples/extensions/napkin/`
 
-```
+It demonstrates:
+
+- `workspace_init` hook to scaffold vault structure
+- `before_container` hook to set `NAPKIN_VAULT`
+- background job (`distill`) for periodic extraction
+- dashboard widget + extension store state
+
+---
+
+## How Distillation Works (Extension Pattern)
+
+Typical flow:
+
+1. Read messages from `state.db` per `space_id`
+2. Export messages to `.messages/YYYY-MM-DD.jsonl`
+3. Detect changed files (hash compare)
+4. Run `pi` with a distillation prompt against changed files
+5. Update vault files incrementally (append/update, not destructive rewrite)
+
+This keeps runs idempotent and avoids re-processing unchanged days.
+
+---
+
+## Data Layout (napkin example)
+
+```text
 .mercury/spaces/<space-id>/
 ├── .messages/
-│   ├── 2026-02-28.jsonl
-│   └── 2026-03-01.jsonl
-└── entities/
-    └── ...                  # Distilled knowledge
+│   └── YYYY-MM-DD.jsonl
+└── knowledge/
+    ├── people/
+    ├── projects/
+    ├── references/
+    ├── daily/
+    └── templates/
 ```
 
-Each line in the JSONL file:
+Message export format:
 
 ```json
 {"ts":1709123456,"role":"ambient","content":"Alice: Great idea!"}
@@ -41,197 +57,21 @@ Each line in the JSONL file:
 {"ts":1709123458,"role":"assistant","content":"I think..."}
 ```
 
-| Role | Description |
-|------|-------------|
-| `ambient` | Space message from the live conversation stream (format: `Name: content`) |
-| `user` | Message that triggered the assistant |
-| `assistant` | Assistant's response |
+---
 
 ## Configuration
 
-Enable via environment variable:
+With the napkin example extension:
 
-```bash
-# Run every hour (3600000ms)
-MERCURY_KB_DISTILL_INTERVAL_MS=3600000
+- `MERCURY_KB_DISTILL_INTERVAL_MS=0` → disabled (default)
+- `MERCURY_KB_DISTILL_INTERVAL_MS=3600000` → check every hour
 
-# Disable (default)
-MERCURY_KB_DISTILL_INTERVAL_MS=0
-```
+You can also expose interval as extension config keys (see `examples/extensions/napkin/index.ts`).
 
-| Value | Behavior |
-|-------|----------|
-| `0` | Disabled (default) |
-| `> 0` | Runs on that interval in milliseconds |
+---
 
-The extension also registers a per-space config key `kb-distill.interval_ms` via `mrctl config set`.
+## Notes
 
-When enabled, the job runs immediately on startup, then every hour (checking the interval config on each tick to decide whether to actually distill).
-
-## CLI Usage
-
-Run manually via CLI:
-
-```bash
-# Process today's changed messages
-mercury kb-distill
-
-# Process all changed historical messages
-mercury kb-distill --backfill
-```
-
-## What Gets Extracted
-
-The distiller extracts three types of knowledge:
-
-### People
-
-Created when someone has 3+ messages, shares a resource, or states a clear position.
-
-```markdown
-# Alice
-
-## Expertise
-- AI agents
-- Product development
-
-## Positions
-- Believes agents will replace traditional apps
-
-## Resources Shared
-- [[some-tool]]
-```
-
-### Resources
-
-Tools, repos, articles, or URLs shared in conversation.
-
-```markdown
-# Some Tool
-
-Type: tool
-URL: https://example.com
-Shared by: [[alice]] on 2026-02-28
-
-## What it does
-Description of the tool.
-
-## Why shared
-Context for why it was mentioned.
-```
-
-### Space Knowledge
-
-Decisions and conclusions reached inside the space.
-
-```markdown
-# Architecture Decision
-
-Date: 2026-02-28
-Participants: [[alice]], [[bob]]
-
-## Question
-Should we use approach A or B?
-
-## Conclusion
-Go with approach A for reasons X, Y, Z.
-```
-
-## Vault Structure
-
-Distilled knowledge goes into the space's existing vault:
-
-```
-.mercury/spaces/<space-id>/
-├── .messages/              # Input (JSONL files)
-├── entities/
-│   ├── people/             # Person entities
-│   ├── resources/          # Tools, repos, articles
-│   └── space-knowledge/    # Decisions, conclusions
-├── daily/                  # Daily notes
-└── .obsidian/              # Obsidian compatibility
-```
-
-## Change Detection
-
-The distiller uses MD5 hashing to detect changes:
-
-1. Read existing JSONL file (if any) and compute hash
-2. Regenerate file from database
-3. Compute hash of new content
-4. If hashes differ → file changed → run distiller
-
-This avoids unnecessary distillation runs when no new messages arrived.
-
-## Incremental Updates
-
-The distiller agent is idempotent:
-
-1. Searches vault before creating entities
-2. Appends to existing files rather than overwriting
-3. Skips already-processed information
-
-This means running distillation multiple times on the same data is safe.
-
-## What Gets Skipped
-
-The distiller ignores:
-
-- Thin interactions (greetings, acknowledgments)
-- Encyclopedia-style definitions
-- Transient chatter
-- `<reply_to>` blocks (quoted messages)
-- Tool outputs
-
-## Lifecycle
-
-KB distillation is now a built-in extension (`src/extensions/kb-distill/`). It registers a background job via `mercury.job()` that runs on a fixed interval.
-
-```
-mercury run
-  │
-  ├─► Load extensions (including kb-distill)
-  │
-  ├─► JobRunner.start()
-  │     └─► kb-distill:distill job
-  │           ├─► Run immediately
-  │           └─► Schedule interval (1h default)
-  │
-  ├─► ... running ...
-  │
-  └─► SIGTERM/SIGINT
-        └─► JobRunner.stop()
-              └─► Clear all job timers
-```
-
-## Dependencies
-
-- **[pi](https://github.com/mariozechner/pi)** — Agent runtime
-- **[napkin](https://github.com/michaelliv/napkin-ai)** — Obsidian vault CLI
-
-Both must be installed and available in PATH.
-
-## Backfill
-
-To process historical conversations:
-
-```bash
-mercury kb-distill --backfill
-```
-
-This processes all changed JSONL files across all dates. Safe to run multiple times.
-
-## Troubleshooting
-
-### No changes to distill
-
-The distiller only runs when file content has changed. If messages haven't changed since the last export, nothing happens.
-
-### Force re-distillation
-
-Delete the JSONL files to force regeneration:
-
-```bash
-rm .mercury/spaces/<space-id>/.messages/*.jsonl
-mercury kb-distill --backfill
-```
+- Distillation behavior depends on the installed extension implementation
+- Mercury core provides hooks, jobs, DB access, and workspace isolation
+- Distillation logic/prompt lives in the extension, not in core Mercury
