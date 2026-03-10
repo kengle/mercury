@@ -140,7 +140,7 @@ function runPi(payload: Payload): Promise<string> {
       "--model",
       process.env.MODEL || "claude-opus-4-6",
       "-e",
-      "/app/extensions/permission-guard.ts",
+      "/app/src/extensions/permission-guard.ts",
       "--append-system-prompt",
       systemPrompt,
       buildPrompt(payload),
