@@ -38,23 +38,6 @@ function getVersion(): string {
   }
 }
 
-function copySourceFile(srcRelative: string, destRelative: string): void {
-  const src = join(PACKAGE_ROOT, srcRelative);
-  const dest = join(CWD, destRelative);
-
-  if (!existsSync(src)) {
-    console.error(`Error: Source file not found: ${srcRelative}`);
-    process.exit(1);
-  }
-
-  const content = readFileSync(src, "utf-8");
-  const destDir = dirname(dest);
-  if (!existsSync(destDir)) {
-    mkdirSync(destDir, { recursive: true });
-  }
-  writeFileSync(dest, content);
-  console.log(`  ✓ ${destRelative}`);
-}
 
 function loadEnvFile(envPath: string): Record<string, string> {
   const content = readFileSync(envPath, "utf-8");
@@ -141,56 +124,10 @@ function initAction(): void {
     console.log(`  ✓ .mercury/global/agents/${file}`);
   }
 
-  // Create container directory and files
-  const containerDir = join(CWD, "container");
-  if (!existsSync(containerDir)) {
-    mkdirSync(containerDir, { recursive: true });
-  }
-
-  const dockerfilePath = join(CWD, "container/Dockerfile");
-  if (!existsSync(dockerfilePath)) {
-    copyFileSync(join(PACKAGE_ROOT, "container/Dockerfile"), dockerfilePath);
-    console.log("  ✓ container/Dockerfile");
-  }
-
-  const buildScriptPath = join(CWD, "container/build.sh");
-  if (!existsSync(buildScriptPath)) {
-    copyFileSync(join(PACKAGE_ROOT, "container/build.sh"), buildScriptPath);
-    chmodSync(buildScriptPath, 0o755);
-    console.log("  ✓ container/build.sh");
-  }
-
-  // Copy source files needed for container build
-  console.log("\nCopying container runtime files:");
-  copySourceFile(
-    "src/agent/container-entry.ts",
-    "src/agent/container-entry.ts",
-  );
-  copySourceFile("src/cli/mrctl.ts", "src/cli/mrctl.ts");
-  copySourceFile("src/extensions/reserved.ts", "src/extensions/reserved.ts");
-  copySourceFile("src/types.ts", "src/types.ts");
-  copySourceFile(
-    "resources/extensions/permission-guard.ts",
-    "resources/extensions/permission-guard.ts",
-  );
-
-  // Build container
-  console.log("\n📦 Building container image...\n");
-  const buildResult = spawnSync("bash", [buildScriptPath], {
-    stdio: "inherit",
-    cwd: CWD,
-  });
-
-  if (buildResult.status !== 0) {
-    console.error(
-      "\n⚠️  Container build failed. You can retry with 'mercury build'",
-    );
-  }
-
   console.log("\n🪽 Initialization complete!");
   console.log("\nNext steps:");
   console.log("  1. Edit .env to set your API keys and enable adapters");
-  console.log("  2. Run 'mercury run' to start");
+  console.log("  2. Run 'mercury service install' to start as a system service");
 }
 
 async function runAction(): Promise<void> {
@@ -238,21 +175,41 @@ async function runAction(): Promise<void> {
 }
 
 function buildAction(): void {
-  const buildScript = join(CWD, "container/build.sh");
+  // Build from package sources using a temp context — no files needed in user project
+  const tmpDir = join(CWD, ".mercury", ".build-context");
+  mkdirSync(tmpDir, { recursive: true });
 
-  if (!existsSync(buildScript)) {
-    console.error("Error: container/build.sh not found in current directory.");
-    console.error("Run 'mercury init' first.");
-    process.exit(1);
-  }
+  try {
+    // Copy container files from package into temp context
+    const filesToCopy = [
+      "container/Dockerfile",
+      "src/agent/container-entry.ts",
+      "src/cli/mrctl.ts",
+      "src/extensions/reserved.ts",
+      "src/extensions/permission-guard.ts",
+      "src/types.ts",
+    ];
 
-  const result = spawnSync("bash", [buildScript], {
-    stdio: "inherit",
-    cwd: CWD,
-  });
+    for (const file of filesToCopy) {
+      const src = join(PACKAGE_ROOT, file);
+      const dest = join(tmpDir, file);
+      mkdirSync(dirname(dest), { recursive: true });
+      copyFileSync(src, dest);
+    }
 
-  if (result.status !== 0) {
-    process.exit(result.status ?? 1);
+    console.log("📦 Building container image...\n");
+    const result = spawnSync(
+      "docker",
+      ["build", "-t", "mercury-agent:latest", "-f", join(tmpDir, "container/Dockerfile"), tmpDir],
+      { stdio: "inherit" },
+    );
+
+    if (result.status !== 0) {
+      process.exit(result.status ?? 1);
+    }
+  } finally {
+    // Clean up temp context
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 
@@ -266,10 +223,7 @@ function statusAction(): void {
     `Configuration:   ${hasEnv ? "✓ .env exists" : "✗ .env missing (run 'mercury init')"}`,
   );
 
-  const hasContainerFiles = existsSync(join(CWD, "container/Dockerfile"));
-  console.log(
-    `Container files: ${hasContainerFiles ? "✓ present" : "✗ missing (run 'mercury init')"}`,
-  );
+
 
   const imageCheck = spawnSync(
     "docker",
