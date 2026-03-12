@@ -17,6 +17,9 @@
     "url": "https://github.com/Michaelliv/mercury"
   },
   "type": "module",
+  "exports": {
+    "./extensions/types": "./src/extensions/types.ts"
+  },
   "bin": {
     "mercury": "./src/cli/mercury.ts",
     "mercury-ctl": "./src/cli/mercury-ctl.ts"
