@@ -1,6 +1,6 @@
 {
   "name": "mercury-ai",
-  "version": "0.4.1",
+  "version": "0.4.2",
   "description": "Personal AI assistant for chat platforms (WhatsApp, Slack, Discord)",
   "license": "MIT",
   "keywords": [
@@ -18,7 +18,10 @@
   },
   "type": "module",
   "exports": {
-    "./extensions/types": "./src/extensions/types.ts"
+    "./extensions/types": {
+      "types": "./src/extensions/types.ts",
+      "default": "./src/extensions/types.ts"
+    }
   },
   "bin": {
     "mercury": "./src/cli/mercury.ts",
