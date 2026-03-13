@@ -607,8 +607,8 @@ function checkCommandExists(cmd: string): boolean {
 }
 
 function generateSystemdService(userMode: boolean): string {
-  const bunPath = process.execPath;
-  const mercuryScript = process.argv[1];
+  const bunPath = resolve(process.execPath);
+  const mercuryScript = resolve(process.argv[1]);
   const workDir = CWD;
 
   return `[Unit]
@@ -628,8 +628,8 @@ WantedBy=${userMode ? "default.target" : "multi-user.target"}
 }
 
 function generateLaunchdPlist(): string {
-  const bunPath = process.execPath;
-  const mercuryScript = process.argv[1];
+  const bunPath = resolve(process.execPath);
+  const mercuryScript = resolve(process.argv[1]);
   const workDir = CWD;
   const { logDir } = getServicePaths();
 
