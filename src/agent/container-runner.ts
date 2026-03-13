@@ -75,6 +75,34 @@ export class AgentContainerRunner {
     });
   }
 
+  /**
+   * Ensure the agent image is available locally, pulling it if needed.
+   * Should be called on startup before accepting work.
+   */
+  async ensureImage(): Promise<void> {
+    const image = this.image;
+    try {
+      execSync(`docker image inspect ${image}`, {
+        stdio: "ignore",
+        timeout: 10_000,
+      });
+      logger.debug("Agent image found locally", { image });
+    } catch {
+      logger.info("Agent image not found locally, pulling...", { image });
+      try {
+        execSync(`docker pull ${image}`, {
+          stdio: "inherit",
+          timeout: 300_000,
+        });
+        logger.info("Agent image pulled successfully", { image });
+      } catch (pullErr) {
+        throw new Error(
+          `Failed to pull agent image: ${image}\nRun manually: docker pull ${image}`,
+        );
+      }
+    }
+  }
+
   isRunning(spaceId: string): boolean {
     return this.runningBySpace.has(spaceId);
   }

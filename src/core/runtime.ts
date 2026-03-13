@@ -117,7 +117,10 @@ export class MercuryCoreRuntime {
     }
 
     // Check mute — silently drop messages from muted users
-    if (route.type === "assistant" && this.db.isMuted(message.spaceId, message.callerId)) {
+    if (
+      route.type === "assistant" &&
+      this.db.isMuted(message.spaceId, message.callerId)
+    ) {
       return { type: "ignore" };
     }
 

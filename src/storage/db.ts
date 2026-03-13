@@ -993,9 +993,7 @@ export class Db {
     };
   }
 
-  listMutes(
-    spaceId: string,
-  ): Array<{
+  listMutes(spaceId: string): Array<{
     platformUserId: string;
     expiresAt: number;
     reason: string | null;

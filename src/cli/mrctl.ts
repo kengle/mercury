@@ -312,9 +312,7 @@ async function main() {
 
     case "unmute": {
       const userId = requireArg(args, 1, "platform-user-id");
-      print(
-        await api("DELETE", `/api/mutes/${encodeURIComponent(userId)}`),
-      );
+      print(await api("DELETE", `/api/mutes/${encodeURIComponent(userId)}`));
       break;
     }
 
