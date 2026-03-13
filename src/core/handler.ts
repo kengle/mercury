@@ -63,6 +63,10 @@ export function createMessageHandler(opts: MessageHandlerOptions) {
       const ingress = await bridge.normalize(threadId, message, ctx, spaceId);
       if (!ingress) return;
 
+      logger.info(
+        `Message from: ${ingress.callerId}${ingress.authorName ? ` (${ingress.authorName})` : ""}`,
+      );
+
       if (ingress.isReplyToBot && !isDM && !triggerResult.matched) {
         try {
           await adapter.startTyping(threadId);
