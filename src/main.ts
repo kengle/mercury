@@ -69,6 +69,9 @@ async function main() {
     logger,
   );
 
+  // Ensure base image is available (auto-pull if missing)
+  await core.containerRunner.ensureImage();
+
   // Build derived container image if extensions declare CLIs
   const agentImage = await ensureDerivedImage(
     config.agentContainerImage,

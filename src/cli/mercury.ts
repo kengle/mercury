@@ -38,7 +38,6 @@ function getVersion(): string {
   }
 }
 
-
 function loadEnvFile(envPath: string): Record<string, string> {
   const content = readFileSync(envPath, "utf-8");
   const vars: Record<string, string> = {};
@@ -127,7 +126,9 @@ function initAction(): void {
   console.log("\n🪽 Initialization complete!");
   console.log("\nNext steps:");
   console.log("  1. Edit .env to set your API keys and enable adapters");
-  console.log("  2. Run 'mercury service install' to start as a system service");
+  console.log(
+    "  2. Run 'mercury service install' to start as a system service",
+  );
 }
 
 async function runAction(): Promise<void> {
@@ -200,7 +201,14 @@ function buildAction(): void {
     console.log("📦 Building container image...\n");
     const result = spawnSync(
       "docker",
-      ["build", "-t", "mercury-agent:latest", "-f", join(tmpDir, "container/Dockerfile"), tmpDir],
+      [
+        "build",
+        "-t",
+        "mercury-agent:latest",
+        "-f",
+        join(tmpDir, "container/Dockerfile"),
+        tmpDir,
+      ],
       { stdio: "inherit" },
     );
 
@@ -222,8 +230,6 @@ function statusAction(): void {
   console.log(
     `Configuration:   ${hasEnv ? "✓ .env exists" : "✗ .env missing (run 'mercury init')"}`,
   );
-
-
 
   const imageCheck = spawnSync(
     "docker",
@@ -317,6 +323,7 @@ authCommand
     let providerId: string;
 
     if (providerArg) {
+      providerArg = providerArg.trim();
       const provider = getOAuthProvider(providerArg);
       if (!provider) {
         console.error(

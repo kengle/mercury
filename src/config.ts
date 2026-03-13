@@ -2,13 +2,11 @@ import path from "node:path";
 import { z } from "zod";
 
 /** Parse boolean from env var strings — case-insensitive "true"/"1" → true, everything else → false */
-const booleanFromEnv = z
-  .union([z.boolean(), z.string()])
-  .transform((val) => {
-    if (typeof val === "boolean") return val;
-    const lower = val.toLowerCase();
-    return lower === "true" || lower === "1";
-  });
+const booleanFromEnv = z.union([z.boolean(), z.string()]).transform((val) => {
+  if (typeof val === "boolean") return val;
+  const lower = val.toLowerCase();
+  return lower === "true" || lower === "1";
+});
 
 const schema = z.object({
   // ─── Logging ────────────────────────────────────────────────────────

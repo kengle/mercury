@@ -57,7 +57,9 @@ mutes.post("/", async (c) => {
   const durationMs = parseDuration(body.duration);
   if (!durationMs) {
     return c.json(
-      { error: `Invalid duration: "${body.duration}". Use e.g. 10m, 1h, 24h, 7d` },
+      {
+        error: `Invalid duration: "${body.duration}". Use e.g. 10m, 1h, 24h, 7d`,
+      },
       400,
     );
   }
