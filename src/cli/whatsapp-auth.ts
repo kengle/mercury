@@ -175,7 +175,7 @@ async function connectSocket(
       clearQrData(statusDir);
       console.log("\n✓ Successfully authenticated with WhatsApp!");
       console.log(`  Credentials saved to ${authDir}/`);
-      console.log("  You can now start mercury with 'mercury run'.\n");
+      console.log("  You can now start mercury with 'mercury service install'.\n");
 
       // Give it a moment to save credentials, then exit
       setTimeout(() => process.exit(0), 1000);
