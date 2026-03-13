@@ -182,6 +182,15 @@ export class WhatsAppBaileysAdapter
   async initialize(chat: ChatInstance): Promise<void> {
     this.chat = chat;
     logger.info("WhatsApp adapter initialize", { authDir: this.authDir });
+
+    // Check if WhatsApp credentials exist
+    const credsFile = path.join(this.authDir, "creds.json");
+    if (!fs.existsSync(credsFile)) {
+      throw new Error(
+        "WhatsApp enabled but not authenticated. Run 'mercury auth whatsapp' first.",
+      );
+    }
+
     await this.connect();
   }
 
