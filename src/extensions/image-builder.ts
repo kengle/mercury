@@ -69,6 +69,30 @@ export function parseInstallCommand(cmd: string): ParsedInstall[] {
   // Split on && respecting quotes
   const parts = splitOnAnd(cmd);
 
+  // If the command mixes apt/pip/npm/bun with shell commands (e.g. repo setup
+  // via curl/echo before apt-get install), keep the whole thing as a single
+  // shell command to preserve ordering dependencies.
+  const hasShellParts = parts.some(
+    (p) =>
+      p &&
+      !p.match(/^apt-get\s/) &&
+      !p.match(/^(?:python3\s+-m\s+)?pip\s+install/) &&
+      !p.match(/^npm\s+install\s+-g/) &&
+      !p.match(/^bun\s+add\s+-g/) &&
+      !p.match(/^rm\s+-rf\s+\/var\/lib\/apt/),
+  );
+  const hasPackageManager = parts.some(
+    (p) =>
+      p &&
+      (p.match(/^apt-get\s+install/) ||
+        p.match(/^(?:python3\s+-m\s+)?pip\s+install/) ||
+        p.match(/^npm\s+install\s+-g/) ||
+        p.match(/^bun\s+add\s+-g/)),
+  );
+  if (hasShellParts && hasPackageManager) {
+    return [{ type: "shell", command: cmd }];
+  }
+
   for (const part of parts) {
     // apt-get install
     const aptMatch = part.match(

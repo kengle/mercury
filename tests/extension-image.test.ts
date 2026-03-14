@@ -63,45 +63,26 @@ describe("parseInstallCommand", () => {
     expect(result).toEqual([{ type: "bun", packages: ["napkin-ai"] }]);
   });
 
-  it("parses mixed command with shell parts", () => {
+  it("keeps mixed command as shell when package manager + shell parts", () => {
     const result = parseInstallCommand(
       "npm install -g agent-browser && npx playwright install --with-deps chromium",
     );
+    // Mixed npm + shell (npx) → entire command stays as shell to preserve ordering
     expect(result).toEqual([
-      { type: "npm", packages: ["agent-browser"] },
-      { type: "shell", command: "npx playwright install --with-deps chromium" },
-    ]);
-  });
-
-  it("handles complex pdf-tools install", () => {
-    const cmd =
-      "apt-get update && apt-get install -y --no-install-recommends poppler-utils qpdf tesseract-ocr && python3 -m pip install --break-system-packages pypdf pdfplumber pdf2image Pillow reportlab pytesseract pypdfium2 && echo '#!/bin/sh' > /usr/local/bin/pdf && echo 'echo \"pdf extension dependencies installed.\"' >> /usr/local/bin/pdf && chmod +x /usr/local/bin/pdf && rm -rf /var/lib/apt/lists/*";
-    const result = parseInstallCommand(cmd);
-    expect(result).toEqual([
-      { type: "apt", packages: ["poppler-utils", "qpdf", "tesseract-ocr"] },
-      {
-        type: "pip",
-        packages: [
-          "pypdf",
-          "pdfplumber",
-          "pdf2image",
-          "Pillow",
-          "reportlab",
-          "pytesseract",
-          "pypdfium2",
-        ],
-      },
-      {
-        type: "shell",
-        command: "echo '#!/bin/sh' > /usr/local/bin/pdf",
-      },
       {
         type: "shell",
         command:
-          "echo 'echo \"pdf extension dependencies installed.\"' >> /usr/local/bin/pdf",
+          "npm install -g agent-browser && npx playwright install --with-deps chromium",
       },
-      { type: "shell", command: "chmod +x /usr/local/bin/pdf" },
     ]);
+  });
+
+  it("handles complex pdf-tools install as shell (mixed types)", () => {
+    const cmd =
+      "apt-get update && apt-get install -y --no-install-recommends poppler-utils qpdf tesseract-ocr && python3 -m pip install --break-system-packages pypdf pdfplumber pdf2image Pillow reportlab pytesseract pypdfium2 && echo '#!/bin/sh' > /usr/local/bin/pdf && echo 'echo \"pdf extension dependencies installed.\"' >> /usr/local/bin/pdf && chmod +x /usr/local/bin/pdf && rm -rf /var/lib/apt/lists/*";
+    const result = parseInstallCommand(cmd);
+    // Mixed apt + pip + shell → entire command stays as shell
+    expect(result).toEqual([{ type: "shell", command: cmd }]);
   });
 
   it("returns empty for empty string", () => {
@@ -172,17 +153,12 @@ describe("parseInstallCommand", () => {
     ]);
   });
 
-  it("handles commands with pipes (not split on &&)", () => {
-    const result = parseInstallCommand(
-      "curl -fsSL https://example.com/install.sh | bash && npm install -g mytool",
-    );
-    expect(result).toEqual([
-      {
-        type: "shell",
-        command: "curl -fsSL https://example.com/install.sh | bash",
-      },
-      { type: "npm", packages: ["mytool"] },
-    ]);
+  it("handles commands with pipes mixed with npm as shell", () => {
+    const cmd =
+      "curl -fsSL https://example.com/install.sh | bash && npm install -g mytool";
+    const result = parseInstallCommand(cmd);
+    // Mixed shell (curl) + npm → entire command stays as shell
+    expect(result).toEqual([{ type: "shell", command: cmd }]);
   });
 
   it("handles && inside single-quoted strings", () => {
@@ -199,14 +175,11 @@ describe("parseInstallCommand", () => {
     ]);
   });
 
-  it("handles mixed quoted && and real &&", () => {
-    const result = parseInstallCommand(
-      "echo 'a && b' > /tmp/x && npm install -g foo",
-    );
-    expect(result).toEqual([
-      { type: "shell", command: "echo 'a && b' > /tmp/x" },
-      { type: "npm", packages: ["foo"] },
-    ]);
+  it("handles mixed quoted && and real && as shell", () => {
+    const cmd = "echo 'a && b' > /tmp/x && npm install -g foo";
+    const result = parseInstallCommand(cmd);
+    // Mixed shell (echo) + npm → entire command stays as shell
+    expect(result).toEqual([{ type: "shell", command: cmd }]);
   });
 
   it("handles multiple pip installs in one chain", () => {
@@ -439,17 +412,15 @@ describe("generateDockerfile", () => {
     expect(aptLines[0]).toContain("git");
   });
 
-  it("deduplicates playwright install across extensions", () => {
+  it("merges npm packages across extensions", () => {
     const exts = [
       makeMeta("web-browser", {
         name: "agent-browser",
-        install:
-          "npm install -g agent-browser && npx playwright install --with-deps chromium",
+        install: "npm install -g agent-browser",
       }),
       makeMeta("diagrams", {
         name: "mmdc",
-        install:
-          "npm install -g @mermaid-js/mermaid-cli && npx playwright install --with-deps chromium",
+        install: "npm install -g @mermaid-js/mermaid-cli",
       }),
     ];
     const df = generateDockerfile("base:v1", exts)!;
@@ -458,11 +429,6 @@ describe("generateDockerfile", () => {
     expect(npmLines).toHaveLength(1);
     expect(npmLines[0]).toContain("agent-browser");
     expect(npmLines[0]).toContain("@mermaid-js/mermaid-cli");
-    // Playwright runs only once
-    const playwrightLines = df
-      .split("\n")
-      .filter((l) => l.includes("playwright"));
-    expect(playwrightLines).toHaveLength(1);
   });
 
   it("generates full realistic Dockerfile", () => {
@@ -494,16 +460,15 @@ describe("generateDockerfile", () => {
       }),
       makeMeta("web-browser", {
         name: "agent-browser",
-        install:
-          "npm install -g agent-browser && npx playwright install --with-deps chromium",
+        install: "npm install -g agent-browser",
       }),
       makeMeta("no-cli"),
     ];
     const df = generateDockerfile("base:latest", exts)!;
     const lines = df.split("\n");
 
-    // Syntax directive + FROM + apt + pip + npm + bun + playwright = 7 lines
-    expect(lines).toHaveLength(7);
+    // Syntax directive + FROM + apt + pip + npm + bun = 6 lines
+    expect(lines).toHaveLength(6);
     expect(lines[0]).toBe("# syntax=docker/dockerfile:1");
     expect(lines[1]).toBe("FROM base:latest");
     // apt: ffmpeg + imagemagick merged
@@ -516,8 +481,6 @@ describe("generateDockerfile", () => {
     expect(lines[4]).toContain("charts-cli");
     // bun: napkin-ai
     expect(lines[5]).toContain("napkin-ai");
-    // shell: playwright once
-    expect(lines[6]).toContain("playwright");
   });
 });
 
