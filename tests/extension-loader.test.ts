@@ -169,10 +169,9 @@ describe("ExtensionRegistry", () => {
     await registry.loadAll(extDir, db, log);
     const ext = registry.get("my-tool");
     expect(ext).toBeDefined();
-    expect(ext.cli).toEqual({
-      name: "my-tool",
-      install: "npm i -g my-tool",
-    });
+    expect(ext.clis).toEqual([
+      { name: "my-tool", install: "npm i -g my-tool" },
+    ]);
     expect(registry.getCliExtensions()).toHaveLength(1);
   });
 

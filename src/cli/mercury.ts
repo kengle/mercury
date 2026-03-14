@@ -1274,12 +1274,15 @@ function resolveExtensionSource(source: string): {
     };
   }
 
-  // git: prefix
+  // git: prefix — supports optional #subdir (e.g. git:https://repo.git#packages/media)
   if (source.startsWith("git:")) {
-    const url = source.slice(4);
+    const raw = source.slice(4);
+    // Split off optional #subdirectory fragment
+    const hashIdx = raw.indexOf("#");
+    const urlPart = hashIdx >= 0 ? raw.slice(0, hashIdx) : raw;
+    const subdir = hashIdx >= 0 ? raw.slice(hashIdx + 1) : undefined;
     // Accept git:github.com/user/repo or git:https://github.com/user/repo
-    const gitUrl = url.startsWith("http") ? url : `https://${url}`;
-    const name = basename(gitUrl).replace(/\.git$/, "");
+    const gitUrl = urlPart.startsWith("http") ? urlPart : `https://${urlPart}`;
     const tmp = join(tmpdir(), `mercury-ext-git-${Date.now()}`);
 
     console.log(`Cloning ${gitUrl}...`);
@@ -1297,8 +1300,17 @@ function resolveExtensionSource(source: string): {
       process.exit(1);
     }
 
+    const extDir = subdir ? join(tmp, subdir) : tmp;
+    if (subdir && !existsSync(extDir)) {
+      rmSync(tmp, { recursive: true, force: true });
+      console.error(`Error: subdirectory "${subdir}" not found in cloned repo`);
+      process.exit(1);
+    }
+
+    const name = basename(extDir);
+
     return {
-      dir: tmp,
+      dir: extDir,
       name,
       cleanup: () => rmSync(tmp, { recursive: true, force: true }),
     };
@@ -1396,8 +1408,7 @@ function installSkillIfPresent(extDir: string, name: string): boolean {
 async function readExtensionInfo(dir: string): Promise<{
   hasCli: boolean;
   hasSkill: boolean;
-  cliName?: string;
-  installCmd?: string;
+  cliNames: string[];
   permissionRoles?: string[];
 }> {
   const { MercuryExtensionAPIImpl } = await import("../extensions/api.js");
@@ -1417,10 +1428,9 @@ async function readExtensionInfo(dir: string): Promise<{
     }
     const meta = api.getMeta();
     return {
-      hasCli: !!meta.cli,
+      hasCli: meta.clis.length > 0,
       hasSkill: !!meta.skillDir,
-      cliName: meta.cli?.name,
-      installCmd: meta.cli?.install,
+      cliNames: meta.clis.map((c) => c.name),
       permissionRoles: meta.permission?.defaultRoles,
     };
   } finally {
@@ -1466,13 +1476,15 @@ async function addAction(source: string): Promise<void> {
     try {
       info = await readExtensionInfo(destDir);
     } catch {
-      info = { hasCli: false, hasSkill: hasSkill };
+      info = { hasCli: false, hasSkill: hasSkill, cliNames: [] };
     }
 
     // Report
     console.log(`\n✓ Extension "${name}" installed`);
     if (info.hasCli) {
-      console.log(`  CLI: ${info.cliName} (available after image rebuild)`);
+      console.log(
+        `  CLI: ${info.cliNames.join(", ")} (available after image rebuild)`,
+      );
     }
     if (hasSkill) {
       console.log(`  Skill: ${name} (available to agent)`);

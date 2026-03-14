@@ -119,7 +119,7 @@ export class ExtensionRegistry {
 
   /** Get extensions that declare a CLI. */
   getCliExtensions(): ExtensionMeta[] {
-    return this.list().filter((ext) => ext.cli != null);
+    return this.list().filter((ext) => ext.clis.length > 0);
   }
 
   /** Get all env var source names claimed by extensions (for passthrough filtering). */

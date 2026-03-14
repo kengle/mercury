@@ -406,10 +406,10 @@ export class MercuryCoreRuntime {
           const denied = cliExtensions
             .filter(
               (ext) =>
-                ext.cli &&
+                ext.clis.length > 0 &&
                 !hasPermission(this.db, spaceId, callerRole, ext.name),
             )
-            .map((ext) => ext.cli!.name);
+            .flatMap((ext) => ext.clis.map((c) => c.name));
           if (denied.length > 0) {
             extraEnv = {
               ...extraEnv,

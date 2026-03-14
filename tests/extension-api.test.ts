@@ -32,18 +32,19 @@ describe("MercuryExtensionAPI", () => {
     it("stores cli config", () => {
       const api = createApi();
       api.cli({ name: "test", install: "npm i -g test" });
-      expect(api.getMeta().cli).toEqual({
-        name: "test",
-        install: "npm i -g test",
-      });
+      expect(api.getMeta().clis).toEqual([
+        { name: "test", install: "npm i -g test" },
+      ]);
     });
 
-    it("throws on second call", () => {
+    it("allows multiple cli calls", () => {
       const api = createApi();
       api.cli({ name: "test", install: "npm i -g test" });
-      expect(() =>
-        api.cli({ name: "other", install: "npm i -g other" }),
-      ).toThrow("only be called once");
+      api.cli({ name: "other", install: "npm i -g other" });
+      expect(api.getMeta().clis).toEqual([
+        { name: "test", install: "npm i -g test" },
+        { name: "other", install: "npm i -g other" },
+      ]);
     });
 
     it("throws on empty name", () => {

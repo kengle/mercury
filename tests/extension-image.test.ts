@@ -7,16 +7,17 @@ import type { ExtensionMeta } from "../src/extensions/types.js";
 
 function makeMeta(
   name: string,
-  cli?: { name: string; install: string },
+  ...clis: { name: string; install: string }[]
 ): ExtensionMeta {
   return {
     name,
     dir: `/fake/${name}`,
-    cli,
+    clis,
     hooks: new Map(),
     jobs: new Map(),
     configs: new Map(),
     widgets: [],
+    envVars: [],
   };
 }
 
