@@ -31,6 +31,10 @@ ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN ln -sf $(find /root/.cache/ms-playwright -name chrome -type f | head -1) /usr/local/bin/chromium
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
 
+# Allow Chromium to run as root in Docker
+RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
+ENV CHROMIUM_FLAGS="--no-sandbox"
+
 # Install CLIs
 RUN bun add -g @mariozechner/pi-coding-agent
 
