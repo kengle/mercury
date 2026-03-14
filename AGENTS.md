@@ -41,6 +41,30 @@ mercury service uninstall # Remove service
 
 This provides auto-restart on crash and proper system integration. See [deployment.md](docs/deployment.md) for details.
 
+## Releasing
+
+Releases are tag-triggered via CI (`.github/workflows/release.yml`). The pipeline runs tests, publishes to npm, creates a GitHub release, and builds+pushes Docker images (amd64+arm64).
+
+```bash
+# 1. Bump version in package.json
+# 2. Commit and push
+git add package.json
+git commit -m "chore: bump version to 0.x.y"
+git push
+
+# 3. Tag and push
+git tag v0.x.y
+git push origin v0.x.y
+
+# 4. Create release with notes (CI also creates one, but this lets you set the description)
+gh release create v0.x.y --title "v0.x.y" --notes "## What's Changed
+..."
+```
+
+CI publishes:
+- **npm**: `mercury-ai` package
+- **Docker**: `ghcr.io/<owner>/mercury-agent:latest` and `ghcr.io/<owner>/mercury-agent:<version>` (both full and minimal variants)
+
 ## Structure
 
 ```
