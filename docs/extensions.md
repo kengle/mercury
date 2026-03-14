@@ -69,7 +69,7 @@ mercury.cli({ name: "napkin", install: "bun add -g napkin-ai" });
 
 Mercury auto-generates a derived Docker image with all extension CLIs installed. The agent calls them directly in bash. Permission enforcement is handled by a built-in pi extension that blocks denied CLIs based on the caller's role.
 
-Can only be called once per extension.
+Can be called multiple times for extensions that need several tools (e.g., media needs ffmpeg, imagemagick, and yt-dlp).
 
 ### `mercury.permission(opts)`
 
