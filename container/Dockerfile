@@ -26,6 +26,11 @@ ENV PATH="/usr/local/go/bin:$PATH"
 # Install Playwright + Chromium (used by multiple extensions: web-browser, diagrams, charts)
 RUN npx playwright install --with-deps chromium
 
+# Point puppeteer to Playwright's Chromium so npm packages skip downloading their own
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+RUN ln -sf $(find /root/.cache/ms-playwright -name chrome -type f | head -1) /usr/local/bin/chromium
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
+
 # Install CLIs
 RUN bun add -g @mariozechner/pi-coding-agent
 

@@ -204,7 +204,7 @@ export function toRunStatements(merged: ParsedInstall[]): string[] {
       case "npm":
         lines.push(
           `RUN --mount=type=cache,target=/root/.npm ` +
-            `npm install -g ${m.packages.join(" ")}`,
+            `PUPPETEER_SKIP_DOWNLOAD=true npm install -g ${m.packages.join(" ")}`,
         );
         break;
       case "bun":
