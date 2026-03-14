@@ -301,8 +301,8 @@ export interface ExtensionMeta {
   name: string;
   /** Absolute path to the extension directory. */
   dir: string;
-  /** CLI declaration, if any. */
-  cli?: CliDef;
+  /** CLI declarations (may be empty). */
+  clis: CliDef[];
   /** Permission configuration, if any. */
   permission?: PermissionDef;
   /** Absolute path to the skill directory, if declared. */

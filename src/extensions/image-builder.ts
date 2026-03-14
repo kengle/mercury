@@ -22,13 +22,15 @@ export function generateDockerfile(
   baseImage: string,
   extensions: ExtensionMeta[],
 ): string | null {
-  const cliExtensions = extensions.filter((e) => e.cli);
+  const cliExtensions = extensions.filter((e) => e.clis.length > 0);
   if (cliExtensions.length === 0) return null;
 
   const lines = [`FROM ${baseImage}`];
   for (const ext of cliExtensions) {
     lines.push(`# Extension: ${ext.name}`);
-    lines.push(`RUN ${ext.cli?.install}`);
+    for (const cli of ext.clis) {
+      lines.push(`RUN ${cli.install}`);
+    }
   }
   return lines.join("\n");
 }
@@ -42,8 +44,8 @@ export function computeImageHash(
   extensions: ExtensionMeta[],
 ): string {
   const installCommands = extensions
-    .filter((e) => e.cli)
-    .map((e) => e.cli?.install)
+    .flatMap((e) => e.clis)
+    .map((c) => c.install)
     .sort()
     .join("\n");
 
@@ -88,7 +90,7 @@ export async function ensureDerivedImage(
     return baseImage;
   }
 
-  const cliCount = extensions.filter((e) => e.cli).length;
+  const cliCount = extensions.reduce((n, e) => n + e.clis.length, 0);
   const hash = computeImageHash(baseImage, extensions);
   const derivedTag = `mercury-agent-ext:${hash}`;
 
@@ -103,8 +105,8 @@ export async function ensureDerivedImage(
     `Building derived agent image (${cliCount} extension CLI${cliCount > 1 ? "s" : ""})...`,
   );
   for (const ext of extensions) {
-    if (ext.cli) {
-      log.info(`  ${ext.name}: ${ext.cli.install}`);
+    for (const cli of ext.clis) {
+      log.info(`  ${ext.name}: ${cli.install}`);
     }
   }
 

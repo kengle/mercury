@@ -9,7 +9,7 @@ extensions.get("/", (c) => {
 
   const list = registry.list().map((ext) => ({
     name: ext.name,
-    hasCli: !!ext.cli,
+    hasCli: ext.clis.length > 0,
     hasSkill: !!ext.skillDir,
     permission: ext.permission ? ext.name : null,
   }));

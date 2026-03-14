@@ -34,6 +34,7 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
     this.meta = {
       name,
       dir,
+      clis: [],
       hooks: new Map(),
       jobs: new Map(),
       configs: new Map(),
@@ -43,17 +44,12 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
   }
 
   cli(opts: CliDef): void {
-    if (this.meta.cli) {
-      throw new Error(
-        `Extension "${this.name}": cli() can only be called once`,
-      );
-    }
     if (!opts.name || !opts.install) {
       throw new Error(
         `Extension "${this.name}": cli() requires name and install`,
       );
     }
-    this.meta.cli = opts;
+    this.meta.clis.push(opts);
   }
 
   permission(opts: PermissionDef): void {
