@@ -11,7 +11,7 @@
   <a href="https://www.npmjs.com/package/mercury-ai"><img alt="npm" src="https://img.shields.io/npm/v/mercury-ai?style=flat-square&logo=npm" /></a>
 </p>
 
-Mercury is a personal AI assistant that lives where you chat. It connects to WhatsApp, Slack, and Discord, runs agents inside containers for isolation, and uses [pi](https://github.com/badlogic/pi) as the runtime.
+Mercury is a personal AI assistant that lives where you chat. It connects to WhatsApp, Slack, and Discord, runs [pi](https://github.com/badlogic/pi) as a sandboxed subprocess, and deploys as a single Docker container.
 
 ---
 
@@ -23,91 +23,78 @@ mkdir my-assistant && cd my-assistant
 mercury init
 ```
 
-Authenticate:
-
-```bash
-mercury auth login              # Interactive OAuth (Anthropic, GitHub Copilot, etc.)
-mercury auth login anthropic    # Or specify provider directly
-mercury auth status             # Check what's configured
-```
-
-Or set an API key in `.env`:
-
-```bash
-MERCURY_ANTHROPIC_API_KEY=sk-ant-...
-```
-
-Configure identity and adapters in `.env`:
+Configure `.env`:
 
 ```bash
 MERCURY_BOT_USERNAME=Mercury
 MERCURY_TRIGGER_PATTERNS=@Mercury,Mercury
-
-# Enable adapters
+MERCURY_MODEL_PROVIDER=anthropic
 MERCURY_ENABLE_WHATSAPP=true
-MERCURY_ENABLE_DISCORD=true
-MERCURY_DISCORD_BOT_TOKEN=your-bot-token
 ```
 
-Start:
+Authenticate:
 
 ```bash
-mercury run
-# or install as a background service:
-mercury service install
+mercury auth login anthropic    # OAuth (opens browser)
+mercury auth whatsapp           # WhatsApp QR code
 ```
 
-### Set up spaces and conversations
-
-Mercury discovers conversations from incoming traffic. They start **unlinked** — you assign them to **spaces** (memory boundaries).
+Build and start:
 
 ```bash
-# Create spaces
-mercury spaces create main
-mercury spaces create work
-mercury spaces create family
-
-# Send a message from WhatsApp/Discord/Slack, then:
-mercury conversations              # See discovered conversations
-mercury conversations --unlinked   # See unlinked ones
-mercury link <id> main             # Link a conversation to a space
+mercury build                   # Build Docker image with extensions
+mercury start                   # Start container
+mercury logs -f                 # View logs
 ```
 
-Multiple conversations can point at the same space — they share memory, session, and vault.
+Pair via WhatsApp DM:
+
+```bash
+mercury pair                    # Show pairing code
+# Send "/pair <CODE>" in a WhatsApp DM → grants admin
+# Send "/pair <CODE>" in a group → activates the bot there
+```
 
 ---
 
 ## How It Works
 
 ```
-┌──────────────────────────────────────────────────────────────┐
-│                        Host Process                          │
-│                                                              │
-│   ┌──────────┐  ┌─────────┐  ┌─────────┐  ┌───────────────┐  │
-│   │ WhatsApp │  │  Slack  │  │ Discord │  │   Scheduler   │  │
-│   │ Adapter  │  │ Adapter │  │ Adapter │  │ (cron tasks)  │  │
-│   └───┬──────┘  └────┬────┘  └───┬─────┘  └──────┬────────┘  │
-│       └──────────────┴───────────┴───────────────┘           │
-│                              │                               │
-│                     ┌────────▼────────┐                      │
-│                     │  Router/Queue   │                      │
-│                     └────────┬────────┘                      │
-│                              │                               │
-│                     ┌────────▼────────┐                      │
-│                     │    SQLite DB    │                      │
-│                     └────────┬────────┘                      │
-└──────────────────────────────┼───────────────────────────────┘
-                               │
-                     ┌─────────▼──────────┐
-                     │  Docker Container  │
-                     │  ┌──────────────┐  │
-                     │  │    pi CLI    │  │
-                     │  └──────────────┘  │
-                     │ /spaces/<space-id> │
-                     └────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                        Docker Container                          │
+│                                                                  │
+│   ┌──────────┐  ┌─────────┐  ┌─────────┐  ┌───────┐            │
+│   │ WhatsApp │  │  Slack  │  │ Discord │  │  API  │            │
+│   │ Adapter  │  │ Adapter │  │ Adapter │  │ /chat │            │
+│   └────┬─────┘  └────┬────┘  └────┬────┘  └───┬───┘            │
+│        └──────────────┴───────────┴────────────┘                │
+│                           │                                      │
+│              ┌────────────▼────────────┐                        │
+│              │    Ingress Service      │                        │
+│              │  pairing · commands ·   │                        │
+│              │  ambient · routing      │                        │
+│              └────────────┬────────────┘                        │
+│                           │                                      │
+│              ┌────────────▼────────────┐                        │
+│              │    Policy Service       │                        │
+│              │  triggers · permissions │                        │
+│              │  mutes · rate limits    │                        │
+│              └────────────┬────────────┘                        │
+│                           │                                      │
+│              ┌────────────▼────────────┐                        │
+│              │       Runtime           │                        │
+│              │  messages · hooks ·     │                        │
+│              │  RBAC env · history     │                        │
+│              └────────────┬────────────┘                        │
+│                           │                                      │
+│              ┌────────────▼────────────┐     ┌───────────────┐  │
+│              │   pi subprocess        │────▶│   SQLite DB   │  │
+│              │   (sandboxed)          │     │   messages,   │  │
+│              │   mrctl · extensions   │     │   tasks,      │  │
+│              └────────────────────────┘     │   roles, ...  │  │
+│                                             └───────────────┘  │
+└──────────────────────────────────────────────────────────────────┘
 ```
-
-Each space is a user-defined memory boundary with its own workspace and pi session. Incoming platform conversations are discovered automatically, then linked into spaces.
 
 ---
 
@@ -115,106 +102,82 @@ Each space is a user-defined memory boundary with its own workspace and pi sessi
 
 | Feature | Description | Docs |
 |---------|-------------|------|
-| **Multi-platform** | WhatsApp, Slack, Discord | [docs/pipeline.md](docs/pipeline.md) |
-| **Memory** | Obsidian-compatible vault per space | [docs/memory.md](docs/memory.md) |
-| **Scheduled Tasks** | Cron-based recurring prompts | [docs/scheduler.md](docs/scheduler.md) |
-| **Permissions** | Role-based access control | [docs/permissions.md](docs/permissions.md) |
-| **Media** | Images, documents, voice notes | [docs/media/overview.md](docs/media/overview.md) |
-| **KB Distillation** | Extract lasting knowledge from chats | [docs/kb-distillation.md](docs/kb-distillation.md) |
-| **Extensions** | TypeScript plugins for CLIs, skills, jobs, hooks | [docs/extensions.md](docs/extensions.md) |
-
----
-
-## Workspaces
-
-Each space gets an isolated workspace:
-
-```text
-.mercury/spaces/<space-id>/
-├── AGENTS.md              # Space instructions
-├── .mercury.session.jsonl # pi session
-├── inbox/                 # Media received from users
-└── outbox/                # Files produced by the agent
-```
-
-Memory/vault structure (for example `.obsidian/`, `knowledge/`, `daily/`) is created by installed extensions.
-
-Multiple platform conversations can point at the same space.
+| **Multi-platform** | WhatsApp, Slack, Discord, or CLI-only | [pipeline](docs/pipeline.md) |
+| **API key auth** | All endpoints require Bearer token | [auth](docs/auth/overview.md) |
+| **Pairing** | DM pairing for admin, group pairing for activation | [permissions](docs/permissions.md) |
+| **RBAC** | Role-based permissions, extension CLI blocking | [permissions](docs/permissions.md) |
+| **Scheduled tasks** | Cron + one-shot tasks with conversation targeting | [scheduler](docs/scheduler.md) |
+| **Media** | Images, documents, voice notes in/out | [media](docs/media/overview.md) |
+| **Extensions** | CLIs, skills, jobs, hooks, config, widgets | [extensions](docs/extensions.md) |
+| **Ambient context** | Non-triggering group messages stored for context | [pipeline](docs/pipeline.md) |
+| **Sandbox** | bubblewrap (Linux) / sandbox-exec (macOS) | [agent lifecycle](docs/agent-lifecycle.md) |
 
 ---
 
 ## CLI
 
-### `mercury` (host CLI)
-
 ```bash
-# setup + runtime
-mercury init
-mercury run
-mercury build              # only needed when developing the base image from source
-mercury status
-mercury doctor             # preflight check — validates Docker, credentials, adapters
+# Project
+mercury init                    # Initialize project
+mercury build                   # Build Docker image
+mercury start                   # Start container
+mercury stop                    # Stop container
+mercury restart                 # Rebuild + restart
+mercury logs [-f]               # View logs
+mercury status                  # Check status
+mercury doctor                  # Preflight checks
 
-# auth
-mercury auth login [provider]
-mercury auth logout [provider]
-mercury auth status
-mercury auth whatsapp
+# Auth
+mercury auth login [provider]   # OAuth login
+mercury auth whatsapp           # WhatsApp QR/pairing code
+mercury auth status             # Show auth status
 
-# chat + routing
-mercury chat "hello"
-mercury chat --file photo.jpg "what's in this?"
-mercury chat --space work "check status"
-echo "summarize" | mercury chat
-mercury spaces list
-mercury spaces create <id>
-mercury conversations
-mercury conversations --unlinked
-mercury link <conversation-id> <space-id>
+# Chat (direct API)
+mercury chat "hello"            # Send message
+mercury chat -f photo.jpg "?"   # With file attachment
+echo "query" | mercury chat     # Piped input
 
-# extensions
-mercury add ./path/to/extension
-mercury add npm:<package>
-mercury add git:<repo-url>
-mercury remove <name>
-mercury extensions list
+# Conversations
+mercury pair                    # Show pairing code
+mercury convos list             # List conversations
+mercury convos unpair <id>      # Unpair a conversation
 
-# service (recommended for background)
-mercury service install
-mercury service uninstall
-mercury service status
-mercury service logs [-f]
+# Extensions
+mercury ext add <source>        # Install (path, npm:, git:)
+mercury ext remove <name>       # Remove
+mercury ext list                # List installed
+
+# API Keys
+mercury api-keys create <name>  # Create key (shown once)
+mercury api-keys list           # List keys (prefix only)
+mercury api-keys revoke <id>    # Revoke a key
 ```
 
-### `mrctl` (in-container API CLI)
+### `mrctl` (agent-side CLI)
+
+Used by the agent inside the sandbox to manage Mercury:
 
 ```bash
-mrctl whoami
+mrctl whoami                    # Caller identity + permissions
 mrctl tasks list|create|pause|resume|run|delete
 mrctl roles list|grant|revoke
 mrctl permissions show|set
 mrctl config get|set
-mrctl spaces list|name|delete
-mrctl conversations list
-mrctl stop
-mrctl compact
+mrctl conversations             # List conversations
+mrctl mute|unmute|mutes         # User moderation
+mrctl stop                      # Abort current run
+mrctl compact                   # Reset session
 ```
-
-For full command docs, run `mercury --help`, `mercury <command> --help`, or `mrctl help`.
 
 ---
 
 ## Extensions
 
-Mercury supports TypeScript extensions that add CLIs, skills, background jobs, lifecycle hooks, config keys, and dashboard widgets.
-
-```
-.mercury/extensions/
-├── napkin/
-│   ├── index.ts
-│   └── skill/SKILL.md
-└── my-extension/
-    └── index.ts
+```bash
+mercury ext add git:github.com/Michaelliv/mercury-extensions#packages/knowledge
+mercury ext add git:github.com/Michaelliv/mercury-extensions#packages/web-browser
+mercury ext add git:github.com/Michaelliv/mercury-extensions#packages/charts
+mercury ext add git:github.com/Michaelliv/mercury-extensions#packages/github
 ```
 
 Each extension exports a setup function:
@@ -225,122 +188,47 @@ export default function(mercury) {
   mercury.permission({ defaultRoles: ["admin", "member"] });
   mercury.env({ from: "MERCURY_NAPKIN_API_KEY" });
   mercury.skill("./skill");
-  mercury.on("workspace_init", async ({ workspace, containerWorkspace }) => { ... });
-  mercury.on("before_container", async ({ workspace, containerWorkspace }) => {
-    return { env: { MY_VAR: containerWorkspace + "/data" } };
-  });
+  mercury.on("workspace_init", async ({ workspace }) => { ... });
+  mercury.job("distill", { interval: 3600_000, run: async (ctx) => { ... } });
 }
 ```
 
-Extensions with CLIs get auto-installed into a derived Docker image. Skills are symlinked for agent discovery. Permissions integrate with the existing RBAC system.
-
-### Official Extensions
-
-Install curated extensions from the [`@mercuryai`](https://github.com/Michaelliv/mercury-extensions) scope:
-
-```bash
-mercury add @mercuryai/knowledge        # Obsidian-based knowledge vault with KB distillation
-mercury add @mercuryai/web-browser      # Web browsing via Playwright/Chromium
-mercury add @mercuryai/charts           # Chart generation
-mercury add @mercuryai/github           # GitHub CLI integration
-mercury add @mercuryai/google-workspace # Google Workspace (Gmail, Calendar, Drive)
-mercury add @mercuryai/pdf-tools        # PDF processing, OCR, and form filling
-```
-
-See [mercury-extensions](https://github.com/Michaelliv/mercury-extensions) for the full list and documentation.
-
-See [docs/extensions.md](docs/extensions.md) for the extension system guide.
+Extension CLIs are installed into the Docker image at build time. RBAC blocks denied CLIs at the bash level. See [docs/extensions.md](docs/extensions.md).
 
 ---
 
 ## Configuration
 
-### Environment Variables
-
-**Core:**
-
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `MERCURY_DATA_DIR` | `.mercury` | Data directory |
-| `MERCURY_MAX_CONCURRENCY` | `3` | Max concurrent runs |
-| `MERCURY_PORT` | `8787` | API port |
 | `MERCURY_BOT_USERNAME` | `mercury` | Bot display name |
-| `MERCURY_LOG_LEVEL` | `info` | Log level |
-
-**Auth:**
-
-Credentials are resolved in this order:
-1. OAuth credentials from `mercury auth login` (saved to `.mercury/global/auth.json`)
-2. API keys from `.env` (e.g., `MERCURY_ANTHROPIC_API_KEY`)
-
-Supported OAuth providers: Anthropic, GitHub Copilot, Google Gemini CLI, Antigravity, OpenAI Codex.
-
-**Model:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MERCURY_MODEL_PROVIDER` | `anthropic` | Provider |
-| `MERCURY_MODEL` | `claude-opus-4-6` | Model |
-| `MERCURY_ANTHROPIC_API_KEY` | — | API key |
-| `MERCURY_ANTHROPIC_OAUTH_TOKEN` | — | OAuth token (alternative) |
-
-**Adapters:**
-
-| Variable | Description |
-|----------|-------------|
-| `MERCURY_ENABLE_WHATSAPP` | Enable WhatsApp |
-| `MERCURY_WHATSAPP_AUTH_DIR` | Auth storage path |
-| `MERCURY_ENABLE_DISCORD` | Enable Discord |
-| `DISCORD_BOT_TOKEN` | Discord bot token |
-| `SLACK_BOT_TOKEN` | Slack bot token |
-| `SLACK_SIGNING_SECRET` | Slack signing secret |
-
-**Container:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MERCURY_AGENT_CONTAINER_IMAGE` | `mercury-agent:latest` | Container image |
-| `MERCURY_CONTAINER_TIMEOUT_MS` | `300000` | Container timeout (5 min) |
-
-**KB Distillation:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MERCURY_KB_DISTILL_INTERVAL_MS` | `0` (disabled) | Distillation interval |
-
-**Triggers:**
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `MERCURY_TRIGGER_MATCH` | `mention` | `mention`, `prefix`, `always` |
-| `MERCURY_TRIGGER_PATTERNS` | `@Mercury,Mercury` | Trigger patterns |
-| `MERCURY_ADMINS` | — | Pre-seeded admin user IDs |
-
-### Per-space Config
-
-Conversations are discovered from incoming traffic. Unlinked conversations stay idle until you attach them to a space via `mercury link <conversation-id> <space-id>` or the dashboard.
-
-```bash
-mrctl config set trigger_match always
-mrctl config set trigger_patterns "@Bot,Bot"
-```
+| `MERCURY_PORT` | `3000` | Server port |
+| `MERCURY_MODEL_PROVIDER` | `anthropic` | AI provider |
+| `MERCURY_MODEL` | `claude-sonnet-4-20250514` | Model |
+| `MERCURY_TRIGGER_PATTERNS` | `@Mercury,Mercury` | Trigger words |
+| `MERCURY_TRIGGER_MATCH` | `mention` | `mention` / `prefix` / `always` |
+| `MERCURY_ENABLE_WHATSAPP` | `false` | Enable WhatsApp adapter |
+| `MERCURY_ENABLE_DISCORD` | `false` | Enable Discord adapter |
+| `MERCURY_ENABLE_SLACK` | `false` | Enable Slack adapter |
+| `MERCURY_RATE_LIMIT_PER_USER` | `0` (disabled) | Requests per window |
+| `MERCURY_AGENT_TIMEOUT_MS` | `900000` (15 min) | Agent subprocess timeout |
 
 ---
 
 ## Docs
 
-- **Platform setup:** [WhatsApp](docs/setup-whatsapp.md) · [Discord](docs/setup-discord.md) · [Slack](docs/setup-slack.md)
-- [Authentication](docs/auth/overview.md)
+- [Deployment guide](docs/deployment-guide.md)
+- [Agent lifecycle](docs/agent-lifecycle.md)
 - [Message pipeline](docs/pipeline.md)
-- [Memory system](docs/memory.md)
-- [Scheduled tasks](docs/scheduler.md)
-- [Permissions](docs/permissions.md)
-- [Media handling](docs/media/overview.md)
-- [KB distillation](docs/kb-distillation.md)
-- [Container lifecycle](docs/container-lifecycle.md)
-- [Graceful shutdown](docs/graceful-shutdown.md)
-- [Rate limiting](docs/rate-limiting.md)
+- [Permissions & RBAC](docs/permissions.md)
 - [Extensions](docs/extensions.md)
+- [Scheduled tasks](docs/scheduler.md)
+- [Authentication](docs/auth/overview.md)
+- [Memory](docs/memory.md)
+- [Media handling](docs/media/overview.md)
+- [Rate limiting](docs/rate-limiting.md)
+- [Graceful shutdown](docs/graceful-shutdown.md)
+- **Platform setup:** [WhatsApp](docs/setup-whatsapp.md) · [Discord](docs/setup-discord.md) · [Slack](docs/setup-slack.md)
 
 ---
 
