@@ -9,12 +9,6 @@
  * into minimal RUN steps with BuildKit cache mounts for fast rebuilds.
  */
 
-import { execSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import type { Logger } from "../logger.js";
 import type { ExtensionMeta } from "./types.js";
 
 /** Parsed install command — either a known package manager or raw shell. */
@@ -247,136 +241,29 @@ export function toRunStatements(merged: ParsedInstall[]): string[] {
 }
 
 /**
- * Generate a Dockerfile that extends the base image with extension CLI installs.
- * Returns null if no extensions declare CLIs.
- *
- * Install commands are parsed, merged by package manager, deduplicated,
- * and emitted as minimal RUN steps with BuildKit cache mounts.
+ * Inject extension CLI install lines into a base Dockerfile.
+ * Inserts RUN statements before the ENTRYPOINT line.
+ * Returns the original content unchanged if no extensions declare CLIs.
  */
-export function generateDockerfile(
-  baseImage: string,
-  extensions: ExtensionMeta[],
-): string | null {
-  const allClis = extensions.flatMap((e) => e.clis);
-  if (allClis.length === 0) return null;
-
-  // Parse all install commands
-  const parsed = allClis.flatMap((cli) => parseInstallCommand(cli.install));
-
-  // Merge by package manager
-  const merged = mergeInstalls(parsed);
-
-  // Generate Dockerfile
-  const lines = [`# syntax=docker/dockerfile:1`, `FROM ${baseImage}`];
-  lines.push(...toRunStatements(merged));
-
-  return lines.join("\n");
-}
-
-/**
- * Compute a deterministic hash for cache invalidation.
- * Based on the base image name and sorted install commands.
- */
-export function computeImageHash(
-  baseImage: string,
+export function injectExtensionInstalls(
+  baseDockerfile: string,
   extensions: ExtensionMeta[],
 ): string {
-  const installCommands = extensions
-    .flatMap((e) => e.clis)
-    .map((c) => c.install)
-    .sort()
-    .join("\n");
+  const allClis = extensions.flatMap((e) => e.clis);
+  if (allClis.length === 0) return baseDockerfile;
 
-  return createHash("sha256")
-    .update(`${baseImage}\n${installCommands}`)
-    .digest("hex")
-    .slice(0, 12);
-}
+  const parsed = allClis.flatMap((cli) => parseInstallCommand(cli.install));
+  const merged = mergeInstalls(parsed);
+  const runLines = toRunStatements(merged);
 
-/**
- * Check if a Docker image exists locally.
- */
-function imageExists(tag: string): boolean {
-  try {
-    execSync(`docker image inspect ${tag}`, {
-      encoding: "utf8",
-      timeout: 10_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
+  if (runLines.length === 0) return baseDockerfile;
 
-/**
- * Build the derived image if needed. Returns the image name to use.
- *
- * - If no extensions declare CLIs, returns the base image unchanged.
- * - If a cached image exists (same hash), returns it.
- * - Otherwise builds a new image and returns its tag.
- * - On build failure, falls back to the base image with a warning.
- */
-export async function ensureDerivedImage(
-  baseImage: string,
-  extensions: ExtensionMeta[],
-  log: Logger,
-): Promise<string> {
-  const dockerfile = generateDockerfile(baseImage, extensions);
-  if (!dockerfile) {
-    log.debug("No extension CLIs declared, using base image");
-    return baseImage;
-  }
+  const lines = baseDockerfile.split("\n");
+  const entrypointIdx = lines.findIndex((l) => /^\s*ENTRYPOINT\s/i.test(l));
 
-  const cliCount = extensions.reduce((n, e) => n + e.clis.length, 0);
-  const hash = computeImageHash(baseImage, extensions);
-  const derivedTag = `mercury-agent-ext:${hash}`;
+  const insertIdx = entrypointIdx >= 0 ? entrypointIdx : lines.length;
+  const header = `\n# Extension CLIs`;
+  lines.splice(insertIdx, 0, header, ...runLines, "");
 
-  // Check cache
-  if (imageExists(derivedTag)) {
-    log.info(`Using cached agent image ${derivedTag}`);
-    return derivedTag;
-  }
-
-  // Build
-  log.info(
-    `Building derived agent image (${cliCount} extension CLI${cliCount > 1 ? "s" : ""})...`,
-  );
-  for (const ext of extensions) {
-    for (const cli of ext.clis) {
-      log.info(`  ${ext.name}: ${cli.install}`);
-    }
-  }
-
-  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-ext-"));
-  try {
-    fs.writeFileSync(path.join(tmpDir, "Dockerfile"), dockerfile);
-    log.debug("Generated Dockerfile:\n" + dockerfile);
-
-    const startTime = Date.now();
-    execSync(`DOCKER_BUILDKIT=1 docker build -t ${derivedTag} ${tmpDir}`, {
-      encoding: "utf8",
-      timeout: 600_000,
-      stdio: ["pipe", "pipe", "pipe"],
-    });
-    const durationMs = Date.now() - startTime;
-
-    log.info(`Built derived agent image ${derivedTag}`, { durationMs });
-    return derivedTag;
-  } catch (err: unknown) {
-    const stderr =
-      err && typeof err === "object" && "stderr" in err
-        ? String((err as { stderr: unknown }).stderr).slice(-2000)
-        : "";
-    const msg = err instanceof Error ? err.message : String(err);
-    log.error(
-      `Failed to build derived image, falling back to base image: ${msg}`,
-    );
-    if (stderr) {
-      log.error(`Docker build stderr:\n${stderr}`);
-    }
-    return baseImage;
-  } finally {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  }
+  return lines.join("\n");
 }

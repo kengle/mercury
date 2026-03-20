@@ -4,15 +4,15 @@ Mercury's extension system lets you add CLIs, skills, background jobs, lifecycle
 
 ## Structure
 
-Extensions live in `.mercury/extensions/*/`. Each directory is an extension:
+Extensions live in `.mercury/extensions/*/`:
 
 ```
 .mercury/extensions/
-├── napkin/
+├── knowledge/
 │   ├── index.ts           # Required — setup function
 │   ├── skill/SKILL.md     # Optional — agent skill
 │   └── package.json       # Optional — dependencies
-└── gws/
+└── charts/
     └── index.ts
 ```
 
@@ -20,85 +20,72 @@ The extension **name** is the directory name.
 
 ## Setup Function
 
-Every extension exports a default function that receives the `MercuryExtensionAPI`:
+Every extension exports a default function:
 
 ```typescript
 import type { MercuryExtensionAPI } from "mercury-ai";
 
 export default function(mercury: MercuryExtensionAPI) {
-  // Declare what this extension provides
   mercury.cli({ name: "napkin", install: "bun add -g napkin-ai" });
   mercury.permission({ defaultRoles: ["admin", "member"] });
   mercury.skill("./skill");
+  mercury.env({ from: "MERCURY_NAPKIN_API_KEY" });
 
-  mercury.on("workspace_init", async ({ workspace, containerWorkspace }) => {
+  mercury.on("workspace_init", async ({ workspace }) => {
     mkdirSync(join(workspace, "entities"), { recursive: true });
   });
 
-  mercury.job("cleanup", {
+  mercury.job("distill", {
     interval: 3600_000,
     run: async (ctx) => { /* ... */ },
   });
 
   mercury.config("enabled", {
-    description: "Enable napkin for this space",
+    description: "Enable this extension",
     default: "true",
   });
 
   mercury.widget({
-    label: "Napkin Status",
+    label: "Status",
     render: (ctx) => `<p>Last run: ${mercury.store.get("last-run") ?? "never"}</p>`,
   });
 }
 ```
 
-All declarations are optional — use only what you need.
-
 ## API Reference
 
 ### `mercury.cli(opts)`
 
-Declare a CLI tool to install in the container image.
+Declare a CLI tool to install in the Docker image.
 
 ```typescript
 mercury.cli({ name: "napkin", install: "bun add -g napkin-ai" });
 ```
 
-- `name` — binary name (should match extension name)
-- `install` — shell command run as a Dockerfile `RUN` step
-
-Mercury auto-generates a derived Docker image with all extension CLIs installed. The agent calls them directly in bash. Permission enforcement is handled by a built-in pi extension that blocks denied CLIs based on the caller's role.
-
-Can be called multiple times for extensions that need several tools (e.g., media needs ffmpeg, imagemagick, and yt-dlp).
+`mercury build` injects these as `RUN` steps in the Dockerfile. The agent calls them directly in bash. Permission enforcement is handled by the permission guard pi extension which blocks denied CLIs based on `MERCURY_DENIED_CLIS`.
 
 ### `mercury.permission(opts)`
 
-Register this extension's permission and set default roles.
+Register this extension's RBAC permission.
 
 ```typescript
 mercury.permission({ defaultRoles: ["admin", "member"] });
 ```
 
-- Permission name = extension name (e.g., `napkin`)
-- `defaultRoles` — roles that get this permission by default
-- `admin` always gets all permissions automatically
-- Per-space overrides in `space_config` take precedence
-
-Can only be called once per extension.
+- Permission name = extension name
+- `admin` always gets all permissions
+- Overridable via `mrctl permissions set <role> <perms...>`
 
 ### `mercury.env(def)`
 
-Declare an environment variable this extension needs. Only injected into containers when the caller has permission for this extension. Claimed vars are excluded from the blind `MERCURY_*` passthrough, preventing credential leakage to unprivileged callers.
+Declare an environment variable. Only injected into the agent subprocess when the caller has permission for this extension.
 
 ```typescript
-mercury.env({ from: "MERCURY_GH_TOKEN" });                    // injected as GH_TOKEN
-mercury.env({ from: "MERCURY_GH_TOKEN", as: "GITHUB_TOKEN" }); // custom container name
+mercury.env({ from: "MERCURY_GH_TOKEN" });                     // injected as GH_TOKEN
+mercury.env({ from: "MERCURY_GH_TOKEN", as: "GITHUB_TOKEN" }); // custom name
 ```
 
-- `from` — env var name as set in `.env` (e.g. `MERCURY_GH_TOKEN`)
-- `as` — (optional) name inside the container. Defaults to `from` with `MERCURY_` prefix stripped
-
-Can be called multiple times for multiple env vars.
+Claimed vars are excluded from the blind `MERCURY_*` passthrough, preventing credential leakage to unprivileged callers.
 
 ### `mercury.skill(relativePath)`
 
@@ -108,44 +95,28 @@ Register a skill directory for agent discovery.
 mercury.skill("./skill");
 ```
 
-The directory must contain a `SKILL.md` file in pi's [skill format](https://agentskills.io/specification). Mercury copies the entire skill directory into `.mercury/global/skills/<name>/`, which is mounted into containers at `/home/node/.pi/agent/skills/<name>/`. Pi discovers it automatically.
-
-Skills can contain multiple files — scripts, references, assets — not just SKILL.md. The agent uses relative paths from SKILL.md to access them.
+Must contain `SKILL.md` in pi's [skill format](https://agentskills.io/specification). Mercury copies the directory into the workspace's `.pi/skills/<name>/`.
 
 ### `mercury.on(event, handler)`
 
 Subscribe to lifecycle events.
 
-```typescript
-mercury.on("workspace_init", async (event, ctx) => {
-  // event.workspace — absolute host path
-  // event.containerWorkspace — container-relative path (e.g. /spaces/main)
-  mkdirSync(join(event.workspace, "my-dir"), { recursive: true });
-});
-```
-
-#### Events
-
 | Event | When | Can mutate? |
 |-------|------|-------------|
-| `startup` | After extensions loaded, runtime ready | No |
+| `startup` | After extensions loaded | No |
 | `shutdown` | Mercury shutting down | No |
-| `workspace_init` | Space workspace created/ensured | No |
-| `before_container` | About to spawn container | Yes |
-| `after_container` | Container finished | Yes |
-
-Both `workspace_init` and `before_container` events include:
-- `workspace` — absolute host path (for file operations on the host)
-- `containerWorkspace` — container-relative path, e.g. `/spaces/main` (for env vars passed into the container)
+| `workspace_init` | Workspace ensured | No |
+| `before_container` | About to run agent | Yes — env, systemPrompt, block |
+| `after_container` | Agent finished | Yes — reply, suppress |
 
 #### `before_container` mutations
 
 ```typescript
 mercury.on("before_container", async (event, ctx) => {
   return {
-    systemPrompt: "Extra instructions...",  // appended to system prompt
-    env: { MY_VAR: event.containerWorkspace + "/data" },  // container-relative paths
-    block: { reason: "Rate limited" },       // prevent container from running
+    systemPrompt: "Extra instructions...",
+    env: { MY_VAR: "value" },
+    block: { reason: "Rate limited" },
   };
 });
 ```
@@ -155,61 +126,37 @@ mercury.on("before_container", async (event, ctx) => {
 ```typescript
 mercury.on("after_container", async (event, ctx) => {
   return {
-    reply: event.reply + "\n\n_Powered by Mercury_",  // transform reply
-    suppress: true,                                     // don't send reply
+    reply: event.reply + "\n\n_Powered by Mercury_",
+    suppress: true,
   };
 });
 ```
 
 ### `mercury.job(name, def)`
 
-Register a background job that runs on the host.
+Register a background job.
 
 ```typescript
-// Interval-based
-mercury.job("cleanup", {
-  interval: 3600_000,  // every hour
-  run: async (ctx) => { /* ... */ },
-});
-
-// Cron-based
-mercury.job("daily-report", {
-  cron: "0 9 * * *",  // 9am daily
-  run: async (ctx) => { /* ... */ },
-});
+mercury.job("cleanup", { interval: 3600_000, run: async (ctx) => { /* ... */ } });
+mercury.job("report", { cron: "0 9 * * *", run: async (ctx) => { /* ... */ } });
 ```
-
-Must specify either `interval` or `cron`, not both. Jobs are started after extensions load and stopped on shutdown. Errors are caught and logged — a failing job never crashes Mercury.
 
 ### `mercury.config(key, def)`
 
-Register a per-space config key.
+Register a config key (namespaced to the extension).
 
 ```typescript
-mercury.config("enabled", {
-  description: "Enable napkin for this space",
-  default: "true",
-  validate: (v) => v === "true" || v === "false",
-});
+mercury.config("enabled", { description: "Enable this extension", default: "true" });
+// Users set via: mrctl config set <extension>.enabled false
 ```
-
-Keys are namespaced to the extension: the above registers `napkin.enabled`. Users set it via `mrctl config set napkin.enabled false`.
 
 ### `mercury.widget(def)`
 
 Register a dashboard widget.
 
 ```typescript
-mercury.widget({
-  label: "KB Distillation",
-  render: (ctx) => {
-    const lastRun = mercury.store.get("last-run") ?? "never";
-    return `<div>Last run: ${lastRun}</div>`;
-  },
-});
+mercury.widget({ label: "Status", render: (ctx) => "<p>OK</p>" });
 ```
-
-Widgets render HTML fragments in the dashboard overview. Errors show a placeholder — never crash the dashboard.
 
 ### `mercury.store`
 
@@ -217,130 +164,34 @@ Scoped key-value store for persistent state.
 
 ```typescript
 mercury.store.set("last-run", Date.now().toString());
-mercury.store.get("last-run");     // "1709654400000"
-mercury.store.delete("last-run");  // true
-mercury.store.list();              // [{ key: "last-run", value: "..." }]
+mercury.store.get("last-run");
+mercury.store.delete("last-run");
+mercury.store.list();
 ```
 
 Each extension sees only its own keys. Backed by the `extension_state` SQLite table.
 
-## Extension Context
-
-Event handlers and job runners receive a `MercuryExtensionContext`:
-
-```typescript
-interface MercuryExtensionContext {
-  readonly db: Db;          // Database access
-  readonly config: AppConfig; // Mercury configuration
-  readonly log: Logger;      // Logger scoped to the extension
-}
-```
-
-## Container Integration
-
-### Skill Files
-
-Skills can include anything the agent needs:
-
-```
-napkin/skill/
-├── SKILL.md              # Required: frontmatter + instructions
-├── scripts/              # Helper scripts
-│   └── search.js
-├── references/           # Detailed docs loaded on-demand
-│   └── api-reference.md
-└── assets/
-    └── template.json
-```
-
-All files are copied into the container mount. Relative paths from SKILL.md work.
-
-### Derived Image
-
-Extensions that declare `mercury.cli()` get their tools installed in a derived Docker image:
-
-```
-FROM mercury-agent:latest
-RUN bun add -g napkin-ai        # from napkin extension
-RUN pip install some-tool       # from another extension
-```
-
-Mercury builds this image on startup (cached by content hash). If no extensions declare CLIs, the base image is used unchanged.
-
-### Agent Discovery
-
-The agent discovers extension CLIs via skills (SKILL.md files) and invokes them through `mrctl`:
-
-```bash
-napkin search "query"           # called directly, RBAC enforced at bash level
-```
-
-## Built-in Commands vs Extensions
-
-`mrctl` has two types of commands:
-
-| Type | Examples | How it works |
-|------|----------|--------------|
-| **Built-in** | `tasks`, `roles`, `permissions`, `config`, `spaces`, `conversations`, `stop`, `compact` | HTTP calls to host API via `mrctl` |
-| **Extension** | `napkin`, `pinchtab`, any custom | Called directly in bash, RBAC enforced by pi extension |
-
-Built-in names are reserved — extension registration fails on collision.
-
-## Permissions
-
-One permission per extension, named after the extension. Extensions declare which roles get it by default:
-
-```typescript
-mercury.permission({ defaultRoles: ["admin", "member"] });
-```
-
-- `admin` always gets all permissions
-- Per-space overrides via `mrctl permissions set <role> prompt,napkin,...`
-- See [permissions.md](permissions.md) for the full RBAC system
-
 ## Installation
 
-### `mercury add`
-
-Install extensions from local paths, npm, or git:
-
 ```bash
-mercury add ./path/to/extension         # local directory
-mercury add npm:mercury-ext-napkin      # npm package
-mercury add git:github.com/user/ext     # git repo
+mercury ext add ./path/to/extension         # local
+mercury ext add npm:mercury-ext-napkin      # npm
+mercury ext add git:github.com/user/ext     # git
+mercury ext remove <name>
+mercury ext list
 ```
 
-Mercury copies the extension to `.mercury/extensions/<name>/`, installs dependencies if `package.json` is present, copies skills to the global dir, and validates the extension loads correctly.
+After adding/removing extensions, run `mercury restart` (rebuilds image + restarts).
 
-### `mercury remove`
+## Built-in vs Extension Commands
 
-```bash
-mercury remove napkin
-```
+| Type | Examples | Mechanism |
+|------|----------|-----------|
+| **Built-in** | tasks, roles, config, mutes, stop, compact | mrctl → HTTP API |
+| **Extension** | napkin, gh, mmdc | Direct bash, RBAC via permission guard |
 
-Removes the extension directory and its installed skill. Restart Mercury to apply.
-
-### `mercury extensions list`
-
-```bash
-mercury extensions list    # or: mercury ext list
-```
-
-Shows all installed extensions (user + built-in) with features and descriptions.
-
-## Examples
-
-See [`examples/extensions/`](../examples/extensions/) for complete, working extensions ranging from minimal (charts — CLI + skill) to full-featured (napkin — hooks, jobs, config, widgets, KB distillation).
+Built-in names are reserved — extensions cannot collide.
 
 ## Types
 
-All types are in `src/extensions/types.ts`:
-
-- `MercuryExtensionAPI` — setup API surface
-- `MercuryExtensionContext` — runtime context for hooks/jobs
-- `MercuryEvents` — all lifecycle events
-- `EventHandler<E>` / `EventResult<E>` — typed handlers with mutation support
-- `ExtensionMeta` — collected metadata after setup
-- `ExtensionStore` — scoped key-value store
-- `JobDef`, `ConfigDef`, `WidgetDef`, `CliDef`, `PermissionDef` — definitions
-- `ExtensionSetupFn` — the default export signature
+All types in `src/extensions/types.ts`: `MercuryExtensionAPI`, `MercuryExtensionContext`, `MercuryEvents`, `ExtensionMeta`, `ExtensionStore`, `JobDef`, `ConfigDef`, `WidgetDef`, `CliDef`, `PermissionDef`.

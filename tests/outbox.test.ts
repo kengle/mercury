@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { extToMime } from "../src/core/media.js";
-import { scanOutbox } from "../src/core/outbox.js";
+import { extToMime } from "../src/core/ingress/media.js";
+import { scanOutbox } from "../src/core/runtime/outbox.js";
 
 let tmpDir: string;
 

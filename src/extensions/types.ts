@@ -5,10 +5,10 @@
  * No runtime code — types only.
  */
 
-import type { ContainerError } from "../agent/container-error.js";
-import type { AppConfig } from "../config.js";
-import type { Logger } from "../logger.js";
-import type { Db } from "../storage/db.js";
+import type { AgentError } from "../core/runtime/agent-error.js";
+import type { AppConfig } from "../core/config.js";
+import type { Logger } from "../core/logger.js";
+import type { Db } from "../core/db.js";
 
 // ---------------------------------------------------------------------------
 // Extension context — passed to event handlers and job runners
@@ -47,38 +47,21 @@ export type StartupEvent = Record<string, never>;
 export type ShutdownEvent = Record<string, never>;
 
 export interface WorkspaceInitEvent {
-  /** The space this workspace belongs to. */
-  spaceId: string;
-  /** Absolute path to the workspace directory. */
   workspace: string;
-  /** Container-relative path to the workspace (e.g. /spaces/main). */
-  containerWorkspace: string;
 }
 
 export interface BeforeContainerEvent {
-  /** The space the message belongs to. */
-  spaceId: string;
-  /** The user's prompt. */
   prompt: string;
-  /** Platform-specific caller identifier. */
   callerId: string;
-  /** Absolute path to the space workspace. */
   workspace: string;
-  /** Container-relative path to the workspace (e.g. /spaces/main). */
-  containerWorkspace: string;
 }
 
 export interface AfterContainerEvent {
-  /** The space the message belongs to. */
-  spaceId: string;
-  /** The original user prompt. */
   prompt: string;
-  /** The agent's reply (empty string on error). */
   reply: string;
-  /** How long the container ran, in milliseconds. */
   durationMs: number;
   /** Present if the container failed. */
-  error?: ContainerError;
+  error?: AgentError;
 }
 
 // ---------------------------------------------------------------------------

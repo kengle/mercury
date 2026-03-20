@@ -1,17 +1,16 @@
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { Adapter } from "chat";
 import { Hono } from "hono";
-import type { WhatsAppBaileysAdapter } from "./adapters/whatsapp.js";
-import type { AppConfig } from "./config.js";
+import type { AppConfig } from "./core/config.js";
 import { createApiApp } from "./core/api.js";
-import { createChatRoute } from "./core/routes/chat.js";
-import { createDashboardRoutes } from "./core/routes/dashboard.js";
-import type { MercuryCoreRuntime } from "./core/runtime.js";
-import type { ConfigRegistry } from "./extensions/config-registry.js";
+import { createChatController } from "./services/chat/controller.js";
+import { createDashboardRoutes } from "./core/dashboard.js";
+import type { MercuryCoreRuntime } from "./core/runtime/runtime.js";
+import type { ConfigRegistry } from "./services/config/registry.js";
 import type { ExtensionRegistry } from "./extensions/loader.js";
-import { logger } from "./logger.js";
+import { logger } from "./core/logger.js";
+import { createChatService } from "./services/chat/service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -22,14 +21,17 @@ type WebhookHandler = (
   options?: { waitUntil?: WaitUntil },
 ) => Promise<Response>;
 
+import type { ApiKeyService } from "./services/api-keys/interface.js";
+
 export interface ServerContext {
   core: MercuryCoreRuntime;
   config: AppConfig;
-  adapters: Record<string, Adapter>;
+  adapters: Record<string, any>;
   webhooks: Record<string, WebhookHandler>;
   startTime: number;
   registry: ExtensionRegistry;
   configRegistry: ConfigRegistry;
+  apiKeys: ApiKeyService;
 }
 
 export function createApp(ctx: ServerContext): Hono {
@@ -45,6 +47,20 @@ export function createApp(ctx: ServerContext): Hono {
   };
 
   const app = new Hono();
+
+  // ─── API Key Auth ───────────────────────────────────────────────────────
+
+  app.use("*", async (c, next) => {
+    const header = c.req.header("authorization");
+    if (!header?.startsWith("Bearer ")) {
+      return c.json({ error: "Missing API key. Use Authorization: Bearer <key>" }, 401);
+    }
+    const key = header.slice(7);
+    if (!ctx.apiKeys.validate(key)) {
+      return c.json({ error: "Invalid API key" }, 401);
+    }
+    await next();
+  });
 
   // ─── Dashboard ──────────────────────────────────────────────────────────
 
@@ -82,12 +98,6 @@ export function createApp(ctx: ServerContext): Hono {
     core,
     adapters: adapterStatus,
     startTime,
-    registry: ctx.registry,
-    extensionCtx: {
-      db: core.db,
-      config,
-      log: logger,
-    },
   });
 
   app.route("/dashboard", dashboardRoutes);
@@ -104,41 +114,40 @@ export function createApp(ctx: ServerContext): Hono {
       status: "ok",
       uptime: uptimeSeconds,
       queue: {
-        active: core.queue.activeCount,
+        active: core.queue.isActive,
         pending: core.queue.pendingCount,
       },
-      containers: {
-        active: core.containerRunner.activeCount,
+      agent: {
+        running: core.agent.isRunning,
       },
       adapters: adapterStatus,
     });
   });
 
   app.get("/auth/whatsapp", (c) => {
-    const whatsappAdapter = adapters.whatsapp as
-      | WhatsAppBaileysAdapter
-      | undefined;
-    if (!whatsappAdapter) {
+    const wa = adapters.whatsapp;
+    if (!wa) {
       return c.json({ error: "WhatsApp adapter not enabled" }, 400);
     }
-    const status = whatsappAdapter.getQrStatus();
-    return c.json(status);
+    if (typeof wa.getQrStatus === "function") {
+      return c.json(wa.getQrStatus());
+    }
+    return c.json({ status: "connected" });
   });
 
   // ─── Internal API ───────────────────────────────────────────────────────
 
   const apiApp = createApiApp({
-    db: core.db,
-    config,
-    containerRunner: core.containerRunner,
+    services: core.services,
+    appConfig: config,
+    agent: core.agent,
     queue: core.queue,
-    scheduler: core.scheduler,
     registry: ctx.registry,
     configRegistry: ctx.configRegistry,
   });
 
   app.route("/api", apiApp);
-  app.route("/chat", createChatRoute(core));
+  app.route("/chat", createChatController(createChatService(core)));
 
   // ─── Webhooks ───────────────────────────────────────────────────────────
 

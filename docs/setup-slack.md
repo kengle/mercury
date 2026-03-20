@@ -85,14 +85,16 @@ To add yourself as admin:
 MERCURY_ADMINS=slack:U0123456789
 ```
 
-## Step 8: Link conversations
+## Step 8: Pair Conversations
 
-Send a message to the bot (DM or mention in a channel), then:
+Get the pairing code and send it to the bot:
 
 ```bash
-mercury conversations --unlinked
-mercury link <id> <space-name>
+mercury pair                    # Show pairing code
+# Then send "/pair <code>" in a Slack DM or channel
 ```
+
+DM pairing grants admin. Channel pairing activates the bot in that channel.
 
 ## Environment Variables
 

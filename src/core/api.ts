@@ -1,67 +1,47 @@
 import { Hono } from "hono";
 import type { ApiContext, AuthContext, Env } from "./api-types.js";
-import { resolveRole } from "./permissions.js";
-import {
-  config,
-  control,
-  conversations,
-  extensions,
-  mutes,
-  permissions,
-  roles,
-  spaces,
-  tasks,
-} from "./routes/index.js";
 
-// ─── App Factory ──────────────────────────────────────────────────────────
+import { conversations } from "../services/conversations/controller.js";
+import { tasks } from "../services/tasks/controller.js";
+import { roles, permissions } from "../services/roles/controller.js";
+import { config } from "../services/config/controller.js";
+import { mutes } from "../services/mutes/controller.js";
+import { users } from "../services/users/controller.js";
+import { createControlController } from "../services/control/controller.js";
+import { createControlService } from "../services/control/service.js";
 
 export function createApiApp(apiCtx: ApiContext): Hono<Env> {
   const app = new Hono<Env>();
 
-  // ─── Auth Middleware ────────────────────────────────────────────────────
-
   app.use("*", async (c, next) => {
-    // Parse auth headers
     const callerId = c.req.header("x-mercury-caller");
-    const spaceId = c.req.header("x-mercury-space");
-
-    if (!callerId || !spaceId) {
-      return c.json(
-        { error: "Missing X-Mercury-Caller or X-Mercury-Space headers" },
-        400,
-      );
+    if (!callerId) {
+      return c.json({ error: "Missing X-Mercury-Caller header" }, 400);
     }
 
-    // Resolve role
-    const seededAdmins = apiCtx.config.admins
-      ? apiCtx.config.admins
-          .split(",")
-          .map((s) => s.trim())
-          .filter(Boolean)
-      : [];
+    const role = apiCtx.services.roles.resolveRole(callerId);
 
-    apiCtx.db.ensureSpace(spaceId);
-    const role = resolveRole(apiCtx.db, spaceId, callerId, seededAdmins);
-
-    // Store in request context
-    c.set("auth", { callerId, spaceId, role } as AuthContext);
+    c.set("auth", { callerId, role } as AuthContext);
     c.set("apiCtx", apiCtx);
     await next();
   });
 
-  // ─── Mount Routes ───────────────────────────────────────────────────────
+  const controlService = createControlService(
+    apiCtx.appConfig,
+    apiCtx.agent,
+    apiCtx.queue,
+    apiCtx.services.roles,
+    apiCtx.services.messages,
+  );
 
-  app.route("/", control);
   app.route("/tasks", tasks);
   app.route("/config", config);
   app.route("/roles", roles);
   app.route("/permissions", permissions);
-  app.route("/spaces", spaces);
   app.route("/conversations", conversations);
   app.route("/mutes", mutes);
-  app.route("/ext", extensions);
-
-  // ─── Fallback ───────────────────────────────────────────────────────────
+  app.route("/users", users);
+  app.route("/", createControlController(controlService));
 
   app.all("*", (c) => {
     return c.json({ error: "Not found" }, 404);
@@ -70,5 +50,4 @@ export function createApiApp(apiCtx: ApiContext): Hono<Env> {
   return app;
 }
 
-// Re-export types for convenience
 export type { ApiContext, AuthContext, Env } from "./api-types.js";

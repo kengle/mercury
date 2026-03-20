@@ -2,14 +2,21 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resetPermissions } from "../src/core/permissions.js";
 import { ExtensionRegistry } from "../src/extensions/loader.js";
-import { Db } from "../src/storage/db.js";
+import { createDatabase } from "../src/core/db.js";
+import { createExtensionStateService } from "../src/extensions/state-service.js";
+import { createRoleService } from "../src/services/roles/service.js";
+import { createConfigService } from "../src/services/config/service.js";
+import type { Database } from "bun:sqlite";
+import type { RoleService } from "../src/services/roles/interface.js";
+import type { ExtensionStateService } from "../src/extensions/state-service.js";
 
 let tmpDir: string;
-let db: Db;
+let db: Database;
 let extDir: string;
 let registry: ExtensionRegistry;
+let extState: ExtensionStateService;
+let roles: RoleService;
 
 const log = {
   level: "info" as const,
@@ -22,14 +29,17 @@ const log = {
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-ext-loader-"));
-  db = new Db(path.join(tmpDir, "state.db"));
+  db = createDatabase(path.join(tmpDir, "state.db"));
   extDir = path.join(tmpDir, "extensions");
   fs.mkdirSync(extDir);
   registry = new ExtensionRegistry();
-  resetPermissions();
+  const configSvc = createConfigService(db);
+  extState = createExtensionStateService(db);
+  roles = createRoleService(db, configSvc);
 });
 
 afterEach(() => {
+  roles.resetPermissions();
   db.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -55,7 +65,7 @@ describe("ExtensionRegistry", () => {
       "hello",
       `export default function(m) { m.config("foo", { description: "test", default: "bar" }); }`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
 
     expect(registry.size).toBe(1);
     expect(registry.get("hello")).toBeDefined();
@@ -66,7 +76,7 @@ describe("ExtensionRegistry", () => {
   it("loads multiple extensions", async () => {
     writeExt("ext-a", "export default function(m) {}");
     writeExt("ext-b", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(2);
     expect(
       registry
@@ -77,43 +87,43 @@ describe("ExtensionRegistry", () => {
   });
 
   it("returns empty for missing extensions directory", async () => {
-    await registry.loadAll(path.join(tmpDir, "nonexistent"), db, log);
+    await registry.loadAll(path.join(tmpDir, "nonexistent"), extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("returns empty for empty extensions directory", async () => {
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("skips directories without index.ts", async () => {
     fs.mkdirSync(path.join(extDir, "empty-ext"));
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("skips files (non-directories)", async () => {
     fs.writeFileSync(path.join(extDir, "not-a-dir.ts"), "");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("skips invalid extension names", async () => {
     writeExt("UPPER_CASE", "export default function(m) {}");
     writeExt("has spaces", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("skips extension names starting with hyphen", async () => {
     writeExt("-bad-name", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
   it("throws on reserved name collision", async () => {
     writeExt("tasks", "export default function(m) {}");
-    await expect(registry.loadAll(extDir, db, log)).rejects.toThrow(
+    await expect(registry.loadAll(extDir, extState, roles, log)).rejects.toThrow(
       "conflicts with built-in",
     );
   });
@@ -149,7 +159,7 @@ describe("ExtensionRegistry", () => {
   it("skips extension that throws during load", async () => {
     writeExt("bad", `export default function(m) { throw new Error("boom"); }`);
     writeExt("good", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(1);
     expect(registry.get("good")).toBeDefined();
     expect(registry.get("bad")).toBeUndefined();
@@ -157,7 +167,7 @@ describe("ExtensionRegistry", () => {
 
   it("skips extension without default export", async () => {
     writeExt("no-default", "export function setup(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(0);
   });
 
@@ -166,7 +176,7 @@ describe("ExtensionRegistry", () => {
       "my-tool",
       `export default function(m) { m.cli({ name: "my-tool", install: "npm i -g my-tool" }); }`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     const ext = registry.get("my-tool");
     expect(ext).toBeDefined();
     expect(ext.clis).toEqual([
@@ -180,7 +190,7 @@ describe("ExtensionRegistry", () => {
       "my-tool",
       `export default function(m) { m.permission({ defaultRoles: ["admin", "member"] }); }`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     const ext = registry.get("my-tool");
     expect(ext).toBeDefined();
     expect(ext.permission).toEqual({
@@ -193,7 +203,7 @@ describe("ExtensionRegistry", () => {
       "my-tool",
       `export default function(m) { m.skill("./skill"); }`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     const ext = registry.get("my-tool");
     expect(ext).toBeDefined();
     expect(ext.skillDir).toContain("my-tool");
@@ -208,7 +218,7 @@ describe("ExtensionRegistry", () => {
 				m.on("shutdown", async () => {});
 			}`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.getHookHandlers("startup")).toHaveLength(1);
     expect(registry.getHookHandlers("shutdown")).toHaveLength(1);
     expect(registry.getHookHandlers("workspace_init")).toHaveLength(0);
@@ -223,7 +233,7 @@ describe("ExtensionRegistry", () => {
       "ext-b",
       `export default function(m) { m.on("startup", async () => {}); }`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.getHookHandlers("startup")).toHaveLength(2);
   });
 
@@ -235,7 +245,7 @@ describe("ExtensionRegistry", () => {
 				m.job("daily", { cron: "0 0 * * *", run: async () => {} });
 			}`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     const jobs = registry.getJobs();
     expect(jobs).toHaveLength(2);
     expect(jobs[0].extension).toBe("worker");
@@ -250,7 +260,7 @@ describe("ExtensionRegistry", () => {
 				m.widget({ label: "Test", render: () => "<p>hi</p>" });
 			}`,
     );
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     const ext = registry.get("dash");
     expect(ext).toBeDefined();
     expect(ext.widgets).toHaveLength(1);
@@ -263,12 +273,12 @@ describe("ExtensionRegistry", () => {
     // Instead, test that two registries loading same dir work independently.
     // The real duplicate check matters if loadAll is called twice.
     writeExt("dup-test", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(1);
 
     // Loading again into same registry should skip (already registered)
     // but the current impl would throw on duplicate — let's verify
-    await expect(registry.loadAll(extDir, db, log)).rejects.toThrow(
+    await expect(registry.loadAll(extDir, extState, roles, log)).rejects.toThrow(
       "Duplicate extension",
     );
   });
@@ -279,7 +289,7 @@ describe("ExtensionRegistry", () => {
       `export default function(m) { m.cli({ name: "with-cli", install: "npm i -g x" }); }`,
     );
     writeExt("no-cli", "export default function(m) {}");
-    await registry.loadAll(extDir, db, log);
+    await registry.loadAll(extDir, extState, roles, log);
     expect(registry.size).toBe(2);
     const cliExts = registry.getCliExtensions();
     expect(cliExts).toHaveLength(1);
@@ -293,8 +303,8 @@ describe("ExtensionRegistry", () => {
 				m.store.set("key", "value");
 			}`,
     );
-    await registry.loadAll(extDir, db, log);
-    expect(db.getExtState("store-test", "key")).toBe("value");
+    await registry.loadAll(extDir, extState, roles, log);
+    expect(extState.get("store-test", "key")).toBe("value");
   });
 });
 

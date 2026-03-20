@@ -1,28 +1,40 @@
 import type { Context } from "hono";
-import type { AgentContainerRunner } from "../agent/container-runner.js";
-import type { AppConfig } from "../config.js";
-import type { ConfigRegistry } from "../extensions/config-registry.js";
+import type { Agent } from "./runtime/agent-interface.js";
+import type { AppConfig } from "./config.js";
+import type { ConfigRegistry } from "../services/config/registry.js";
 import type { ExtensionRegistry } from "../extensions/loader.js";
-import type { Db } from "../storage/db.js";
-import { hasPermission } from "./permissions.js";
-import type { SpaceQueue } from "./space-queue.js";
-import type { TaskScheduler } from "./task-scheduler.js";
+import type { AgentQueue } from "./runtime/queue.js";
+import type { ConversationService } from "../services/conversations/interface.js";
+import type { MessageService } from "../services/messages/interface.js";
+import type { TaskService } from "../services/tasks/interface.js";
+import type { RoleService } from "../services/roles/interface.js";
+import type { ConfigService } from "../services/config/interface.js";
+import type { MuteService } from "../services/mutes/interface.js";
+import type { UserService } from "../services/users/interface.js";
+import type { PolicyService } from "../services/policy/interface.js";
 
-// ─── Context Types ────────────────────────────────────────────────────────
+export interface Services {
+  conversations: ConversationService;
+  messages: MessageService;
+  tasks: TaskService;
+  roles: RoleService;
+  config: ConfigService;
+  mutes: MuteService;
+  users: UserService;
+  policy: PolicyService;
+}
 
 export interface ApiContext {
-  db: Db;
-  config: AppConfig;
-  containerRunner: AgentContainerRunner;
-  queue: SpaceQueue;
-  scheduler: TaskScheduler;
+  services: Services;
+  appConfig: AppConfig;
+  agent: Agent;
+  queue: AgentQueue;
   registry: ExtensionRegistry;
   configRegistry: ConfigRegistry;
 }
 
 export interface AuthContext {
   callerId: string;
-  spaceId: string;
   role: string;
 }
 
@@ -33,8 +45,6 @@ export type Env = {
   };
 };
 
-// ─── Helper Functions ─────────────────────────────────────────────────────
-
 export const getAuth = (c: Context<Env>): AuthContext => c.get("auth");
 export const getApiCtx = (c: Context<Env>): ApiContext => c.get("apiCtx");
 
@@ -42,10 +52,10 @@ export const checkPerm = (
   c: Context<Env>,
   permission: string,
 ): Response | null => {
-  const { spaceId, role } = c.get("auth");
-  const { db } = c.get("apiCtx");
+  const { role } = c.get("auth");
+  const { services } = c.get("apiCtx");
 
-  if (!hasPermission(db, spaceId, role, permission)) {
+  if (!services.roles.hasPermission(role, permission)) {
     return c.json(
       { error: `Forbidden: requires '${permission}' permission` },
       403,

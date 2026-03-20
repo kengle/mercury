@@ -2,15 +2,19 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { Db } from "../src/storage/db.js";
+import { createDatabase } from "../src/core/db.js";
+import { createExtensionStateService, type ExtensionStateService } from "../src/extensions/state-service.js";
+import type { Database } from "bun:sqlite";
 
 describe("extension_state", () => {
-  let db: Db;
+  let db: Database;
+  let extState: ExtensionStateService;
   let tmpDir: string;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-ext-store-"));
-    db = new Db(path.join(tmpDir, "state.db"));
+    db = createDatabase(path.join(tmpDir, "state.db"));
+    extState = createExtensionStateService(db);
   });
 
   afterEach(() => {
@@ -19,44 +23,44 @@ describe("extension_state", () => {
   });
 
   it("get returns null for missing key", () => {
-    expect(db.getExtState("napkin", "missing")).toBeNull();
+    expect(extState.get("napkin", "missing")).toBeNull();
   });
 
   it("set then get returns value", () => {
-    db.setExtState("napkin", "last-run", "123456");
-    expect(db.getExtState("napkin", "last-run")).toBe("123456");
+    extState.set("napkin", "last-run", "123456");
+    expect(extState.get("napkin", "last-run")).toBe("123456");
   });
 
   it("set overwrites existing value", () => {
-    db.setExtState("napkin", "count", "1");
-    db.setExtState("napkin", "count", "2");
-    expect(db.getExtState("napkin", "count")).toBe("2");
+    extState.set("napkin", "count", "1");
+    extState.set("napkin", "count", "2");
+    expect(extState.get("napkin", "count")).toBe("2");
   });
 
   it("namespace isolation — two extensions with same key", () => {
-    db.setExtState("napkin", "status", "ok");
-    db.setExtState("kb-distill", "status", "running");
+    extState.set("napkin", "status", "ok");
+    extState.set("kb-distill", "status", "running");
 
-    expect(db.getExtState("napkin", "status")).toBe("ok");
-    expect(db.getExtState("kb-distill", "status")).toBe("running");
+    expect(extState.get("napkin", "status")).toBe("ok");
+    expect(extState.get("kb-distill", "status")).toBe("running");
   });
 
   it("delete removes key and returns true", () => {
-    db.setExtState("napkin", "tmp", "val");
-    expect(db.deleteExtState("napkin", "tmp")).toBe(true);
-    expect(db.getExtState("napkin", "tmp")).toBeNull();
+    extState.set("napkin", "tmp", "val");
+    expect(extState.delete("napkin", "tmp")).toBe(true);
+    expect(extState.get("napkin", "tmp")).toBeNull();
   });
 
   it("delete returns false for missing key", () => {
-    expect(db.deleteExtState("napkin", "nope")).toBe(false);
+    expect(extState.delete("napkin", "nope")).toBe(false);
   });
 
   it("list returns all keys for extension", () => {
-    db.setExtState("napkin", "a", "1");
-    db.setExtState("napkin", "b", "2");
-    db.setExtState("other", "c", "3");
+    extState.set("napkin", "a", "1");
+    extState.set("napkin", "b", "2");
+    extState.set("other", "c", "3");
 
-    const items = db.listExtState("napkin");
+    const items = extState.list("napkin");
     expect(items).toEqual([
       { key: "a", value: "1" },
       { key: "b", value: "2" },
@@ -64,6 +68,6 @@ describe("extension_state", () => {
   });
 
   it("list returns empty array when no keys", () => {
-    expect(db.listExtState("empty")).toEqual([]);
+    expect(extState.list("empty")).toEqual([]);
   });
 });

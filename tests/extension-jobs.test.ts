@@ -2,22 +2,23 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppConfig } from "../src/config.js";
+import type { AppConfig } from "../src/core/config.js";
 import { getNextCronDelay, JobRunner } from "../src/extensions/jobs.js";
 import type {
   ExtensionMeta,
   MercuryExtensionContext,
 } from "../src/extensions/types.js";
-import { Db } from "../src/storage/db.js";
+import { createDatabase } from "../src/core/db.js"
+import type { Database } from "bun:sqlite";
 
 let tmpDir: string;
-let db: Db;
+let db: Database;
 let ctx: MercuryExtensionContext;
 let runner: JobRunner;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-jobs-test-"));
-  db = new Db(path.join(tmpDir, "test.db"));
+  db = createDatabase(path.join(tmpDir, "test.db"));
   ctx = {
     db,
     config: {} as AppConfig,

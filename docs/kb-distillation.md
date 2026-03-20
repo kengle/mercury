@@ -1,44 +1,37 @@
 # KB Distillation
 
-KB distillation is **extension-based** in Mercury (not built-in).
+KB distillation is **extension-based** — not built-in to Mercury core.
 
-As of v0.3.x, Mercury no longer ships a built-in `kb-distill` extension. The recommended approach is to use a user-installed extension (for example, `napkin`) that runs a background job and writes distilled knowledge into each space vault.
+## How It Works
 
----
+The `knowledge` extension (from `mercury-extensions`) runs a background job that:
 
-## Recommended Setup
+1. Reads messages from `state.db` per conversation
+2. Exports messages to `.messages/YYYY-MM-DD.jsonl`
+3. Detects changed files (hash compare)
+4. Runs `pi` with a distillation prompt against changed files
+5. Updates vault files incrementally
 
-Use the real example extension at:
+## Setup
 
-- `examples/extensions/napkin/`
+Install the knowledge extension:
 
-It demonstrates:
+```bash
+mercury ext add npm:mercury-ext-knowledge
+mercury restart
+```
 
-- `workspace_init` hook to scaffold vault structure
-- `before_container` hook to set `NAPKIN_VAULT`
-- background job (`distill`) for periodic extraction
-- dashboard widget + extension store state
+The extension registers:
+- A `distill` background job (runs hourly by default)
+- A `workspace_init` hook to scaffold vault structure
+- A `before_container` hook to set `NAPKIN_VAULT`
+- A dashboard widget showing last run time
+- A skill for the agent to search/read the vault
 
----
+## Data Layout
 
-## How Distillation Works (Extension Pattern)
-
-Typical flow:
-
-1. Read messages from `state.db` per `space_id`
-2. Export messages to `.messages/YYYY-MM-DD.jsonl`
-3. Detect changed files (hash compare)
-4. Run `pi` with a distillation prompt against changed files
-5. Update vault files incrementally (append/update, not destructive rewrite)
-
-This keeps runs idempotent and avoids re-processing unchanged days.
-
----
-
-## Data Layout (napkin example)
-
-```text
-.mercury/spaces/<space-id>/
+```
+.mercury/workspace/
 ├── .messages/
 │   └── YYYY-MM-DD.jsonl
 └── knowledge/
@@ -49,29 +42,6 @@ This keeps runs idempotent and avoids re-processing unchanged days.
     └── templates/
 ```
 
-Message export format:
-
-```json
-{"ts":1709123456,"role":"ambient","content":"Alice: Great idea!"}
-{"ts":1709123457,"role":"user","content":"What do you think about X?"}
-{"ts":1709123458,"role":"assistant","content":"I think..."}
-```
-
----
-
 ## Configuration
 
-With the napkin example extension:
-
-- `MERCURY_KB_DISTILL_INTERVAL_MS=0` → disabled (default)
-- `MERCURY_KB_DISTILL_INTERVAL_MS=3600000` → check every hour
-
-You can also expose interval as extension config keys (see `examples/extensions/napkin/index.ts`).
-
----
-
-## Notes
-
-- Distillation behavior depends on the installed extension implementation
-- Mercury core provides hooks, jobs, DB access, and workspace isolation
-- Distillation logic/prompt lives in the extension, not in core Mercury
+The job interval is set in the extension. Mercury core provides the infrastructure: hooks, jobs, DB access, and the workspace directory.

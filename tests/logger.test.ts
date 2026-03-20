@@ -37,8 +37,8 @@ describe("logger", () => {
     process.env.LOG_FORMAT = "text";
 
     // Clear module cache and re-import
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "text" });
 
     logger.info("Test message", { key: "value" });
@@ -60,8 +60,8 @@ describe("logger", () => {
     process.env.LOG_LEVEL = "info";
     process.env.LOG_FORMAT = "json";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "json" });
 
     logger.info("Test message", { key: "value" });
@@ -79,11 +79,11 @@ describe("logger", () => {
   test("child logger inherits and extends context", async () => {
     process.env.LOG_FORMAT = "json";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "json" });
 
-    const childLogger = logger.child({ spaceId: "group-123" });
+    const childLogger = logger.child({ component: "test" });
     childLogger.info("Child log", { extra: "data" });
 
     expect(consoleLog).toHaveBeenCalledTimes(1);
@@ -91,19 +91,19 @@ describe("logger", () => {
 
     const parsed = JSON.parse(output);
     expect(parsed.msg).toBe("Child log");
-    expect(parsed.spaceId).toBe("group-123");
+    expect(parsed.component).toBe("test");
     expect(parsed.extra).toBe("data");
   });
 
   test("child logger can be nested", async () => {
     process.env.LOG_FORMAT = "json";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "json" });
 
     const childLogger = logger
-      .child({ spaceId: "group-123" })
+      .child({ component: "test" })
       .child({ userId: "user-456" });
 
     childLogger.info("Nested child log");
@@ -111,13 +111,13 @@ describe("logger", () => {
     const output = consoleLog.mock.calls[0][0] as string;
     const parsed = JSON.parse(output);
 
-    expect(parsed.spaceId).toBe("group-123");
+    expect(parsed.component).toBe("test");
     expect(parsed.userId).toBe("user-456");
   });
 
   test("log level filtering works", async () => {
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "warn", format: "text" });
 
     logger.debug("Debug message");
@@ -132,8 +132,8 @@ describe("logger", () => {
   });
 
   test("silent level suppresses all logs", async () => {
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "silent", format: "text" });
 
     logger.debug("Debug");
@@ -150,8 +150,8 @@ describe("logger", () => {
   test("error objects are handled in JSON format", async () => {
     process.env.LOG_FORMAT = "json";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "json" });
 
     const err = new Error("Test error");
@@ -168,8 +168,8 @@ describe("logger", () => {
   test("error objects are handled in text format", async () => {
     process.env.LOG_FORMAT = "text";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "text" });
 
     const err = new Error("Test error");
@@ -182,12 +182,12 @@ describe("logger", () => {
   });
 
   test("text format includes context from child logger", async () => {
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "text" });
 
     const childLogger = logger.child({
-      spaceId: "abc123",
+      component: "test",
       container: "mercury-123-1",
     });
 
@@ -196,13 +196,13 @@ describe("logger", () => {
     const output = consoleLog.mock.calls[0][0] as string;
 
     expect(output).toContain("Container started");
-    expect(output).toContain("spaceId=abc123");
+    expect(output).toContain("component=test");
     expect(output).toContain("container=mercury-123-1");
   });
 
   test("debug level enables all logs", async () => {
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "debug", format: "text" });
 
     logger.debug("Debug message");
@@ -219,12 +219,12 @@ describe("logger", () => {
   test("container lifecycle log format (JSON)", async () => {
     process.env.LOG_FORMAT = "json";
 
-    delete require.cache[require.resolve("../src/logger.js")];
-    const { logger, configureLogger } = await import("../src/logger.js");
+    delete require.cache[require.resolve("../src/core/logger.js")];
+    const { logger, configureLogger } = await import("../src/core/logger.js");
     configureLogger({ level: "info", format: "json" });
 
     const containerLog = logger.child({
-      spaceId: "abc123",
+      component: "test",
       container: "mercury-1705312200-1",
     });
 
@@ -234,7 +234,7 @@ describe("logger", () => {
     const startParsed = JSON.parse(startOutput);
 
     expect(startParsed.msg).toBe("Container started");
-    expect(startParsed.spaceId).toBe("abc123");
+    expect(startParsed.component).toBe("test");
     expect(startParsed.container).toBe("mercury-1705312200-1");
     expect(startParsed.event).toBe("container.start");
 

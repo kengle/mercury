@@ -8,13 +8,13 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Logger } from "../logger.js";
+import type { Logger } from "../core/logger.js";
 import type { ExtensionMeta } from "./types.js";
 
 /**
  * Install extension skills into the global pi agent dir.
  *
- * - Copies each extension's skill directory to `<globalDir>/skills/<name>/`
+ * - Copies each extension's skill directory to `<globalDir>/.pi/skills/<name>/`
  * - Removes stale skill directories for extensions that no longer exist
  * - Preserves all files (scripts, references, assets) — not just SKILL.md
  */
@@ -22,22 +22,22 @@ export function installExtensionSkills(
   extensions: ExtensionMeta[],
   globalDir: string,
   log: Logger,
+  builtinSkillNames?: Set<string>,
 ): void {
-  const skillsDir = path.join(globalDir, "skills");
+  const skillsDir = path.join(globalDir, ".pi", "skills");
   fs.mkdirSync(skillsDir, { recursive: true });
 
-  // Track which extension names have skills
   const activeSkillNames = new Set(
     extensions.filter((e) => e.skillDir).map((e) => e.name),
   );
 
-  // Clean up stale skill directories
   for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
     if (!entry.isDirectory()) continue;
+    if (builtinSkillNames?.has(entry.name)) continue;
     if (!activeSkillNames.has(entry.name)) {
       const stale = path.join(skillsDir, entry.name);
       fs.rmSync(stale, { recursive: true });
-      log.info(`Removed stale skill: ${entry.name}`);
+      log.info(`Removed stale extension skill: ${entry.name}`);
     }
   }
 
@@ -54,7 +54,7 @@ export function installExtensionSkills(
 /**
  * Install built-in skills shipped with Mercury.
  *
- * Copies from `resources/skills/` into `<globalDir>/skills/`.
+ * Copies from `resources/skills/` into `<globalDir>/.pi/skills/`.
  * Built-in skills are for mrctl built-in commands (tasks, roles, etc.).
  */
 export function installBuiltinSkills(
@@ -67,7 +67,7 @@ export function installBuiltinSkills(
     return;
   }
 
-  const skillsDir = path.join(globalDir, "skills");
+  const skillsDir = path.join(globalDir, ".pi", "skills");
   fs.mkdirSync(skillsDir, { recursive: true });
 
   for (const entry of fs.readdirSync(builtinSkillsDir, {

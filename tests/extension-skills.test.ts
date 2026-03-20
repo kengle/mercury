@@ -59,7 +59,7 @@ describe("installExtensionSkills", () => {
     const skillDir = makeSkillDir("napkin");
     installExtensionSkills([makeMeta("napkin", skillDir)], globalDir, log);
 
-    const dst = path.join(globalDir, "skills", "napkin", "SKILL.md");
+    const dst = path.join(globalDir, ".pi", "skills", "napkin", "SKILL.md");
     expect(fs.existsSync(dst)).toBe(true);
     expect(fs.readFileSync(dst, "utf-8")).toContain("name: napkin");
   });
@@ -75,19 +75,19 @@ describe("installExtensionSkills", () => {
 
     expect(
       fs.existsSync(
-        path.join(globalDir, "skills", "napkin", "scripts", "search.js"),
+        path.join(globalDir, ".pi", "skills", "napkin", "scripts", "search.js"),
       ),
     ).toBe(true);
     expect(
       fs.existsSync(
-        path.join(globalDir, "skills", "napkin", "references", "api.md"),
+        path.join(globalDir, ".pi", "skills", "napkin", "references", "api.md"),
       ),
     ).toBe(true);
   });
 
   it("skips extensions without skillDir", () => {
     installExtensionSkills([makeMeta("no-skill", undefined)], globalDir, log);
-    expect(fs.existsSync(path.join(globalDir, "skills", "no-skill"))).toBe(
+    expect(fs.existsSync(path.join(globalDir, ".pi", "skills", "no-skill"))).toBe(
       false,
     );
   });
@@ -102,16 +102,16 @@ describe("installExtensionSkills", () => {
     );
 
     expect(
-      fs.existsSync(path.join(globalDir, "skills", "ext-a", "SKILL.md")),
+      fs.existsSync(path.join(globalDir, ".pi", "skills", "ext-a", "SKILL.md")),
     ).toBe(true);
     expect(
-      fs.existsSync(path.join(globalDir, "skills", "ext-b", "SKILL.md")),
+      fs.existsSync(path.join(globalDir, ".pi", "skills", "ext-b", "SKILL.md")),
     ).toBe(true);
   });
 
   it("removes stale skill directories", () => {
     // Simulate a previously installed skill
-    const staleDir = path.join(globalDir, "skills", "removed-ext");
+    const staleDir = path.join(globalDir, ".pi", "skills", "removed-ext");
     fs.mkdirSync(staleDir, { recursive: true });
     fs.writeFileSync(path.join(staleDir, "SKILL.md"), "old");
 
@@ -124,7 +124,7 @@ describe("installExtensionSkills", () => {
   it("does not remove skills for active extensions", () => {
     const skillDir = makeSkillDir("active");
     // Pre-populate
-    const dst = path.join(globalDir, "skills", "active");
+    const dst = path.join(globalDir, ".pi", "skills", "active");
     fs.mkdirSync(dst, { recursive: true });
     fs.writeFileSync(path.join(dst, "SKILL.md"), "old version");
 
@@ -132,7 +132,7 @@ describe("installExtensionSkills", () => {
 
     // Should have the new version, not the old
     const content = fs.readFileSync(
-      path.join(globalDir, "skills", "active", "SKILL.md"),
+      path.join(globalDir, ".pi", "skills", "active", "SKILL.md"),
       "utf-8",
     );
     expect(content).toContain("name: active");
@@ -151,7 +151,7 @@ describe("installExtensionSkills", () => {
     installExtensionSkills([makeMeta("napkin", skillDir)], globalDir, log);
 
     const content = fs.readFileSync(
-      path.join(globalDir, "skills", "napkin", "SKILL.md"),
+      path.join(globalDir, ".pi", "skills", "napkin", "SKILL.md"),
       "utf-8",
     );
     expect(content).toContain("Updated");
@@ -162,14 +162,14 @@ describe("installExtensionSkills", () => {
     const skillDir = makeSkillDir("test");
     installExtensionSkills([makeMeta("test", skillDir)], freshGlobal, log);
     expect(
-      fs.existsSync(path.join(freshGlobal, "skills", "test", "SKILL.md")),
+      fs.existsSync(path.join(freshGlobal, ".pi", "skills", "test", "SKILL.md")),
     ).toBe(true);
   });
 
   it("handles empty extensions array", () => {
     installExtensionSkills([], globalDir, log);
     // Should not crash, skills dir created
-    expect(fs.existsSync(path.join(globalDir, "skills"))).toBe(true);
+    expect(fs.existsSync(path.join(globalDir, ".pi", "skills"))).toBe(true);
   });
 });
 
@@ -185,7 +185,7 @@ describe("installBuiltinSkills", () => {
     installBuiltinSkills(builtinDir, globalDir, log);
 
     expect(
-      fs.existsSync(path.join(globalDir, "skills", "tasks", "SKILL.md")),
+      fs.existsSync(path.join(globalDir, ".pi", "skills", "tasks", "SKILL.md")),
     ).toBe(true);
   });
 
@@ -195,7 +195,7 @@ describe("installBuiltinSkills", () => {
     fs.writeFileSync(path.join(builtinDir, "readme.txt"), "ignore me");
 
     installBuiltinSkills(builtinDir, globalDir, log);
-    expect(fs.existsSync(path.join(globalDir, "skills", "readme.txt"))).toBe(
+    expect(fs.existsSync(path.join(globalDir, ".pi", "skills", "readme.txt"))).toBe(
       false,
     );
   });
@@ -219,7 +219,7 @@ describe("installBuiltinSkills", () => {
 
     for (const name of ["tasks", "roles", "config"]) {
       expect(
-        fs.existsSync(path.join(globalDir, "skills", name, "SKILL.md")),
+        fs.existsSync(path.join(globalDir, ".pi", "skills", name, "SKILL.md")),
       ).toBe(true);
     }
   });

@@ -5,7 +5,7 @@
  * Errors in handlers are caught and logged — never crash Mercury.
  */
 
-import type { Logger } from "../logger.js";
+import type { Logger } from "../core/logger.js";
 import type { ExtensionRegistry } from "./loader.js";
 import type {
   AfterContainerResult,

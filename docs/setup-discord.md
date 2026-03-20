@@ -68,14 +68,16 @@ mercury service status
 mercury service logs -f
 ```
 
-## Step 7: Link conversations
+## Step 7: Pair Conversations
 
-Send a message to the bot (DM or mention in a channel), then:
+Get the pairing code and send it to the bot:
 
 ```bash
-mercury conversations --unlinked
-mercury link <id> <space-name>
+mercury pair                    # Show pairing code
+# Then send "/pair <code>" in a Discord DM or channel
 ```
+
+DM pairing grants admin. Channel pairing activates the bot in that channel.
 
 ## Environment Variables
 
