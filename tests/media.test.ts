@@ -8,7 +8,7 @@ import {
   extToMime,
   mimeToExt,
   mimeToMediaType,
-} from "../src/core/media.js";
+} from "../src/core/ingress/media.js";
 
 // ─── extToMime ──────────────────────────────────────────────────────────
 

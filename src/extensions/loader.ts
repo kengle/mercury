@@ -7,10 +7,11 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import type { Logger } from "../logger.js";
-import type { Db } from "../storage/db.js";
+import type { Logger } from "../core/logger.js";
+import type { ExtensionStateService } from "./state-service.js";
+import type { RoleService } from "../services/roles/interface.js";
 import { MercuryExtensionAPIImpl } from "./api.js";
-import type { ConfigRegistry } from "./config-registry.js";
+import type { ConfigRegistry } from "../services/config/registry.js";
 import { RESERVED_EXTENSION_NAMES } from "./reserved.js";
 import type {
   EventHandler,
@@ -32,20 +33,22 @@ export class ExtensionRegistry {
    */
   async loadAll(
     extensionsDir: string,
-    db: Db,
+    extState: ExtensionStateService,
+    roles: RoleService,
     log: Logger,
     configRegistry?: ConfigRegistry,
     ...extraDirs: string[]
   ): Promise<void> {
     const dirs = [extensionsDir, ...extraDirs];
     for (const dir of dirs) {
-      await this.loadFromDir(dir, db, log, configRegistry);
+      await this.loadFromDir(dir, extState, roles, log, configRegistry);
     }
   }
 
   private async loadFromDir(
     extensionsDir: string,
-    db: Db,
+    extState: ExtensionStateService,
+    roles: RoleService,
     log: Logger,
     configRegistry?: ConfigRegistry,
   ): Promise<void> {
@@ -90,7 +93,7 @@ export class ExtensionRegistry {
       }
 
       try {
-        const meta = await loadExtension(name, extDir, indexPath, db);
+        const meta = await loadExtension(name, extDir, indexPath, extState, roles);
         // Register extension config keys in the config registry
         if (configRegistry) {
           for (const [key, def] of meta.configs) {
@@ -170,7 +173,8 @@ async function loadExtension(
   name: string,
   extDir: string,
   indexPath: string,
-  db: Db,
+  extState: ExtensionStateService,
+  roles: RoleService,
 ): Promise<ExtensionMeta> {
   const mod = await import(indexPath);
   const setup = mod.default;
@@ -181,7 +185,12 @@ async function loadExtension(
     );
   }
 
-  const api = new MercuryExtensionAPIImpl(name, extDir, db);
+  const api = new MercuryExtensionAPIImpl(
+    name,
+    extDir,
+    extState,
+    (permName, opts) => roles.registerPermission(permName, opts),
+  );
   setup(api);
   return api.getMeta();
 }

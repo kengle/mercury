@@ -2,29 +2,39 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { resetPermissions } from "../src/core/permissions.js";
 import { MercuryExtensionAPIImpl } from "../src/extensions/api.js";
-import { Db } from "../src/storage/db.js";
+import { createDatabase } from "../src/core/db.js";
+import { createExtensionStateService } from "../src/extensions/state-service.js";
+import { createRoleService } from "../src/services/roles/service.js";
+import { createConfigService } from "../src/services/config/service.js";
+import type { Database } from "bun:sqlite";
+import type { RoleService } from "../src/services/roles/interface.js";
+import type { ExtensionStateService } from "../src/extensions/state-service.js";
 
 let tmpDir: string;
-let db: Db;
+let db: Database;
 let extDir: string;
+let extState: ExtensionStateService;
+let roles: RoleService;
 
 beforeEach(() => {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-ext-api-"));
-  db = new Db(path.join(tmpDir, "state.db"));
+  db = createDatabase(path.join(tmpDir, "state.db"));
   extDir = path.join(tmpDir, "test-ext");
   fs.mkdirSync(extDir, { recursive: true });
-  resetPermissions();
+  const configSvc = createConfigService(db);
+  extState = createExtensionStateService(db);
+  roles = createRoleService(db, configSvc);
 });
 
 afterEach(() => {
+  roles.resetPermissions();
   db.close();
   fs.rmSync(tmpDir, { recursive: true, force: true });
 });
 
 function createApi(name = "test-ext") {
-  return new MercuryExtensionAPIImpl(name, extDir, db);
+  return new MercuryExtensionAPIImpl(name, extDir, extState, (n, o) => roles.registerPermission(n, o));
 }
 
 describe("MercuryExtensionAPI", () => {
@@ -75,8 +85,7 @@ describe("MercuryExtensionAPI", () => {
       const api = createApi("perm-test");
       api.permission({ defaultRoles: ["member"] });
 
-      const { getAllPermissions } = require("../src/core/permissions.js");
-      expect(getAllPermissions()).toContain("perm-test");
+      expect(roles.getAllPermissions()).toContain("perm-test");
     });
 
     it("throws on second call", () => {
@@ -259,8 +268,8 @@ describe("MercuryExtensionAPI", () => {
 
   describe("meta isolation", () => {
     it("two extensions have independent metadata", () => {
-      const a = new MercuryExtensionAPIImpl("ext-a", extDir, db);
-      const b = new MercuryExtensionAPIImpl("ext-b", extDir, db);
+      const a = new MercuryExtensionAPIImpl("ext-a", extDir, extState, (n, o) => roles.registerPermission(n, o));
+      const b = new MercuryExtensionAPIImpl("ext-b", extDir, extState, (n, o) => roles.registerPermission(n, o));
 
       a.config("key", { description: "a", default: "1" });
       b.job("tick", { interval: 1000, run: async () => {} });
@@ -277,7 +286,7 @@ describe("MercuryExtensionAPI", () => {
       const api = createApi("ext-a");
       api.store.set("key", "val-a");
 
-      const api2 = new MercuryExtensionAPIImpl("ext-b", extDir, db);
+      const api2 = new MercuryExtensionAPIImpl("ext-b", extDir, extState, (n, o) => roles.registerPermission(n, o));
       api2.store.set("key", "val-b");
 
       expect(api.store.get("key")).toBe("val-a");
@@ -296,7 +305,7 @@ describe("MercuryExtensionAPI", () => {
       api.store.set("a", "1");
       api.store.set("b", "2");
 
-      const other = new MercuryExtensionAPIImpl("other", extDir, db);
+      const other = new MercuryExtensionAPIImpl("other", extDir, extState, (n, o) => roles.registerPermission(n, o));
       other.store.set("c", "3");
 
       expect(api.store.list()).toEqual([

@@ -174,17 +174,11 @@ async function connectSocket(
       writeStatus(statusDir, "authenticated");
       clearQrData(statusDir);
       console.log("\n✓ Successfully authenticated with WhatsApp!");
-      const myJid = sock.user?.id;
-      if (myJid) {
-        console.log(`\n  Your WhatsApp ID: whatsapp:${myJid}`);
-        console.log(
-          "  Add to MERCURY_ADMINS in .env to make yourself admin.\n",
-        );
-      }
       console.log(`  Credentials saved to ${authDir}/`);
-      console.log(
-        "  You can now start mercury with 'mercury service install'.\n",
-      );
+      console.log("\nNext steps:");
+      console.log("  1. mercury start");
+      console.log("  2. mercury pair");
+      console.log("  3. DM the bot: /pair <code>\n");
 
       // Give it a moment to save credentials, then exit
       setTimeout(() => process.exit(0), 1000);

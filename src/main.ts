@@ -1,7 +1,7 @@
+import fs from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-// Suppress noisy Bun WebSocket warnings from Baileys
 const originalWarn = console.warn;
 console.warn = (...args: unknown[]) => {
   const msg = typeof args[0] === "string" ? args[0] : "";
@@ -10,30 +10,40 @@ console.warn = (...args: unknown[]) => {
   originalWarn(...args);
 };
 
-import type { Adapter, Message } from "chat";
-import type { DiscordNativeAdapter } from "./adapters/discord-native.js";
-import { setupAdapters } from "./adapters/setup.js";
-import type { WhatsAppBaileysAdapter } from "./adapters/whatsapp.js";
-import { DiscordBridge } from "./bridges/discord.js";
-import { SlackBridge } from "./bridges/slack.js";
-import { TeamsBridge } from "./bridges/teams.js";
-import { WhatsAppBridge } from "./bridges/whatsapp.js";
-import { createChatShim } from "./chat-shim.js";
-import { loadConfig, resolveProjectPath } from "./config.js";
-import { createMessageHandler } from "./core/handler.js";
-import { MercuryCoreRuntime } from "./core/runtime.js";
-import { ConfigRegistry } from "./extensions/config-registry.js";
-import { ensureDerivedImage } from "./extensions/image-builder.js";
+import { createMemoryState } from "@chat-adapter/state-memory";
+import { Chat } from "chat";
+import {
+  connectAdapters,
+  disconnectAdapters,
+  setupChatSdkAdapters,
+} from "./core/ingress/chatsdk.js";
+import { createChatSdkSender } from "./core/ingress/chatsdk-sender.js";
+import { loadConfig, resolveProjectPath } from "./core/config.js";
+import { createIngressService } from "./services/ingress/service.js";
+import { createChatSdkAdapter } from "./services/ingress/chatsdk-adapter.js";
+import { MercuryCoreRuntime } from "./core/runtime/runtime.js";
+import { SubprocessAgent } from "./core/runtime/subprocess.js";
+import { createDatabase } from "./core/db.js";
+import { createConfigService } from "./services/config/service.js";
+import { createConversationService } from "./services/conversations/service.js";
+import { createMessageService } from "./services/messages/service.js";
+import { createTaskService } from "./services/tasks/service.js";
+import { createRoleService } from "./services/roles/service.js";
+import { createMuteService } from "./services/mutes/service.js";
+import { createUserService } from "./services/users/service.js";
+import { createPolicyService } from "./services/policy/service.js";
+import { RateLimiter } from "./core/runtime/rate-limiter.js";
+import { ConfigRegistry } from "./services/config/registry.js";
 import { JobRunner } from "./extensions/jobs.js";
 import { ExtensionRegistry } from "./extensions/loader.js";
 import {
   installBuiltinSkills,
   installExtensionSkills,
 } from "./extensions/skills.js";
-import { configureLogger, logger } from "./logger.js";
+import { configureLogger, logger } from "./core/logger.js";
+import { createExtensionStateService } from "./extensions/state-service.js";
 import { createApp } from "./server.js";
-import { ensureSpaceWorkspace } from "./storage/memory.js";
-import type { NormalizeContext, PlatformBridge } from "./types.js";
+import { createApiKeyService } from "./services/api-keys/service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, "..");
@@ -47,9 +57,28 @@ async function main() {
     format: config.logFormat,
   });
 
-  // ─── Initialize Core ────────────────────────────────────────────────────
+  // ─── Create Database & Services ──────────────────────────────────────────
 
-  const core = new MercuryCoreRuntime(config);
+  const database = createDatabase(resolveProjectPath(config.dbPath));
+  const configService = createConfigService(database);
+  const muteService = createMuteService(database);
+  const rolesService = createRoleService(database, configService);
+  const rateLimiter = new RateLimiter(config.rateLimitPerUser, config.rateLimitWindowMs);
+  rateLimiter.startCleanup();
+
+  const services = {
+    config: configService,
+    conversations: createConversationService(database, configService),
+    messages: createMessageService(database),
+    tasks: createTaskService(database, muteService),
+    roles: rolesService,
+    mutes: muteService,
+    users: createUserService(database),
+    policy: createPolicyService(config, rolesService, configService, muteService, rateLimiter),
+  };
+
+  const agent = new SubprocessAgent(config);
+  const core = new MercuryCoreRuntime({ config, database, services, agent });
   await core.initialize();
 
   // ─── Load Extensions ────────────────────────────────────────────────────
@@ -58,145 +87,35 @@ async function main() {
   const configRegistry = new ConfigRegistry();
   const extensionsDir = resolveProjectPath(`${config.dataDir}/extensions`);
   const builtinExtDir = join(__dirname, "extensions");
+  const extState = createExtensionStateService(database);
+
   await registry.loadAll(
     extensionsDir,
-    core.db,
+    extState,
+    services.roles,
     logger,
     configRegistry,
     builtinExtDir,
   );
   logger.info("Extensions loaded", { count: registry.size });
 
-  // Wire extensions into runtime (hooks, context)
   core.initExtensions(registry);
 
-  // Install skills (extension + built-in)
-  const globalDir = resolveProjectPath(config.globalDir);
-  installExtensionSkills(registry.list(), globalDir, logger);
-  installBuiltinSkills(
-    join(PACKAGE_ROOT, "resources/skills"),
-    globalDir,
-    logger,
-  );
-
-  // Ensure base image is available (auto-pull if missing)
-  await core.containerRunner.ensureImage();
-
-  // Build derived container image if extensions declare CLIs
-  const agentImage = await ensureDerivedImage(
-    config.agentContainerImage,
-    registry.list(),
-    logger,
-  );
-  core.containerRunner.setImage(agentImage);
-
-  // ─── Setup Adapters ─────────────────────────────────────────────────────
-
-  const adapters = setupAdapters(config);
-
-  // ─── Platform Bridges ─────────────────────────────────────────────────
-
-  const bridges: Record<string, PlatformBridge> = {};
-
-  if (adapters.whatsapp) {
-    bridges.whatsapp = new WhatsAppBridge(
-      adapters.whatsapp as WhatsAppBaileysAdapter,
-    );
-  }
-  if (adapters.discord) {
-    bridges.discord = new DiscordBridge(
-      adapters.discord as DiscordNativeAdapter,
-    );
-  }
-  if (adapters.slack) {
-    const slackBotToken = process.env.MERCURY_SLACK_BOT_TOKEN;
-    if (!slackBotToken) {
-      throw new Error("Slack enabled but MERCURY_SLACK_BOT_TOKEN is missing");
+  const workspace = resolveProjectPath(config.workspaceDir);
+  const builtinSkillsDir = join(PACKAGE_ROOT, "resources/skills");
+  const builtinSkillNames = new Set<string>();
+  if (fs.existsSync(builtinSkillsDir)) {
+    for (const e of fs.readdirSync(builtinSkillsDir, { withFileTypes: true })) {
+      if (e.isDirectory()) builtinSkillNames.add(e.name);
     }
-    bridges.slack = new SlackBridge(adapters.slack, slackBotToken);
   }
-  if (adapters.teams) {
-    bridges.teams = new TeamsBridge(adapters.teams);
-  }
+  installExtensionSkills(registry.list(), workspace, logger, builtinSkillNames);
+  installBuiltinSkills(builtinSkillsDir, workspace, logger);
 
-  const normalizeCtx: NormalizeContext = {
-    botUserName: config.botUsername,
-    getWorkspace: (spaceId) =>
-      ensureSpaceWorkspace(resolveProjectPath(config.spacesDir), spaceId),
-    media: {
-      enabled: config.mediaEnabled,
-      maxSizeBytes: config.mediaMaxSizeMb * 1024 * 1024,
-    },
-  };
+  // ─── Setup Chat SDK Adapters (optional) ──────────────────────────────────
 
-  const handlers = new Map<string, ReturnType<typeof createMessageHandler>>();
-  for (const [name, bridge] of Object.entries(bridges)) {
-    handlers.set(
-      name,
-      createMessageHandler({ bridge, core, config, ctx: normalizeCtx }),
-    );
-  }
-
-  // ─── Message Dispatch ───────────────────────────────────────────────────
-
-  const onMessage = (adapter: Adapter, threadId: string, message: Message) => {
-    const handler = handlers.get(adapter.name);
-    if (handler) {
-      void handler(adapter, threadId, message).catch((error) =>
-        logger.error(
-          "Message handler failed",
-          error instanceof Error ? error : undefined,
-        ),
-      );
-    } else {
-      logger.warn("No bridge for adapter", { adapter: adapter.name });
-    }
-  };
-
-  // Chat shim satisfies Chat SDK adapter interface (initialize, webhooks)
-  // without the full Chat routing pipeline (subscriptions, mention routing, locks).
-  // Mercury handles its own routing via conversation resolution + trigger matching.
-  const chatShim = createChatShim(onMessage);
-
-  // ─── Message Sender (for scheduled tasks) ───────────────────────────────
-
-  const messageSender: import("./types.js").MessageSender = {
-    async send(groupId, text, files) {
-      const [platform] = groupId.split(":");
-      const bridge = bridges[platform];
-      if (!bridge) {
-        logger.warn("Message dropped — no bridge for platform", {
-          groupId,
-          platform,
-        });
-        return;
-      }
-      await bridge.sendReply(groupId, text, files);
-    },
-  };
-
-  // ─── Start Services ─────────────────────────────────────────────────────
-
-  core.startScheduler(messageSender);
-
-  // Start extension background jobs
-  const jobRunner = new JobRunner();
-  jobRunner.start(registry.list(), {
-    db: core.db,
-    config,
-    log: logger,
-  });
-  core.onShutdown(() => jobRunner.stop());
-
-  // Initialize adapters via shim (calls adapter.initialize(chatShim))
-  for (const [name, adapter] of Object.entries(adapters)) {
-    logger.info("Initializing adapter", { adapter: name });
-    await adapter.initialize(chatShim);
-  }
-
-  // ─── Create HTTP Server ─────────────────────────────────────────────────
-
-  // Build webhook handlers — each adapter's handleWebhook is called directly
+  let adapters: Record<string, any> = {};
+  let bot: Chat | null = null;
   const webhooks: Record<
     string,
     (
@@ -205,9 +124,77 @@ async function main() {
     ) => Promise<Response>
   > = {};
 
-  for (const [name, adapter] of Object.entries(adapters)) {
-    webhooks[name] = (request, options) =>
-      adapter.handleWebhook(request, options);
+  const hasAdapters = config.enableWhatsApp || config.enableDiscord || config.enableSlack;
+
+  if (hasAdapters) {
+    adapters = await setupChatSdkAdapters(config, logger);
+
+    const ingressService = createIngressService(core, config, logger);
+    const handleMessage = createChatSdkAdapter({
+      ingress: ingressService,
+      config,
+      log: logger,
+      adapters,
+    });
+
+    bot = new Chat({
+      userName: config.botUsername,
+      adapters,
+      state: createMemoryState(),
+    });
+
+    bot.onNewMention(async (thread, message) => {
+      await handleMessage(thread, message, true);
+    });
+    bot.onSubscribedMessage(async (thread, message) => {
+      await handleMessage(thread, message, false);
+    });
+    bot.onNewMessage(/.+/, async (thread, message) => {
+      await handleMessage(thread, message, false);
+    });
+
+    await bot.initialize();
+    await connectAdapters(adapters, logger);
+
+    const messageSender = createChatSdkSender(bot, core.services.conversations, logger);
+    core.startScheduler(messageSender);
+
+    for (const [name, adapter] of Object.entries(adapters)) {
+      if ("handleWebhook" in (adapter as any)) {
+        webhooks[name] = (request, options) =>
+          (adapter as any).handleWebhook(request, options);
+      }
+    }
+  } else {
+    logger.info("No chat adapters enabled — running with CLI/API ingress only");
+    core.startScheduler();
+  }
+
+  // ─── Background Jobs ───────────────────────────────────────────────────
+
+  const jobRunner = new JobRunner();
+  jobRunner.start(registry.list(), {
+    db: core.database,
+    config,
+    log: logger,
+  });
+  core.onShutdown(() => jobRunner.stop());
+
+  const apiKeys = createApiKeyService(database);
+
+  // Ensure an internal API key exists for agent subprocess → API calls
+  const existingKeys = apiKeys.list().filter((k) => !k.revokedAt);
+  if (existingKeys.length === 0) {
+    const { key } = apiKeys.create("default");
+    process.env.MERCURY_API_KEY = key;
+    logger.info("Generated default API key");
+  } else {
+    // If we don't have the key in env, create a new internal one
+    if (!process.env.MERCURY_API_KEY) {
+      const { key } = apiKeys.create("internal");
+      process.env.MERCURY_API_KEY = key;
+      logger.info("Generated internal API key for agent subprocess");
+    }
   }
 
   const app = createApp({
@@ -218,6 +205,7 @@ async function main() {
     startTime,
     registry,
     configRegistry,
+    apiKeys,
   });
 
   const server = Bun.serve({
@@ -227,22 +215,14 @@ async function main() {
 
   // ─── Shutdown Hooks ─────────────────────────────────────────────────────
 
-  core.onShutdown(async () => {
-    logger.info("Shutdown: closing chat adapters");
-    for (const [name, adapter] of Object.entries(adapters)) {
-      try {
-        if ("shutdown" in adapter && typeof adapter.shutdown === "function") {
-          await (adapter as { shutdown: () => Promise<void> }).shutdown();
-          logger.info("Shutdown: adapter disconnected", { adapter: name });
-        }
-      } catch (err) {
-        logger.error("Shutdown: failed to disconnect adapter", {
-          adapter: name,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      }
-    }
-  });
+  if (bot) {
+    const botRef = bot;
+    core.onShutdown(async () => {
+      logger.info("Shutdown: closing adapters");
+      await disconnectAdapters(adapters, logger);
+      await botRef.shutdown();
+    });
+  }
 
   core.onShutdown(async () => {
     logger.info("Shutdown: stopping HTTP server");
@@ -251,27 +231,11 @@ async function main() {
 
   core.installSignalHandlers();
 
-  // ─── Startup Logs ───────────────────────────────────────────────────────
-
   logger.info("Server started", {
     port: server.port,
-    image: config.agentContainerImage,
+
     adapters: Object.keys(adapters).join(", "),
   });
-  logger.info("Webhook path pattern: POST /webhooks/:platform");
-  logger.info("Internal API: /api/*");
-
-  if (adapters.discord) {
-    logger.info("Discord enabled (native adapter with persistent connection)");
-  }
-  if (adapters.teams) {
-    logger.info("Teams enabled (webhook via Azure Bot Service)");
-  }
-  if (adapters.whatsapp) {
-    logger.info("WhatsApp enabled", {
-      authDir: resolveProjectPath(config.whatsappAuthDir),
-    });
-  }
 }
 
 main().catch((error) => {

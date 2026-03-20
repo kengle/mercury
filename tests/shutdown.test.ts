@@ -2,66 +2,70 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { AppConfig } from "../src/config.js";
-import { MercuryCoreRuntime } from "../src/core/runtime.js";
-import { SpaceQueue } from "../src/core/space-queue.js";
+import type { AppConfig } from "../src/core/config.js";
+import { AgentQueue } from "../src/core/runtime/queue.js";
+import { MercuryCoreRuntime } from "../src/core/runtime/runtime.js";
+import { createDatabase } from "../src/core/db.js";
+import { createConfigService } from "../src/services/config/service.js";
+import { createConversationService } from "../src/services/conversations/service.js";
+import { createMessageService } from "../src/services/messages/service.js";
+import { createTaskService } from "../src/services/tasks/service.js";
+import { createRoleService } from "../src/services/roles/service.js";
+import { createMuteService } from "../src/services/mutes/service.js";
+import { createUserService } from "../src/services/users/service.js";
+import type { Agent } from "../src/core/runtime/agent-interface.js";
+import { createPolicyService } from "../src/services/policy/service.js";
 
-describe("SpaceQueue shutdown", () => {
-  test("cancelAll cancels all pending work across spaces", () => {
-    const q = new SpaceQueue(1);
-    // Fill concurrency so further enqueues are pending
-    q.enqueue("g1", () => new Promise(() => {})); // never resolves
+describe("AgentQueue shutdown", () => {
+  test("cancelPending cancels all pending work", () => {
+    const q = new AgentQueue();
+    q.enqueue(() => new Promise(() => {})); // never resolves (active)
 
-    // These will queue as pending
-    q.enqueue("g2", async () => "a");
-    q.enqueue("g3", async () => "b");
-    q.enqueue("g1", async () => "c");
+    q.enqueue(async () => "a");
+    q.enqueue(async () => "b");
 
-    const cancelled = q.cancelAll();
-    // g2, g3 are pending (g1's second is also pending), g1's first is active
-    expect(cancelled).toBe(3);
-    expect(q.activeCount).toBe(1);
+    const cancelled = q.cancelPending();
+    expect(cancelled).toBe(2);
+    expect(q.isActive).toBe(true);
   });
 
-  test("cancelAll returns 0 when nothing is pending", () => {
-    const q = new SpaceQueue(2);
-    expect(q.cancelAll()).toBe(0);
+  test("cancelPending returns 0 when nothing is pending", () => {
+    const q = new AgentQueue();
+    expect(q.cancelPending()).toBe(0);
   });
 
   test("waitForActive resolves immediately when nothing active", async () => {
-    const q = new SpaceQueue(2);
+    const q = new AgentQueue();
     const result = await q.waitForActive(100);
     expect(result).toBe(true);
   });
 
   test("waitForActive waits for active work to finish", async () => {
-    const q = new SpaceQueue(2);
+    const q = new AgentQueue();
     let resolve!: () => void;
     const workDone = new Promise<void>((r) => {
       resolve = r;
     });
 
-    const workPromise = q.enqueue("g1", async () => {
+    const workPromise = q.enqueue(async () => {
       await workDone;
       return "done";
     });
 
-    expect(q.activeCount).toBe(1);
+    expect(q.isActive).toBe(true);
 
-    // Start waiting, then resolve the work
     const waitPromise = q.waitForActive(5000);
     setTimeout(() => resolve(), 50);
 
     const result = await waitPromise;
     expect(result).toBe(true);
-    expect(q.activeCount).toBe(0);
-    await workPromise; // clean up
+    expect(q.isActive).toBe(false);
+    await workPromise;
   });
 
   test("waitForActive returns false on timeout", async () => {
-    const q = new SpaceQueue(2);
-    // Work that never finishes
-    q.enqueue("g1", () => new Promise(() => {}));
+    const q = new AgentQueue();
+    q.enqueue(() => new Promise(() => {}));
 
     const result = await q.waitForActive(200);
     expect(result).toBe(false);
@@ -72,6 +76,13 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
   let tmpDir: string;
   let core: MercuryCoreRuntime;
 
+  const mockAgent: Agent = {
+    async run() { return { text: "", files: [] }; },
+    abort() { return false; },
+    kill() {},
+    get isRunning() { return false; },
+  };
+
   function makeConfig(dir: string): AppConfig {
     return {
       modelProvider: "anthropic",
@@ -79,25 +90,35 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
       triggerPatterns: "@test,test",
       triggerMatch: "mention",
       dataDir: dir,
-      maxConcurrency: 2,
       port: 0,
       botUsername: "test",
       discordGatewayDurationMs: 600_000,
       discordGatewaySecret: undefined,
       enableWhatsApp: false,
       authPath: undefined,
-      agentContainerImage: "test:latest",
-      admins: "",
       dbPath: path.join(dir, "state.db"),
-      globalDir: path.join(dir, "global"),
-      spacesDir: path.join(dir, "spaces"),
+      workspaceDir: path.join(dir, "workspace"),
       whatsappAuthDir: path.join(dir, "wa-auth"),
-    };
+    } as AppConfig;
   }
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-shutdown-"));
-    core = new MercuryCoreRuntime(makeConfig(tmpDir));
+    const cfg = makeConfig(tmpDir);
+    const database = createDatabase(path.join(tmpDir, "state.db"));
+    const configSvc = createConfigService(database);
+    const muteSvc = createMuteService(database);
+    const services = {
+      config: configSvc,
+      conversations: createConversationService(database, configSvc),
+      messages: createMessageService(database),
+      tasks: createTaskService(database, muteSvc),
+      roles: createRoleService(database, configSvc),
+      mutes: muteSvc,
+      users: createUserService(database),
+      policy: createPolicyService(cfg, createRoleService(database, configSvc), configSvc, muteSvc),
+    };
+    core = new MercuryCoreRuntime({ config: cfg, database, services, agent: mockAgent });
   });
 
   afterEach(() => {
@@ -109,14 +130,14 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
     core.startScheduler();
 
     // Write something to DB to confirm it's open
-    core.db.ensureSpace("test-group");
+    core.services.messages.create("user", "test");
 
     await core.shutdown(5000);
 
     expect(core.isShuttingDown).toBe(true);
 
     // DB should be closed — further writes should throw
-    expect(() => core.db.ensureSpace("another")).toThrow();
+    expect(() => core.services.messages.create("user", "test")).toThrow();
   });
 
   test("shutdown is idempotent — second call is a no-op", async () => {
@@ -157,45 +178,36 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
 
     expect(order).toEqual(["hook1", "hook2"]);
     // DB should still be closed despite hook error
-    expect(() => core.db.ensureSpace("x")).toThrow();
+    expect(() => core.services.messages.create("user", "test")).toThrow();
   });
 
   test("shutdown cancels pending queue entries", async () => {
-    // Fill concurrency
-    core.queue.enqueue("g1", () => new Promise(() => {}));
-    core.queue.enqueue("g2", () => new Promise(() => {}));
+    // Fill the single slot with work that never resolves
+    core.queue.enqueue(() => new Promise(() => {}));
 
     // These should be pending
-    core.queue.enqueue("g3", async () => "a");
-    core.queue.enqueue("g4", async () => "b");
+    core.queue.enqueue(async () => "a");
+    core.queue.enqueue(async () => "b");
 
     await core.shutdown(2000);
 
-    // Pending entries should have been cancelled
-    // (active ones won't drain since they never resolve, but we hit the timeout)
     expect(core.isShuttingDown).toBe(true);
   });
 });
 
-describe("AgentContainerRunner.killAll", () => {
-  test("killAll concept - kills all tracked processes", () => {
-    // We can't easily spawn real Docker containers in tests, but we verify
-    // the map-based tracking and signal escalation logic
+describe("SubprocessAgent.kill", () => {
+  test("kill sends SIGKILL to running process", () => {
     const killed: string[] = [];
-    const running = new Map<string, { kill: (sig: string) => void }>();
+    let running: { kill: (sig: string) => void } | null = {
+      kill: (sig) => killed.push(sig),
+    };
 
-    running.set("g1", {
-      kill: (sig) => killed.push(`g1:${sig}`),
-    });
-    running.set("g2", {
-      kill: (sig) => killed.push(`g2:${sig}`),
-    });
-
-    // Simulate killAll
-    for (const [_spaceId, proc] of running) {
-      proc.kill("SIGTERM");
+    if (running) {
+      running.kill("SIGKILL");
+      running = null;
     }
 
-    expect(killed).toEqual(["g1:SIGTERM", "g2:SIGTERM"]);
+    expect(killed).toEqual(["SIGKILL"]);
+    expect(running).toBeNull();
   });
 });

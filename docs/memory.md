@@ -1,127 +1,54 @@
 # Memory
 
-Mercury stores memory per **space** in the space workspace directory. Memory behavior is extension-driven (for example, via a napkin extension).
+Mercury stores memory in a single workspace directory and per-conversation session files.
 
-## How It Works
+## Workspace
 
-Each space gets a workspace at:
-
-```text
-.mercury/spaces/<space-id>/
 ```
-
-Core directories Mercury manages:
-
-```text
-.mercury/spaces/<space-id>/
+.mercury/workspace/
 ├── inbox/              # Media received from users
 ├── outbox/             # Files produced by the agent
-├── AGENTS.md           # Space instructions
-└── .mercury.session.jsonl
+├── AGENTS.md           # Agent instructions
+├── .pi/
+│   ├── skills/         # Installed skills (built-in + extension)
+│   └── extensions/     # Pi extensions (permission guard)
+└── (extension dirs)    # Created by extensions (e.g., knowledge/)
 ```
 
-Additional vault structure (for example `.obsidian/`, `knowledge/`, `daily/`, `entities/`) is created by installed extensions.
+The workspace is shared across all conversations. Extensions create additional directories via the `workspace_init` hook.
 
-## Vault Structure
+## Sessions
 
-There is no single required memory schema in core Mercury. The exact structure depends on your extension setup.
+Each conversation gets its own pi session file:
 
-A common pattern (napkin example) is:
-
-```text
-knowledge/
-├── people/
-├── projects/
-├── references/
-└── daily/
+```
+.mercury/sessions/<conversation-id>/session.jsonl
 ```
 
-Conversations do not get their own vaults — multiple platform conversations can link into the same space.
+Sessions persist agent conversation history across messages. The `/compact` command resets the session (fresh context). The `/new` command starts a new session without compacting.
 
-## Agent Capabilities
+## Ambient Messages
 
-The agent discovers extension commands via installed skills (for example `napkin` skill in `.mercury/extensions/napkin/skill/`).
+Non-triggering messages in paired group conversations are stored as ambient context in the `messages` table. When the agent is triggered, recent ambient messages are included in the prompt so the agent has conversational context.
 
-### Reading
+Format: `AuthorName: message text`
 
-```bash
-napkin search "query"              # Find relevant files
-napkin read "filename"             # Read a specific file
-napkin link back --file "name"     # See what links to a file
-napkin daily read                  # Read today's daily note
-```
+## Message History
 
-### Writing
+The agent receives recent message history (up to 200 messages) from the current conversation, starting after the last session boundary. This includes:
+- `user` — messages that triggered the agent
+- `assistant` — agent responses
+- `ambient` — non-triggering group messages
 
-```bash
-napkin create --name "Liat" --path entities --content "..."
-napkin append --file "Liat" --content "..."
-napkin property set --file "Liat" --name birthday --value "April 15"
-napkin daily append --content "- Discussed vacation plans"
-```
+## Extension-Driven Memory
 
-### Wikilinks
-
-The agent uses `[[wikilinks]]` when mentioning entities. This creates a navigable graph:
-
-```markdown
----
-type: person
-relationship: wife
----
-
-# Liat
-
-[[Michael]]'s wife. Planning a surprise party at [[Dizengoff Italian Place]].
-```
-
-## User Interaction
-
-Users manage memory through natural chat:
-
-| User says | What happens |
-|-----------|--------------|
-| "Remember that Liat's birthday is April 15" | Agent writes to `entities/Liat.md` |
-| "What do you know about Liat?" | Agent reads and summarizes the entity file |
-| "Forget everything about the project" | Agent deletes the entity file |
-
-## Entity Format
-
-Entities are markdown files with optional YAML frontmatter:
-
-```markdown
----
-type: person
-birthday: April 15
----
-
-# Liat
-
-Context and notes about Liat.
-
-_2026-02-20:_ Booked the Italian place for April 12.
-_2026-02-25:_ Changed venue to [[Cafe Nimrod]].
-```
-
-- **Frontmatter** — Structured attributes (replace semantics)
-- **Body** — Accumulated context (append semantics, timestamped)
-- **Wikilinks** — Connections to other entities
+The workspace structure beyond `inbox/`/`outbox/` is extension-driven. For example, the `knowledge` extension creates a vault with `entities/`, `daily/`, etc. See [kb-distillation.md](kb-distillation.md).
 
 ## Persistence
 
-Memory persists because the agent writes to disk during conversation. When a session compacts or restarts, the vault files remain — the agent reads them fresh on next interaction.
+Memory persists because:
+1. The workspace is on disk (mounted as `/data/workspace` in Docker)
+2. Session files accumulate conversation history
+3. The SQLite database stores messages, conversations, tasks, roles, config
 
-The vault is plain markdown. You can:
-- Open it in Obsidian and browse the graph
-- Edit files directly from the host
-- Back it up like any other directory
-
-## Configuration
-
-Memory behavior is controlled by installed extensions and their config.
-
-To use a shared Obsidian vault across tools, symlink or mount it:
-
-```bash
-ln -s /path/to/your/vault .mercury/spaces/main
-```
+The workspace is plain files. You can browse it, edit files directly, or back it up.

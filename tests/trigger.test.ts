@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { matchTrigger } from "../src/core/trigger.js";
-import type { TriggerConfig, TriggerMatch } from "../src/types.js";
+import { matchTrigger } from "../src/core/ingress/trigger.js";
+import type { TriggerConfig, TriggerMatch } from "../src/core/types.js";
 
 function cfg(overrides: Partial<TriggerConfig> = {}): TriggerConfig {
   return {

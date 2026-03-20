@@ -1,211 +1,116 @@
 # Message Pipeline
 
-Mercury connects to chat platforms through **adapters** and **bridges**. Messages flow through a standardized pipeline regardless of platform:
+Messages flow through the ingress service, policy service, and runtime to produce responses.
+
+## Flow
 
 ```
-Platform → Adapter → parseThread() → resolveConversation() → PlatformBridge.normalize() → handleRawInput() → Container → PlatformBridge.sendReply()
-```
-
-## Architecture
-
-```
-Platform (WhatsApp / Slack / Discord)
+Platform (WhatsApp / Slack / Discord / CLI)
   │
-  ├─► Adapter receives raw message
-  │     • Platform-specific connection (socket, webhook)
-  │     • Mention normalization, reply-to-bot detection
-  │     • Media download (WhatsApp only — uses Baileys socket)
-  │     • Passes data via message metadata
+  ├─► Chat SDK Adapter (chatsdk-adapter.ts)
+  │     • Parses Chat SDK objects
+  │     • Detects platform, callerId, mentions
+  │     • Downloads attachments to inbox/
+  │     • Creates MessageChannel
   │
-  ├─► Unified handler (src/core/handler.ts)
-  │     • Parse platform thread into an external conversation ID
-  │     • Resolve/create conversation in DB
-  │     • Ignore unlinked conversations
-  │     • Pre-route trigger check (cheap, sync)
-  │     • Start typing indicator if matched
-  │     • Call bridge.normalize(..., spaceId) → IngressMessage
-  │     • Start typing for reply-to-bot (detected during normalize)
+  ├─► Ingress Service
+  │     ├─► Unpaired? Only /pair allowed, else ignore
+  │     ├─► Paired:
+  │     │     ├─► Slash commands → permission check → execute
+  │     │     ├─► Not addressed to bot → store ambient → return
+  │     │     └─► Mentioned/DM → mark read, start typing → continue
+  │     │
+  │     └─► Runtime.handleMessage()
   │
-  ├─► core.handleRawInput(IngressMessage)
-  │     • Route: trigger match, permissions, command detection
-  │     • If triggered → queue → container run → ContainerResult
-  │     • If not triggered → store as ambient context
-  │     • If command → execute immediately (stop, compact)
-  │     • If denied → return reason
+  ├─► Policy Service
+  │     • Trigger matching (mention/prefix/always)
+  │     • Permission check (prompt.group / prompt.dm)
+  │     • Mute check
+  │     • Rate limit check
+  │     → Returns: process / deny / ignore
   │
-  └─► bridge.sendReply(text, files?)
-        • Text reply via adapter
-        • File attachments via platform-specific API
+  ├─► Runtime (executePrompt)
+  │     • Store user message
+  │     • Run extension hooks (workspace_init, before_container)
+  │     • Resolve RBAC (denied CLIs, extension env vars)
+  │     • Fetch message history
+  │     • Call agent.run() (subprocess)
+  │     • Run after_container hooks
+  │     • Store assistant message
+  │
+  └─► Response
+        • Text reply via MessageChannel
+        • File attachments via platform-specific sending
 ```
 
-## PlatformBridge
-
-Each platform implements a single `PlatformBridge` interface covering both ingress and egress:
-
-```typescript
-interface PlatformBridge {
-  readonly platform: string;
-  parseThread(threadId: string): { externalId: string; isDM: boolean };
-  normalize(threadId, message, ctx, spaceId): Promise<IngressMessage | null>;
-  sendReply(threadId, text, files?): Promise<void>;
-}
-```
-
-Bridges live in `src/bridges/`:
-
-| Bridge | File | Platform details |
-|--------|------|-----------------|
-| `WhatsAppBridge` | `src/bridges/whatsapp.ts` | Baileys socket for file sending |
-| `DiscordBridge` | `src/bridges/discord.ts` | discord.js channel.send() for files |
-| `SlackBridge` | `src/bridges/slack.ts` | Slack files.uploadV2 API |
-
-## Ingress
-
-### IngressMessage
-
-Every adapter produces a normalized `IngressMessage`:
-
-```typescript
-interface IngressMessage {
-  platform: string;
-  spaceId: string;
-  conversationExternalId: string;
-  callerId: string;        // "whatsapp:jid", "discord:123", "slack:U123"
-  authorName?: string;
-  text: string;
-  isDM: boolean;
-  isReplyToBot: boolean;
-  attachments: MessageAttachment[];
-}
-```
-
-All fields are required — no optional booleans or arrays. `spaceId` is the resolved memory boundary; `conversationExternalId` is the platform-native conversation key used for routing.
-
-### inbox/ directory
-
-Incoming media attachments are downloaded to `{workspace}/inbox/`:
+## CLI / API Path
 
 ```
-{workspace}/
-├── inbox/
-│   ├── 1741243200000-photo.jpg
-│   ├── 1741243500000-voice.ogg
-│   └── 1741244000000-report.pdf
+POST /chat
+  │
+  ├─► Chat Service
+  │     • Save input files to inbox/
+  │     • Build IngressMessage (isDM=true, isReplyToBot=true)
+  │     • Create conversation
+  │
+  ├─► Runtime.handleMessage(source="cli")
+  │     • Skip policy (trusted ingress)
+  │     • Check mute
+  │     • Execute agent directly
+  │
+  └─► Response JSON: { reply, files[] }
 ```
-
-WhatsApp downloads via Baileys socket. Discord and Slack use URL-based download (`src/core/media.ts`) with optional auth headers.
-
-## Egress
-
-### ContainerResult
-
-Container runs return `ContainerResult` instead of a plain string:
-
-```typescript
-interface ContainerResult {
-  reply: string;
-  files: EgressFile[];  // Scanned from workspace outbox/
-}
-```
-
-### outbox/ directory
-
-The model writes files to `./outbox/` during a run. After the container exits, the runtime scans for files with `mtime >= startTime` — new or modified files are attached to the reply.
-
-```
-{workspace}/
-├── outbox/
-│   ├── chart.png       ← written by model, sent with reply
-│   └── summary.pdf     ← written by model, sent with reply
-```
-
-Previous outbox files are NOT deleted — the agent retains history. Only files created or modified during the current run are sent.
-
-### File sending by platform
-
-| Platform | Mechanism |
-|----------|-----------|
-| WhatsApp | `sock.sendMessage()` with image/video/audio/document content types, caption on last file |
-| Discord | `channel.send({ files: [...] })` — text + files in one message |
-| Slack | `files.uploadV2` API — text sent first, then files uploaded separately |
-
-## Adapters
-
-### WhatsApp
-
-Uses [Baileys](https://github.com/WhiskeySockets/Baileys) for a direct WebSocket connection.
-
-| Detail | Value |
-|--------|-------|
-| **Connection** | WebSocket (Baileys) |
-| **Space ID** | Full thread ID (e.g., `whatsapp:12345@g.us:12345@g.us`) |
-| **DM detection** | Thread ID does not contain `@g.us` |
-| **@mention** | Bot JID mention replaced with configured `userName` in adapter |
-| **Reply-to-bot** | Quoted message participant matches bot JID |
-| **Media** | Downloaded via Baileys to `inbox/` |
-
-### Discord
-
-Uses discord.js with persistent WebSocket gateway.
-
-| Detail | Value |
-|--------|-------|
-| **Connection** | WebSocket (discord.js) |
-| **Space ID** | Full thread ID (e.g., `discord:guild:channel[:thread]`) |
-| **DM detection** | Guild ID is `@me` |
-| **@mention** | `<@botId>` converted to `@userName` in bridge |
-| **Reply-to-bot** | Replied-to message author matches bot ID |
-| **Media** | Downloaded from CDN URLs to `inbox/` |
-
-### Slack
-
-Uses `@chat-adapter/slack` with webhook-based event delivery.
-
-| Detail | Value |
-|--------|-------|
-| **Connection** | Webhook (`POST /webhooks/slack`) |
-| **Conversation external ID** | `slack:<channelId>` or `slack:<channelId>:<threadTs>` |
-| **DM detection** | Channel starts with `D` or `G` |
-| **Reply-to-bot** | Not implemented (Slack threading model) |
-| **Media** | Downloaded from `url_private` with bot token auth to `inbox/` |
 
 ## Trigger Matching
 
-All platforms share the same trigger engine. A pre-route check runs before `normalize()` so the typing indicator fires early.
-
 | Mode | Behavior |
 |------|----------|
-| `mention` | Message contains trigger pattern as a standalone word (default) |
+| `mention` | Message contains trigger pattern as a word (default) |
 | `prefix` | Message starts with trigger pattern |
-| `always` | Every message triggers a response |
+| `always` | Every message triggers |
 
-DMs always match regardless of mode.
+DMs always trigger regardless of mode. Replies to bot messages trigger in groups.
 
-### Reply-to-Bot
+Configured via `MERCURY_TRIGGER_PATTERNS` and `MERCURY_TRIGGER_MATCH`, overridable per-deployment via `mrctl config set trigger.match <mode>`.
 
-Replying to a bot message triggers a response without explicit `@mention`. Works on WhatsApp and Discord. Not implemented for Slack.
+## Ambient Messages
 
-## Chat API (Direct Bridge)
+Non-triggering messages in paired groups are stored as ambient context:
 
-`POST /chat` provides a synchronous HTTP bridge for external agents, scripts, or CLIs. No platform adapter needed — it constructs an `IngressMessage` directly and runs through the same pipeline.
-
-```bash
-mercury chat "hello"
-mercury chat --file photo.jpg "what's in this?"
-mercury chat --space my-project "check status"
-echo "summarize" | mercury chat
-curl -X POST localhost:8787/chat -H 'Content-Type: application/json' \
-  -d '{"text": "hello", "callerId": "api:my-agent"}'
+```
+Alice: hello everyone
+Bob: what's for lunch?
 ```
 
-Request: `{ text, callerId?, spaceId?, authorName?, files?: [{ name, data(base64) }] }`
-Response: `{ reply, files: [{ filename, mimeType, sizeBytes, data(base64) }] }`
+When the agent is later triggered, these ambient messages are included in the prompt so it has conversational context.
 
-Input files are saved to the target space's `inbox/`. Output files are read from `outbox/` and returned as base64. Messages are always treated as DMs with `isReplyToBot: true`, so they always trigger a response regardless of trigger mode.
+## Inbox / Outbox
 
-## Adding a New Platform
+```
+workspace/
+├── inbox/     # Incoming attachments (images, docs, audio)
+├── outbox/    # Agent-produced files (attached to reply)
+```
 
-1. Implement `PlatformBridge` in `src/bridges/<platform>.ts`
-2. Create adapter in `src/adapters/<platform>.ts` (or use existing chat-sdk adapter)
-3. Register bridge in `src/main.ts`
-4. Add tests in `tests/<platform>-bridge.test.ts`
+Outbox files are scanned by mtime — only files created/modified during the current agent run are sent.
+
+## Adapters
+
+| Platform | Connection | Mention Detection | Media |
+|----------|-----------|-------------------|-------|
+| WhatsApp | WebSocket (Baileys) | JID in mentioned list | Downloaded via Baileys |
+| Discord | WebSocket (discord.js) | `<@botId>` in text | CDN URL download |
+| Slack | Webhook | App mention event | `url_private` with token |
+
+## Chat API
+
+```bash
+curl -X POST http://localhost:3000/chat \
+  -H "Authorization: Bearer <key>" \
+  -H "Content-Type: application/json" \
+  -d '{"text": "hello", "callerId": "alice", "files": [{"name": "doc.pdf", "data": "<base64>"}]}'
+```
+
+Response: `{ reply: string, files: [{ filename, mimeType, sizeBytes, data }] }`
+
+Always triggers (no trigger matching), respects mutes, per-caller conversation isolation.

@@ -49,14 +49,16 @@ mercury service status
 mercury service logs -f
 ```
 
-## Step 4: Link conversations
+## Step 4: Pair Conversations
 
-Send a message to the bot's WhatsApp number, then:
+Get the pairing code and send it in a group or DM:
 
 ```bash
-mercury conversations --unlinked
-mercury link <id> <space-name>
+mercury pair                    # Show pairing code
+# Then send "/pair <code>" in a WhatsApp group or DM
 ```
+
+DM pairing grants admin. Group pairing activates the bot in that group.
 
 ## Environment Variables
 

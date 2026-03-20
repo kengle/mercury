@@ -7,8 +7,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { registerPermission } from "../core/permissions.js";
-import type { Db } from "../storage/db.js";
+import type { ExtensionStateService } from "./state-service.js";
 import type {
   CliDef,
   ConfigDef,
@@ -29,7 +28,8 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
   constructor(
     readonly name: string,
     private readonly dir: string,
-    private readonly db: Db,
+    private readonly extState: ExtensionStateService,
+    private readonly registerPermissionFn: (name: string, opts: { defaultRoles: string[] }) => void,
   ) {
     this.meta = {
       name,
@@ -64,7 +64,7 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
       );
     }
     this.meta.permission = opts;
-    registerPermission(this.name, opts);
+    this.registerPermissionFn(this.name, opts);
   }
 
   env(def: EnvDef): void {
@@ -151,11 +151,11 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
 
   get store(): ExtensionStore {
     return {
-      get: (key: string) => this.db.getExtState(this.name, key),
+      get: (key: string) => this.extState.get(this.name, key),
       set: (key: string, value: string) =>
-        this.db.setExtState(this.name, key, value),
-      delete: (key: string) => this.db.deleteExtState(this.name, key),
-      list: () => this.db.listExtState(this.name),
+        this.extState.set(this.name, key, value),
+      delete: (key: string) => this.extState.delete(this.name, key),
+      list: () => this.extState.list(this.name),
     };
   }
 

@@ -5,7 +5,7 @@
  */
 
 import { CronExpressionParser } from "cron-parser";
-import type { Logger } from "../logger.js";
+import type { Logger } from "../core/logger.js";
 import type {
   ExtensionMeta,
   JobDef,

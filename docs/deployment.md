@@ -1,197 +1,105 @@
 # Deployment
 
-Mercury can run as a background daemon with automatic restart on crash.
+Mercury runs as a Docker container. The CLI manages the container lifecycle.
 
-## Quick Setup
-
-```bash
-# Install as user service (recommended)
-mercury service install
-
-# Check status
-mercury service status
-
-# View logs
-mercury service logs -f
-
-# Uninstall when needed
-mercury service uninstall
-```
-
-## Platform Support
-
-### Linux (systemd)
-
-Mercury installs as a systemd user service by default:
+## Quick Start
 
 ```bash
-# Install as user service (no sudo required)
-mercury service install
-
-# Or explicitly specify user mode
-mercury service install --user
+mercury init          # Create project (.env, workspace, first API key)
+mercury build         # Build Docker image with extensions
+mercury start         # Start container
+mercury logs -f       # View logs
+mercury stop          # Stop container
 ```
 
-The service file is written to `~/.config/systemd/user/mercury.service`.
-
-**Manual systemd commands:**
+## Container Management
 
 ```bash
-# Check status
-systemctl --user status mercury
-
-# Restart service
-systemctl --user restart mercury
-
-# Stop service
-systemctl --user stop mercury
-
-# View logs (follow mode)
-journalctl --user -u mercury -f
+mercury start         # Start (or replace existing) container
+mercury stop          # Stop and remove container
+mercury restart       # Rebuild image + restart container
+mercury logs          # View logs
+mercury logs -f       # Follow logs
+mercury status        # Check if running
 ```
 
-**User service notes:**
-- No root/sudo required
-- Service runs under your user account
-- Starts automatically on user login
-- For 24/7 operation without login, enable lingering: `loginctl enable-linger $USER`
+The container runs with:
+- `--restart unless-stopped` — auto-restarts on crash
+- `--cap-add SYS_ADMIN --security-opt seccomp=unconfined` — required for bubblewrap sandbox
+- `-v .mercury:/data` — persistent data (DB, workspace, auth, sessions)
+- `--env-file .env` — configuration
 
-### macOS (launchd)
+## Image
 
-Mercury installs as a launchd user agent:
+`mercury build` creates a Docker image from the base Dockerfile, then injects extension CLI install commands. The base image includes:
+
+- Bun, Node.js, Python, Go
+- `pi` CLI (AI agent runtime)
+- `mrctl` (Mercury control CLI)
+- Chromium (for browser automation extensions)
+- bubblewrap (agent sandbox)
+
+Extensions that declare CLIs (e.g., `npm install -g napkin-ai`) are installed into the image at build time.
+
+## Configuration
+
+All configuration is via `.env`:
 
 ```bash
-mercury service install
+# Required
+MERCURY_BOT_USERNAME=mercury
+MERCURY_MODEL_PROVIDER=anthropic
+MERCURY_MODEL=claude-sonnet-4-20250514
+
+# Server
+MERCURY_PORT=3000
+
+# Adapters (all optional — CLI-only mode if none enabled)
+MERCURY_ENABLE_WHATSAPP=false
+MERCURY_ENABLE_DISCORD=false
+MERCURY_ENABLE_SLACK=false
+
+# Trigger
+MERCURY_TRIGGER_PATTERNS=@Mercury,Mercury
 ```
 
-The plist is written to `~/Library/LaunchAgents/com.mercury.agent.plist`.
+## API Keys
 
-Logs are written to `.mercury/logs/` in your project directory:
-- `mercury.log` — stdout
-- `mercury.error.log` — stderr
-
-**Manual launchd commands:**
+All endpoints require authentication via `Authorization: Bearer <key>`.
 
 ```bash
-# Check if running
-launchctl list com.mercury.agent
-
-# Stop service
-launchctl stop com.mercury.agent
-
-# Start service
-launchctl start com.mercury.agent
-
-# Unload completely
-launchctl unload ~/Library/LaunchAgents/com.mercury.agent.plist
-
-# View logs
-tail -f .mercury/logs/mercury.log
+mercury api-keys create <name>    # Create new key (shown once)
+mercury api-keys list             # List keys (prefix only)
+mercury api-keys revoke <id>      # Revoke a key
 ```
 
-### Windows
+The first key is generated during `mercury init`. An internal key is auto-generated at startup for agent subprocess → API communication.
 
-Not currently supported via `mercury service`. Options:
+## CLI-Only Mode
 
-1. **Task Scheduler**: Create a task that runs `mercury run` at startup
-2. **NSSM**: Use [NSSM](https://nssm.cc/) to wrap Mercury as a Windows service
-3. **PM2**: Use `pm2 start "mercury run" --name mercury`
+If no chat adapters are enabled, Mercury runs with only the HTTP API:
 
-## Auto-Restart Behavior
+- `POST /chat` — send messages, get replies
+- `GET/POST /api/*` — management API
+- `mercury chat "hello"` — CLI wrapper
 
-Both systemd and launchd are configured to automatically restart Mercury if it crashes:
+## Data Directory
 
-- **systemd**: `Restart=on-failure` with 10-second delay
-- **launchd**: `KeepAlive=true` for immediate restart
+`.mercury/` contains all persistent state:
 
-## Working Directory
+```
+.mercury/
+├── state.db          # SQLite: conversations, messages, tasks, roles, config, mutes, api keys
+├── workspace/        # Agent workspace (AGENTS.md, skills, extensions, inbox, outbox)
+├── sessions/         # Per-conversation pi session files
+├── extensions/       # Installed Mercury extensions
+└── whatsapp-auth/    # WhatsApp credentials (if enabled)
+```
 
-The service is configured to run from the directory where you ran `mercury service install`. This means:
-
-- Your `.env` file is loaded from that directory
-- Relative paths in configuration resolve from there
-- The `.mercury/` data directory is in that location
-
-If you move your Mercury project, you'll need to uninstall and reinstall the service.
-
-## Logs
-
-### Linux
-
-Logs go to the systemd journal:
+## Health Check
 
 ```bash
-# View recent logs
-mercury service logs
-
-# Follow logs in real-time
-mercury service logs -f
-
-# Or use journalctl directly
-journalctl --user -u mercury -n 100
-journalctl --user -u mercury --since "1 hour ago"
+curl -H "Authorization: Bearer <key>" http://localhost:3000/health
 ```
 
-### macOS
-
-Logs go to files in `.mercury/logs/`:
-
-```bash
-# View recent logs
-mercury service logs
-
-# Follow logs in real-time
-mercury service logs -f
-
-# Or use tail directly
-tail -f .mercury/logs/mercury.log
-```
-
-## Troubleshooting
-
-### Service fails to start
-
-1. Run `mercury doctor` to check for common issues
-2. Check that `mercury run` works manually first
-3. Verify `.env` exists and is configured
-4. Check logs for errors: `mercury service logs`
-
-### Permission denied (Linux)
-
-If you see permission errors with system-level install, use user mode:
-
-```bash
-mercury service install --user
-```
-
-### Service not found after reboot (Linux)
-
-Enable user lingering so services start without login:
-
-```bash
-loginctl enable-linger $USER
-```
-
-### Logs not appearing (macOS)
-
-Check that the log directory exists:
-
-```bash
-mkdir -p .mercury/logs
-```
-
-Then reinstall the service:
-
-```bash
-mercury service uninstall
-mercury service install
-```
-
-### Multiple instances
-
-Each Mercury project should be installed as a separate service from its own directory. The service name is always `mercury`, so only one instance can be managed per user account.
-
-For multiple instances, consider:
-- Running different instances under different user accounts
-- Using Docker/Podman with separate containers
-- Manual systemd service files with unique names
+Returns: `{ status, uptime, queue, agent, adapters }`
