@@ -237,7 +237,3 @@ Extension CLIs are installed into the Docker image at build time. RBAC blocks de
 MIT
 
 ---
-
-<p align="center">
-  <em>There are many claws, but this one is mine.</em> 🪽
-</p>
