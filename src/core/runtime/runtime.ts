@@ -57,8 +57,6 @@ export class MercuryCoreRuntime {
     ensurePiResourceDir(this.workspace);
   }
 
-  async initialize(): Promise<void> {
-  }
 
   initExtensions(registry: ExtensionRegistry): void {
     this.hooks = new HookDispatcher(registry, logger);

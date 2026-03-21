@@ -79,7 +79,6 @@ async function main() {
 
   const agent = new SubprocessAgent(config);
   const core = new MercuryCoreRuntime({ config, database, services, agent });
-  await core.initialize();
 
   // ─── Load Extensions ────────────────────────────────────────────────────
 
