@@ -6,9 +6,9 @@ import { type AppConfig, resolveProjectPath } from "../config.js";
 import { HookDispatcher } from "../../extensions/hooks.js";
 import type { ExtensionRegistry } from "../../extensions/loader.js";
 import type { MercuryExtensionContext } from "../../extensions/types.js";
+import fs from "node:fs";
 import { logger } from "../logger.js";
 import { ensurePiResourceDir } from "./workspace.js";
-import { getApiKeyFromPiAuthFile } from "../auth.js";
 
 import type {
   AgentOutput,
@@ -59,16 +59,15 @@ export class MercuryCoreRuntime {
   }
 
   async initialize(): Promise<void> {
-
     const authPath = path.join(this.workspace, "auth.json");
-    const providerApiKey = await getApiKeyFromPiAuthFile({
-      provider: this.config.modelProvider,
-      authPath,
-    });
-    if (providerApiKey) {
-      const envKey = `${this.config.modelProvider.toUpperCase()}_API_KEY`;
-      process.env[envKey] = providerApiKey;
-      logger.info("Loaded API key from OAuth credentials");
+    const piAgentDir = path.join(process.env.HOME ?? "/root", ".pi", "agent");
+    const piAuthPath = path.join(piAgentDir, "auth.json");
+
+    if (fs.existsSync(authPath)) {
+      fs.mkdirSync(piAgentDir, { recursive: true });
+      try { fs.unlinkSync(piAuthPath); } catch {}
+      fs.symlinkSync(authPath, piAuthPath);
+      logger.info("Linked pi auth.json to workspace credentials");
     }
   }
 
