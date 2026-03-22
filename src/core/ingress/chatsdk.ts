@@ -1,9 +1,8 @@
 /**
  * Chat SDK adapter setup.
  *
- * Creates Chat SDK adapters for WhatsApp (Baileys) and Discord.
- * Used by deployments that use Chat SDK directly (fly.io)
- * instead of Mercury's native adapter wrappers.
+ * Creates Chat SDK adapters for WhatsApp (Baileys), Discord, and WeCom.
+ * Used by deployments that use Chat SDK directly.
  */
 
 import { createDiscordAdapter } from "@chat-adapter/discord";
@@ -12,6 +11,7 @@ import { createBaileysAdapter } from "chat-adapter-baileys";
 import type { AppConfig } from "../config.js";
 import { resolveProjectPath } from "../config.js";
 import type { Logger } from "../logger.js";
+import { createWeComAdapter } from "../../adapters/wecom.js";
 
 export interface ChatSdkAdapters {
   [name: string]: any;
@@ -59,9 +59,26 @@ export async function setupChatSdkAdapters(
     log.info("Discord adapter configured");
   }
 
+  if (config.enableWeCom) {
+    const botId = process.env.MERCURY_WECOM_BOT_ID;
+    const secret = process.env.MERCURY_WECOM_SECRET;
+    if (!botId || !secret) {
+      throw new Error(
+        "MERCURY_ENABLE_WECOM=true but missing MERCURY_WECOM_BOT_ID or MERCURY_WECOM_SECRET",
+      );
+    }
+    adapters.wecom = createWeComAdapter({
+      botId,
+      secret,
+      mediaDir: config.wecomMediaDir,
+      log,
+    });
+    log.info("WeCom adapter configured", { mediaDir: config.wecomMediaDir });
+  }
+
   if (Object.keys(adapters).length === 0) {
     throw new Error(
-      "No adapters enabled. Set MERCURY_ENABLE_WHATSAPP or MERCURY_ENABLE_DISCORD to true",
+      "No adapters enabled. Set MERCURY_ENABLE_WHATSAPP, MERCURY_ENABLE_DISCORD, or MERCURY_ENABLE_WECOM to true",
     );
   }
 
@@ -90,6 +107,12 @@ export async function connectAdapters(
         log.error("Discord gateway error", { error: err.message }),
       );
     log.info("Discord gateway started");
+  }
+
+  // WeCom adapter is initialized by Chat SDK's bot.initialize()
+  // No need to call initialize() here
+  if (adapters.wecom) {
+    log.info("WeCom adapter loaded (will be initialized by Chat SDK)");
   }
 }
 
@@ -122,6 +145,7 @@ export function getPlatformFromThreadId(threadId: string): string {
   if (threadId.startsWith("baileys:")) return "whatsapp";
   if (threadId.startsWith("discord:")) return "discord";
   if (threadId.startsWith("slack:")) return "slack";
+  if (threadId.startsWith("wecom:")) return "wecom";
   return "unknown";
 }
 

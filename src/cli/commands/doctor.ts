@@ -68,11 +68,12 @@ export function doctorAction(): void {
   const discordEnabled =
     envVars.MERCURY_ENABLE_DISCORD?.toLowerCase() === "true";
   const slackEnabled = envVars.MERCURY_ENABLE_SLACK?.toLowerCase() === "true";
+  const wecomEnabled = envVars.MERCURY_ENABLE_WECOM?.toLowerCase() === "true";
 
-  if (!whatsappEnabled && !discordEnabled && !slackEnabled) {
+  if (!whatsappEnabled && !discordEnabled && !slackEnabled && !wecomEnabled) {
     fail(
       "No adapters enabled",
-      "Set MERCURY_ENABLE_WHATSAPP, MERCURY_ENABLE_DISCORD, or MERCURY_ENABLE_SLACK to true in .env",
+      "Set MERCURY_ENABLE_WHATSAPP, MERCURY_ENABLE_DISCORD, MERCURY_ENABLE_SLACK, or MERCURY_ENABLE_WECOM to true in .env",
     );
   } else {
     if (whatsappEnabled) {
@@ -110,6 +111,19 @@ export function doctorAction(): void {
           !hasSecret && "MERCURY_SLACK_SIGNING_SECRET",
         ].filter(Boolean);
         fail(`Slack: enabled but missing ${missing.join(", ")}`, "Add to .env");
+      }
+    }
+    if (wecomEnabled) {
+      const hasBotId = !!envVars.MERCURY_WECOM_BOT_ID;
+      const hasSecret = !!envVars.MERCURY_WECOM_SECRET;
+      if (hasBotId && hasSecret) {
+        pass("WeCom: enabled and configured");
+      } else {
+        const missing = [
+          !hasBotId && "MERCURY_WECOM_BOT_ID",
+          !hasSecret && "MERCURY_WECOM_SECRET",
+        ].filter(Boolean);
+        fail(`WeCom: enabled but missing ${missing.join(", ")}`, "Add to .env");
       }
     }
   }

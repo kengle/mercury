@@ -20,6 +20,9 @@ export function statusAction(): void {
     const hasWhatsApp = /MERCURY_ENABLE_WHATSAPP\s*=\s*true/i.test(envContent);
     const hasSlack = /^[^#]*SLACK_BOT_TOKEN=\S+/m.test(envContent);
     const hasDiscord = /^[^#]*DISCORD_BOT_TOKEN=\S+/m.test(envContent);
+    const hasWeCom = /MERCURY_ENABLE_WECOM\s*=\s*true/i.test(envContent);
+    const hasWeComBotId = /^[^#]*MERCURY_WECOM_BOT_ID=\S+/m.test(envContent);
+    const hasWeComSecret = /^[^#]*MERCURY_WECOM_SECRET=\S+/m.test(envContent);
 
     console.log(`  WhatsApp: ${hasWhatsApp ? "✓ enabled" : "○ disabled"}`);
     console.log(
@@ -27,6 +30,9 @@ export function statusAction(): void {
     );
     console.log(
       `  Discord:  ${hasDiscord ? "✓ configured" : "○ not configured"}`,
+    );
+    console.log(
+      `  WeCom:    ${hasWeCom && hasWeComBotId && hasWeComSecret ? "✓ configured" : hasWeCom ? "○ enabled but missing credentials" : "○ disabled"}`,
     );
 
     const portMatch = envContent.match(/MERCURY_PORT\s*=\s*(\d+)/);

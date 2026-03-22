@@ -67,6 +67,9 @@ const schema = z.object({
   // ─── WhatsApp ───────────────────────────────────────────────────────
   enableWhatsApp: booleanFromEnv.default(false),
 
+  // ─── WeCom (Enterprise WeChat) ──────────────────────────────────────
+  enableWeCom: booleanFromEnv.default(false),
+
   // ─── Media Handling ─────────────────────────────────────────────────
   mediaEnabled: booleanFromEnv.default(true),
   mediaMaxSizeMb: z.coerce.number().min(1).max(100).default(10),
@@ -78,6 +81,7 @@ export type AppConfig = z.infer<typeof schema> & {
   dbPath: string;
   workspaceDir: string;
   whatsappAuthDir: string;
+  wecomMediaDir: string;
 };
 
 export function loadConfig(): AppConfig {
@@ -123,6 +127,9 @@ export function loadConfig(): AppConfig {
     // WhatsApp
     enableWhatsApp: process.env.MERCURY_ENABLE_WHATSAPP,
 
+    // WeCom
+    enableWeCom: process.env.MERCURY_ENABLE_WECOM,
+
     // Media Handling
     mediaEnabled: process.env.MERCURY_MEDIA_ENABLED,
     mediaMaxSizeMb: process.env.MERCURY_MEDIA_MAX_SIZE_MB,
@@ -140,6 +147,9 @@ export function loadConfig(): AppConfig {
     whatsappAuthDir:
       process.env.MERCURY_WHATSAPP_AUTH_DIR ??
       path.join(dataDir, "whatsapp-auth"),
+    wecomMediaDir:
+      process.env.MERCURY_WECOM_MEDIA_DIR ??
+      path.join(dataDir, "wecom-media"),
   };
 }
 

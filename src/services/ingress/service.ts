@@ -42,6 +42,16 @@ export function createIngressService(
       try { await channel.markRead(); } catch {}
       core.services.conversations.create(platform, externalId, isDM ? "dm" : "group");
 
+      // ─── Auto-pair DM for WeCom (internal system) ─────────────────────
+      if (isDM && platform === "wecom") {
+        const role = core.services.roles.get(callerId);
+        if (role !== "admin") {
+          core.services.conversations.pair(platform, externalId);
+          core.services.roles.set(callerId, "admin", "auto");
+          log.info("Auto-paired wecom DM as admin", { callerId, externalId });
+        }
+      }
+
       // ─── Slash commands (only when addressed to bot) ────────────────────
       if (text.startsWith("/") && (isDM || isMention)) {
         // DM pairing
@@ -50,6 +60,7 @@ export function createIngressService(
           const expected = core.services.conversations.getPairingCode();
           if (code === expected) {
             core.services.conversations.regeneratePairingCode();
+            core.services.conversations.pair(platform, externalId);
             core.services.roles.set(callerId, "admin", "pair");
             await channel.send("✅ Paired. You are now an admin.");
             log.info("Admin paired via DM", { callerId });

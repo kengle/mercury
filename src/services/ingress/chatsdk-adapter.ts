@@ -83,7 +83,10 @@ function createChannel(
     },
     async sendFiles(text: string, files: OutputFile[]) {
       const adapter = adapters[platform === "whatsapp" ? "whatsapp" : platform];
-      if (adapter?._requireSocket) {
+      if (platform === "wecom") {
+        // WeCom adapter has its own postMessage method
+        await adapter.postMessage(threadId, { text, files });
+      } else if (adapter?._requireSocket) {
         await sendWhatsAppFiles(adapter, threadId, text, files, log);
       } else {
         const fileUploads = files.map((f) => ({
