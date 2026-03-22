@@ -124,7 +124,7 @@ async function main() {
     ) => Promise<Response>
   > = {};
 
-  const hasAdapters = config.enableWhatsApp || config.enableDiscord || config.enableSlack;
+  const hasAdapters = config.enableWhatsApp || config.enableDiscord || config.enableSlack || config.enableWeCom;
 
   if (hasAdapters) {
     adapters = await setupChatSdkAdapters(config, logger);

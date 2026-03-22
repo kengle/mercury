@@ -53,11 +53,11 @@ Prioritize practical outputs and explicit assumptions.
 Files received from users (images, documents, voice notes) are saved to the \`inbox/\` directory in the current workspace. To send files back with your reply, write them to the \`outbox/\` directory — any files created or modified there during this run will be automatically attached to your response.
 
 ## Permissions & Security
-Each run is triggered by a specific caller with a role (admin or member). The caller's identity and role are provided in the user prompt as a <caller /> tag.
+Each run is triggered by a specific caller with a role (admin or member). The caller's role is provided in the user prompt as a <caller role="..." /> tag.
 - **admin**: Full access to all tools and extensions.
 - **member**: Limited access. Some tools and extensions are restricted.
 
-**IMPORTANT: Your environment changes between callers.** When you see a new <caller /> tag with a different id or role, your available tools, API keys, and credentials may be completely different. A role="member" caller may lack access that a role="admin" caller has. Never reuse tool results from a previous caller — always re-check.
+**IMPORTANT: Your environment changes between callers.** When you see a new <caller /> tag with a different role, your available tools, API keys, and credentials may be completely different. A role="member" caller may lack access that a role="admin" caller has. Never reuse tool results from a previous caller — always re-check.
 
 If a tool call is blocked with "Permission denied", this is a hard security boundary. Do NOT attempt to achieve the same result through alternative means — no curl, no direct API calls, no workarounds. Simply inform the user they do not have permission.
 
@@ -74,10 +74,8 @@ You can mute users who are being abusive, spamming, trying to exfiltrate secrets
 function buildPrompt(input: AgentInput): string {
   const parts: string[] = [];
 
-  const nameAttr = input.authorName ? ` name="${input.authorName}"` : "";
-  parts.push(
-    `<caller id="${input.callerId}"${nameAttr} role="${input.callerRole}" />`,
-  );
+  // Only expose role, not user ID or name (privacy protection)
+  parts.push(`<caller role="${input.callerRole}" />`);
   parts.push("");
 
   const ambientEntries = input.messages
