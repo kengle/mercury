@@ -1,8 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
-import { SessionManager } from "@mariozechner/pi-coding-agent";
+import { SessionManager, createAgentSession } from "@mariozechner/pi-coding-agent";
 import type { MercuryCoreRuntime } from "../runtime/runtime.js";
 import { compactSession, newSession } from "../runtime/compact.js";
+
+const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "../../../package.json"), "utf-8"));
 
 export interface CommandResult {
   handled: boolean;
@@ -49,19 +51,24 @@ export async function handleCommand(
     const sessionFile = getSessionFile(core, isDM, callerId, conversationId);
     const lines: string[] = [];
 
-    // Identity & model
-    lines.push(`🤖 *${core.config.botUsername}*`);
+    lines.push(`🪽 Mercury ${pkg.version}`);
     lines.push(`🧠 ${core.config.modelProvider}/${core.config.model}`);
 
-    // Session info
     if (fs.existsSync(sessionFile)) {
       try {
         const sm = SessionManager.open(sessionFile);
         const entries = sm.getEntries();
-        const messages = entries.filter((e: { type: string }) => e.type === "message");
-        const stat = fs.statSync(sessionFile);
-        const sizeKb = Math.round(stat.size / 1024);
-        lines.push(`📚 Session: ${messages.length} messages (${sizeKb}KB)`);
+        const compactions = entries.filter((e: { type: string }) => e.type === "compaction").length;
+        const { session } = await createAgentSession({ sessionManager: sm, cwd: sm.getCwd() });
+        const stats = session.getSessionStats();
+        const fmt = (n: number) => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+        lines.push(`📚 Session: ${stats.totalMessages} msgs · ↑${fmt(stats.tokens.input)} ↓${fmt(stats.tokens.output)}`);
+        if (stats.tokens.cacheRead > 0) {
+          const cacheHitPct = Math.round((stats.tokens.cacheRead / (stats.tokens.cacheRead + stats.tokens.input)) * 100);
+          lines.push(`🗄️ Cache: ${cacheHitPct}% hit · ${fmt(stats.tokens.cacheRead)} cached`);
+        }
+        if (stats.cost > 0) lines.push(`💰 Cost: $${stats.cost.toFixed(3)}`);
+        lines.push(`🧹 Compactions: ${compactions}`);
       } catch {
         lines.push("📚 Session: error reading");
       }
@@ -69,16 +76,13 @@ export async function handleCommand(
       lines.push("📚 Session: none");
     }
 
-    // Agent state
     const agentState = core.agent.isRunning ? "busy" : "idle";
     const queueDepth = core.queue.pendingCount;
     lines.push(`⚙️ Agent: ${agentState}${queueDepth > 0 ? ` · Queue: ${queueDepth}` : ""}`);
 
-    // Trigger config
     const patterns = core.config.triggerPatterns.split(",").map((s: string) => s.trim()).join(", ");
     lines.push(`👥 Triggers: ${patterns}`);
 
-    // Extensions
     const extCount = core.extensionRegistry?.list().length ?? 0;
     if (extCount > 0) {
       const extNames = core.extensionRegistry!.list().map((e: { name: string }) => e.name).join(", ");
