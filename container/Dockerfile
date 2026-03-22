@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3 python3-pip python3-venv \
     bubblewrap \
+    fonts-wqy-zenhei fonts-noto-cjk \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js
