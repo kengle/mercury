@@ -219,6 +219,10 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
   }
 
   // ==================== Chat SDK Adapter Interface ====================
+  isDM(threadId): boolean {
+    const { isDM } = this.decodeThreadId(threadId);
+    return isDM;
+  }
 
   decodeThreadId(threadId: string): WeComThreadId {
     const [, convId, chattype, reqId] = threadId.split(":");
