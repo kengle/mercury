@@ -19,7 +19,6 @@ export function createIngressService(
 
       const paired = isDM || core.services.conversations.isPaired(platform, externalId);
 
-      log.debug("[service] Handling message", { platform, externalId, callerId, text, paired });
       // ─── Unpaired: only /pair allowed ─────────────────────────────────
       if (!paired) {
         if (!text.startsWith("/pair ")) return;
