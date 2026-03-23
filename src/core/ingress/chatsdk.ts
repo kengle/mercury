@@ -70,10 +70,10 @@ export async function setupChatSdkAdapters(
     adapters.wecom = createWeComAdapter({
       botId,
       secret,
-      mediaDir: config.wecomMediaDir,
+      workspaceDir: config.workspaceDir,
       log,
     });
-    log.info("WeCom adapter configured", { mediaDir: config.wecomMediaDir });
+    log.info("WeCom adapter configured", { workspaceDir: config.workspaceDir });
   }
 
   if (Object.keys(adapters).length === 0) {

@@ -27,13 +27,15 @@ import type {
 import { Message as ChatMessage } from "chat";
 import type { MessageAttachment, OutputFile } from "../core/types.js";
 import type { Logger } from "../core/logger.js";
+import { resolveProjectPath } from "../core/config.js";
 
 export interface WeComAdapterOptions {
   botId: string;
   secret: string;
   userName?: string;
-  /** Media file save directory (default: system temp directory) */
-  mediaDir?: string;
+  /** Workspace directory for storing media files in inbox/ */
+  workspaceDir?: string;
+  log: Logger;
 }
 
 export interface WeComThreadId {
@@ -50,7 +52,7 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
   private chat?: ChatInstance;
   private readonly botId: string;
   private readonly secret: string;
-  private readonly mediaDir: string;
+  private readonly workspaceDir?: string;
   private readonly log: Logger;
 
   private connected = false;
@@ -61,10 +63,8 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
     this.botId = options.botId;
     this.secret = options.secret;
     this.userName = options.userName ?? "wecom-bot";
-    this.mediaDir = options.mediaDir || path.join(os.tmpdir(), "wecom-inbox");
+    this.workspaceDir = options.workspaceDir;
     this.log = options.log;
-
-    fs.mkdirSync(this.mediaDir, { recursive: true });
   }
 
   get isConnected(): boolean {
@@ -197,6 +197,17 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
   ): Promise<MessageAttachment[]> {
     if (!mediaInfo?.url || !this.client) return [];
 
+    // Resolve workspace and inbox directory
+    let inboxDir: string;
+    if (this.workspaceDir) {
+      const workspace = resolveProjectPath(this.workspaceDir);
+      inboxDir = path.join(workspace, "inbox");
+    } else {
+      // Fallback to temp dir if workspace not configured
+      inboxDir = path.join(os.tmpdir(), "wecom-inbox");
+    }
+    fs.mkdirSync(inboxDir, { recursive: true });
+
     try {
       const { buffer } = await this.client.downloadFile(
         mediaInfo.url,
@@ -205,7 +216,7 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
 
       const ext = type === "image" ? "jpg" : type === "video" ? "mp4" : type === "voice" ? "ogg" : "bin";
       const filename = `${Date.now()}.${ext}`;
-      const filePath = path.join(this.mediaDir, filename);
+      const filePath = path.join(inboxDir, filename);
       fs.writeFileSync(filePath, buffer);
 
       const mimeType = type === "image" ? "image/jpeg" : type === "video" ? "video/mp4" : type === "voice" ? "audio/ogg" : "application/octet-stream";

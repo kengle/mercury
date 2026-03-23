@@ -176,23 +176,7 @@ export class SubprocessAgent implements Agent {
       };
     }
 
-    if (process.platform === "linux") {
-      const bwrapArgs = [
-        "--bind", "/", "/",
-        "--tmpfs", dataDir,
-        "--dev", "/dev",
-        "--proc", "/proc",
-      ];
-
-      for (const p of allowedPaths) {
-        bwrapArgs.push("--bind", p, p);
-      }
-
-      bwrapArgs.push("--", command, ...args);
-
-      return { cmd: "bwrap", cmdArgs: bwrapArgs };
-    }
-
+    // Running inside Docker, no need for additional sandboxing
     return { cmd: command, cmdArgs: args };
   }
 
