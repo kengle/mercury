@@ -27,6 +27,7 @@ ENV PATH="/usr/local/go/bin:$PATH"
 # pi CLI
 RUN bun add -g @mariozechner/pi-coding-agent
 
+
 # Playwright Chromium
 RUN npx playwright install --with-deps chromium
 ENV PUPPETEER_SKIP_DOWNLOAD=true
@@ -46,6 +47,10 @@ COPY tsconfig.json ./
 # mrctl helper
 RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
     chmod +x /usr/local/bin/mrctl
+
+
+# 把 models.json 复制到镜像中
+COPY models.json /root/.pi/agent/models.json
 
 # Data directory is mounted separately (persisted across deploys)
 VOLUME /data
