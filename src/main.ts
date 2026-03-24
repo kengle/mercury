@@ -145,9 +145,6 @@ async function main() {
     bot.onNewMention(async (thread, message) => {
       await handleMessage(thread, message, true);
     });
-    bot.onSubscribedMessage(async (thread, message) => {
-      await handleMessage(thread, message, true);
-    });
     bot.onNewMessage(/.+/, async (thread, message) => {
       await handleMessage(thread, message, false);
     });

@@ -33,11 +33,14 @@ export function createChatSdkAdapter(opts: {
       const callerId = getCallerId(platform, message.author);
       const authorName = message.author.userName || message.author.fullName;
 
-      // Detect WhatsApp @mentions
-      const rawMentions = message.raw?.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
+      // Detect WhatsApp @mentions and reply-to-bot
       if (!cachedBotJids) cachedBotJids = getBotJids(adapters);
+      const contextInfo = extractContextInfo(message.raw);
+      const rawMentions = contextInfo?.mentionedJid ?? [];
       const isWhatsAppMention = platform === "whatsapp" && rawMentions.some((jid: string) => cachedBotJids!.has(jid));
-      const effectiveMention = isMention || isWhatsAppMention;
+      const repliedToJid = contextInfo?.participant;
+      const isReplyToBot = platform === "whatsapp" && !!repliedToJid && cachedBotJids.has(repliedToJid);
+      const effectiveMention = isMention || isWhatsAppMention || isReplyToBot;
 
       // Strip mention IDs from text
       const cleanText = effectiveMention ? stripMentionIds(text, cachedBotJids) : text;
@@ -104,9 +107,7 @@ function createChannel(
     async startTyping() {
       await thread.startTyping();
     },
-    async subscribe() {
-      try { await thread.subscribe(); } catch {}
-    },
+
   };
 }
 
@@ -213,6 +214,16 @@ async function sendWhatsAppFiles(
   if (!textSent) {
     await sock.sendMessage(chatJid, { text });
   }
+}
+
+function extractContextInfo(raw: any): any {
+  if (!raw?.message) return null;
+  for (const val of Object.values(raw.message)) {
+    if (val && typeof val === "object" && "contextInfo" in (val as any)) {
+      return (val as any).contextInfo;
+    }
+  }
+  return null;
 }
 
 function getBotJids(adapters: Record<string, any>): Set<string> {
