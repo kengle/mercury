@@ -42,6 +42,19 @@ export function createChatSdkAdapter(opts: {
       const isReplyToBot = platform === "whatsapp" && !!repliedToJid && cachedBotJids.has(repliedToJid);
       const effectiveMention = isMention || isWhatsAppMention || isReplyToBot;
 
+      log.info("Message received", {
+        platform,
+        callerId,
+        authorName,
+        text,
+        isDM,
+        isMention,
+        isWhatsAppMention,
+        isReplyToBot,
+        effectiveMention,
+        attachments: message.attachments?.length ?? 0,
+      });
+
       // Strip mention IDs from text
       const cleanText = effectiveMention ? stripMentionIds(text, cachedBotJids) : text;
 

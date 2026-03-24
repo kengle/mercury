@@ -22,7 +22,10 @@ export function createIngressService(
 
       // ─── Unpaired: only /pair allowed ─────────────────────────────────
       if (!paired) {
-        if (!text.startsWith("/pair ")) return;
+        if (!text.startsWith("/pair ")) {
+          log.info("Unpaired conversation, ignoring", { platform, externalId, text });
+          return;
+        }
 
         core.services.conversations.create(platform, externalId, "group");
         const code = text.slice(6).trim().toUpperCase();
@@ -101,6 +104,7 @@ export function createIngressService(
       }
 
       if (!addressedToBot) {
+        log.info("Ambient message", { callerId, authorName, text });
         const ambientText = authorName
           ? `${authorName}: ${text.trim()}`
           : text.trim();
@@ -109,6 +113,8 @@ export function createIngressService(
         }
         return;
       }
+
+      log.info("Addressed to bot", { callerId, authorName, isDM, isMention, text: strippedText });
 
       // ─── Addressed to bot: run through policy → agent ─────────────────
       try { await channel.startTyping(); } catch {}
