@@ -79,7 +79,7 @@ export function restartAction(): void {
   console.log("\nRebuilding image...\n");
   // Dynamic import to avoid circular deps
   import("./build.js").then(async ({ buildAction }) => {
-    await buildAction();
+    await buildAction({});
     console.log();
     startAction();
   });
