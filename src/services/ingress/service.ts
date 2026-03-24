@@ -48,7 +48,6 @@ export function createIngressService(
 
       // ─── Check if addressed to bot via mention or trigger pattern ─────
       let addressedToBot = isMention || isDM;
-      let strippedText = text;
 
       if (!addressedToBot && !isDM) {
         const triggerConfig = loadTriggerConfig(core.services.config, {
@@ -58,15 +57,14 @@ export function createIngressService(
         const result = matchTrigger(text, triggerConfig, false);
         if (result.matched) {
           addressedToBot = true;
-          strippedText = result.prompt;
         }
       }
 
       // ─── Slash commands (only when addressed to bot) ────────────────────
-      if (strippedText.startsWith("/") && addressedToBot) {
+      if (text.startsWith("/") && addressedToBot) {
         // DM pairing
-        if (strippedText.startsWith("/pair ") && isDM) {
-          const code = strippedText.slice(6).trim().toUpperCase();
+        if (text.startsWith("/pair ") && isDM) {
+          const code = text.slice(6).trim().toUpperCase();
           const expected = core.services.conversations.getPairingCode();
           if (code === expected) {
             core.services.conversations.regeneratePairingCode();
@@ -85,7 +83,7 @@ export function createIngressService(
           return;
         }
 
-        if (strippedText === "/unpair") {
+        if (text === "/unpair") {
           if (core.services.conversations.isPaired(platform, externalId)) {
             core.services.conversations.unpair(platform, externalId);
             await channel.send("✅ Unpaired. I will no longer respond here.");
@@ -96,7 +94,7 @@ export function createIngressService(
           return;
         }
 
-        const cmd = await handleCommand(core, strippedText, isDM, callerId, externalId);
+        const cmd = await handleCommand(core, text, isDM, callerId, externalId);
         if (cmd.handled) {
           if (cmd.reply) await channel.send(cmd.reply);
           return;
@@ -114,7 +112,7 @@ export function createIngressService(
         return;
       }
 
-      log.info("Addressed to bot", { callerId, authorName, isDM, isMention, text: strippedText });
+      log.info("Addressed to bot", { callerId, authorName, isDM, isMention, text: text });
 
       // ─── Addressed to bot: run through policy → agent ─────────────────
       try { await channel.startTyping(); } catch {}
@@ -124,7 +122,7 @@ export function createIngressService(
         conversationExternalId: externalId,
         callerId,
         authorName,
-        text: strippedText,
+        text: text,
         isDM,
         isReplyToBot: isMention,
         attachments,
