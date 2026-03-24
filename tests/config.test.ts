@@ -35,12 +35,11 @@ describe("loadConfig", () => {
     expect(config.logFormat).toBe("text");
   });
 
-  test("derived paths use projectRoot", () => {
-    process.env.MERCURY_PROJECT_ROOT = "/custom/project";
+  test("derived paths use CWD", () => {
     const config = loadConfig();
-    expect(config.dbPath).toBe("/custom/project/state.db");
-    expect(config.workspaceDir).toBe("/custom/project/workspace");
-    expect(config.whatsappAuthDir).toBe("/custom/project/whatsapp-auth");
+    expect(config.dbPath).toBe("state.db");
+    expect(config.workspaceDir).toBe("workspace");
+    expect(config.whatsappAuthDir).toBe("whatsapp-auth");
   });
 
   test("env overrides", () => {
