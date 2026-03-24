@@ -50,9 +50,7 @@ RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl 
 RUN mkdir -p /root/.pi && ln -s /data/pi-agent /root/.pi/agent
 
 # Project root is mounted at /data (persisted across deploys)
-ENV MERCURY_PROJECT_ROOT=/data
 VOLUME /data
-
-
+WORKDIR /data
 
 ENTRYPOINT ["bun", "run", "/app/src/main.ts"]
