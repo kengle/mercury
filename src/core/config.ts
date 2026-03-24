@@ -24,7 +24,6 @@ const schema = z.object({
   triggerMatch: z.string().default("mention"),
 
   // ─── Storage ────────────────────────────────────────────────────────
-  projectRoot: z.string().default("."),
   authPath: z.string().optional(),
 
   // ─── Agent ───────────────────────────────────────────────────────────
@@ -75,6 +74,7 @@ const schema = z.object({
 });
 
 export type AppConfig = z.infer<typeof schema> & {
+  projectRoot: string;
   dbPath: string;
   workspaceDir: string;
   whatsappAuthDir: string;
@@ -95,7 +95,6 @@ export function loadConfig(): AppConfig {
     triggerMatch: process.env.MERCURY_TRIGGER_MATCH,
 
     // Storage
-    projectRoot: process.env.MERCURY_PROJECT_ROOT,
     authPath: process.env.MERCURY_AUTH_PATH,
 
     // Agent
@@ -131,15 +130,16 @@ export function loadConfig(): AppConfig {
 
   });
 
-  const root = base.projectRoot;
+  const projectRoot = ".";
 
   return {
     ...base,
-    dbPath: path.join(root, "state.db"),
-    workspaceDir: path.join(root, "workspace"),
+    projectRoot,
+    dbPath: path.join(projectRoot, "state.db"),
+    workspaceDir: path.join(projectRoot, "workspace"),
     whatsappAuthDir:
       process.env.MERCURY_WHATSAPP_AUTH_DIR ??
-      path.join(root, "whatsapp-auth"),
+      path.join(projectRoot, "whatsapp-auth"),
   };
 }
 

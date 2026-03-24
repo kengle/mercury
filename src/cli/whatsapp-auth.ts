@@ -230,7 +230,7 @@ if (import.meta.main) {
     (_, i, arr) => arr[i - 1] === "--status-dir",
   );
 
-  const root = process.env.MERCURY_PROJECT_ROOT || ".";
+  const root = ".";
   const authDir =
     authDirIndex >= 0
       ? args[authDirIndex]

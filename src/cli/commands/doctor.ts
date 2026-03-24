@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { createDatabase } from "../../core/db.js";
-import { CWD, getProjectRoot, loadEnvFile } from "../helpers.js";
+import { CWD, loadEnvFile } from "../helpers.js";
 
 export function doctorAction(): void {
   console.log("🩺 mercury doctor\n");
@@ -46,8 +46,7 @@ export function doctorAction(): void {
   }
 
   console.log("\nAI Credentials:");
-  const root = getProjectRoot();
-  const authPath = join(CWD, root, "pi-agent", "auth.json");
+  const authPath = join(CWD, "pi-agent", "auth.json");
   const hasOAuth = existsSync(authPath);
   const hasApiKey = !!(
     envVars.MERCURY_ANTHROPIC_API_KEY || envVars.MERCURY_ANTHROPIC_OAUTH_TOKEN
@@ -78,7 +77,7 @@ export function doctorAction(): void {
     if (whatsappEnabled) {
       const whatsappAuthDir =
         envVars.MERCURY_WHATSAPP_AUTH_DIR ||
-        join(CWD, root, "whatsapp-auth");
+        join(CWD, "whatsapp-auth");
       const credsFile = join(whatsappAuthDir, "creds.json");
       if (existsSync(credsFile)) {
         pass("WhatsApp: enabled and authenticated");
@@ -134,7 +133,7 @@ export function doctorAction(): void {
   }
 
   console.log("\nDatabase:");
-  const dbPath = join(CWD, root, "state.db");
+  const dbPath = join(CWD, "state.db");
   if (existsSync(dbPath)) {
     try {
       const db = createDatabase(dbPath);
