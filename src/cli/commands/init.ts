@@ -7,10 +7,18 @@ import { createApiKeyService } from "../../services/api-keys/service.js";
 export function initAction(): void {
   console.log("🪽 Initializing mercury project...\n");
 
+  const envExamplePath = join(CWD, ".env.example");
+  if (!existsSync(envExamplePath)) {
+    copyFileSync(join(TEMPLATES_DIR, "env.template"), envExamplePath);
+    console.log("  ✓ .env.example");
+  } else {
+    console.log("  • .env.example (already exists)");
+  }
+
   const envPath = join(CWD, ".env");
   if (!existsSync(envPath)) {
-    copyFileSync(join(TEMPLATES_DIR, "env.template"), envPath);
-    console.log("  ✓ .env");
+    copyFileSync(envExamplePath, envPath);
+    console.log("  ✓ .env (copied from .env.example — edit this)");
   } else {
     console.log("  • .env (already exists)");
   }
@@ -55,6 +63,8 @@ export function initAction(): void {
 
   console.log("\n🪽 Initialization complete!");
   console.log("\nNext steps:");
-  console.log("  1. Edit .env to set your API keys and enable adapters");
-  console.log("  2. Run 'mercury start' to start the service");
+  console.log("  1. Edit .env with your API keys and adapter settings");
+  console.log("  2. mercury ext add <source>   — install extensions");
+  console.log("  3. mercury dockerfile          — generate Dockerfile");
+  console.log("  4. mercury build               — build image locally");
 }
