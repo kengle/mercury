@@ -61,10 +61,12 @@ export function createIngressService(
       }
 
       // ─── Slash commands (only when addressed to bot) ────────────────────
-      if (text.startsWith("/") && effectiveMention) {
+      const slashMatch = text.match(/(?:^|\s)(\/\S+.*)/);
+      const slashText = slashMatch ? slashMatch[1].trim() : null;
+      if (slashText && effectiveMention) {
         // DM pairing
-        if (text.startsWith("/pair ") && isDM) {
-          const code = text.slice(6).trim().toUpperCase();
+        if (slashText.startsWith("/pair ") && isDM) {
+          const code = slashText.slice(6).trim().toUpperCase();
           const expected = core.services.conversations.getPairingCode();
           if (code === expected) {
             core.services.conversations.regeneratePairingCode();
@@ -83,7 +85,7 @@ export function createIngressService(
           return;
         }
 
-        if (text === "/unpair") {
+        if (slashText === "/unpair") {
           if (core.services.conversations.isPaired(platform, externalId)) {
             core.services.conversations.unpair(platform, externalId);
             await channel.send("✅ Unpaired. I will no longer respond here.");
@@ -94,7 +96,7 @@ export function createIngressService(
           return;
         }
 
-        const cmd = await handleCommand(core, text, isDM, callerId, externalId);
+        const cmd = await handleCommand(core, slashText, isDM, callerId, externalId);
         if (cmd.handled) {
           if (cmd.reply) await channel.send(cmd.reply);
           return;
