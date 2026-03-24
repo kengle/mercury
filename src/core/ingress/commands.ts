@@ -62,10 +62,11 @@ export async function handleCommand(
         const { session } = await createAgentSession({ sessionManager: sm, cwd: sm.getCwd() });
         const stats = session.getSessionStats();
         const fmt = (n: number) => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
-        lines.push(`📚 Session: ${stats.totalMessages} msgs · ↑${fmt(stats.tokens.input)} ↓${fmt(stats.tokens.output)}`);
+        const totalInput = stats.tokens.input + stats.tokens.cacheRead;
+        lines.push(`📚 Session: ${stats.totalMessages} msgs · ↑${fmt(totalInput)} ↓${fmt(stats.tokens.output)}`);
         if (stats.tokens.cacheRead > 0) {
-          const cacheHitPct = Math.round((stats.tokens.cacheRead / (stats.tokens.cacheRead + stats.tokens.input)) * 100);
-          lines.push(`🗄️ Cache: ${cacheHitPct}% hit · ${fmt(stats.tokens.cacheRead)} cached`);
+          const cacheHitPct = Math.round((stats.tokens.cacheRead / totalInput) * 100);
+          lines.push(`🗄️ Cache: ${cacheHitPct}% hit`);
         }
         if (stats.cost > 0) lines.push(`💰 Cost: $${stats.cost.toFixed(3)}`);
         lines.push(`🧹 Compactions: ${compactions}`);
