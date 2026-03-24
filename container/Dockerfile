@@ -34,16 +34,13 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
 RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
 ENV CHROMIUM_FLAGS="--no-sandbox"
 
-# Mercury source
-WORKDIR /app
-COPY package.json bun.lock* ./
-RUN bun install --frozen-lockfile --production
-COPY src/ ./src/
-COPY resources/ ./resources/
-COPY tsconfig.json ./
+# Mercury
+ARG MERCURY_VERSION=latest
+RUN bun add -g mercury-ai@${MERCURY_VERSION}
+ENV MERCURY_PKG_DIR="/root/.bun/install/global/node_modules/mercury-ai"
 
 # mrctl helper
-RUN echo '#!/bin/sh\nbun run /app/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
+RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
     chmod +x /usr/local/bin/mrctl
 
 # Pi agent dir → persisted project root (symlink resolves at runtime when volume is mounted)
@@ -53,4 +50,4 @@ RUN mkdir -p /root/.pi && ln -s /data/pi-agent /root/.pi/agent
 VOLUME /data
 WORKDIR /data
 
-ENTRYPOINT ["bun", "run", "/app/src/main.ts"]
+ENTRYPOINT ["sh", "-c", "exec bun run $MERCURY_PKG_DIR/src/main.ts"]
