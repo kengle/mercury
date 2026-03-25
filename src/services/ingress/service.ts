@@ -3,6 +3,7 @@ import type { Logger } from "../../core/logger.js";
 import type { IngressMessage } from "../../core/types.js";
 import type { MercuryCoreRuntime } from "../../core/runtime/runtime.js";
 import { handleCommand } from "../../core/ingress/commands.js";
+import { loadTriggerConfig, matchTrigger } from "../../core/ingress/trigger.js";
 import type { IncomingMessage } from "./models.js";
 import type { IngressService, MessageChannel } from "./interface.js";
 
@@ -21,7 +22,10 @@ export function createIngressService(
 
       // ─── Unpaired: only /pair allowed ─────────────────────────────────
       if (!paired) {
-        if (!text.startsWith("/pair ")) return;
+        if (!text.startsWith("/pair ")) {
+          log.info("Unpaired conversation, ignoring", { platform, externalId, text });
+          return;
+        }
 
         core.services.conversations.create(platform, externalId, "group");
         const code = text.slice(6).trim().toUpperCase();
@@ -52,11 +56,27 @@ export function createIngressService(
         }
       }
 
+      // ─── Check if addressed to bot via mention or trigger pattern ─────
+      let effectiveMention = isMention || isDM;
+
+      if (!effectiveMention && !isDM) {
+        const triggerConfig = loadTriggerConfig(core.services.config, {
+          patterns: config.triggerPatterns.split(","),
+          match: config.triggerMatch,
+        });
+        const result = matchTrigger(text, triggerConfig, false);
+        if (result.matched) {
+          effectiveMention = true;
+        }
+      }
+
       // ─── Slash commands (only when addressed to bot) ────────────────────
-      if (text.startsWith("/") && (isDM || isMention)) {
+      const slashMatch = text.match(/(?:^|\s)(\/\S+.*)/);
+      const slashText = slashMatch ? slashMatch[1].trim() : null;
+      if (slashText && effectiveMention) {
         // DM pairing
-        if (text.startsWith("/pair ") && isDM) {
-          const code = text.slice(6).trim().toUpperCase();
+        if (slashText.startsWith("/pair ") && isDM) {
+          const code = slashText.slice(6).trim().toUpperCase();
           const expected = core.services.conversations.getPairingCode();
           if (code === expected) {
             core.services.conversations.regeneratePairingCode();
@@ -76,7 +96,7 @@ export function createIngressService(
           return;
         }
 
-        if (text === "/unpair") {
+        if (slashText === "/unpair") {
           if (core.services.conversations.isPaired(platform, externalId)) {
             core.services.conversations.unpair(platform, externalId);
             await channel.send("✅ Unpaired. I will no longer respond here.");
@@ -87,16 +107,15 @@ export function createIngressService(
           return;
         }
 
-        const cmd = await handleCommand(core, text, isDM, callerId, externalId);
+        const cmd = await handleCommand(core, slashText, isDM, callerId, externalId);
         if (cmd.handled) {
           if (cmd.reply) await channel.send(cmd.reply);
           return;
         }
       }
 
-      // ─── Not addressed to bot: store ambient ──────────────────────────
-      const addressedToBot = isMention || isDM;
-      if (!addressedToBot) {
+      if (!effectiveMention) {
+        log.info("Ambient message", { callerId, authorName, text });
         const ambientText = authorName
           ? `${authorName}: ${text.trim()}`
           : text.trim();
@@ -105,6 +124,8 @@ export function createIngressService(
         }
         return;
       }
+
+      log.info("Addressed to bot", { callerId, authorName, isDM, isMention, text: text });
 
       // ─── Addressed to bot: run through policy → agent ─────────────────
       try { await channel.startTyping(); } catch {}
@@ -116,7 +137,7 @@ export function createIngressService(
         authorName,
         text,
         isDM,
-        isReplyToBot: isMention,
+        isReplyToBot: effectiveMention,
         attachments,
       };
 

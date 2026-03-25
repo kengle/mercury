@@ -1,6 +1,10 @@
+import fs from "node:fs";
 import path from "node:path";
+import { SessionManager, createAgentSession } from "@mariozechner/pi-coding-agent";
 import type { MercuryCoreRuntime } from "../runtime/runtime.js";
 import { compactSession, newSession } from "../runtime/compact.js";
+
+const pkg = JSON.parse(fs.readFileSync(path.join(import.meta.dir, "../../../package.json"), "utf-8"));
 
 export interface CommandResult {
   handled: boolean;
@@ -12,9 +16,9 @@ function sanitizeFilename(id: string): string {
 }
 
 function getSessionFile(core: MercuryCoreRuntime, isDM: boolean, callerId: string, conversationId: string): string {
-  const dataDir = path.resolve(path.join(core.workspace, ".."));
+  const projectRoot = path.resolve(path.join(core.workspace, ".."));
   const sessionId = sanitizeFilename(isDM ? `dm-${callerId}` : conversationId);
-  return path.join(dataDir, "sessions", sessionId, "session.jsonl");
+  return path.join(projectRoot, "sessions", sessionId, "session.jsonl");
 }
 
 export async function handleCommand(
@@ -44,7 +48,49 @@ export async function handleCommand(
   }
 
   if (cmd === "/status") {
-    return { handled: true, reply: "Running." };
+    const sessionFile = getSessionFile(core, isDM, callerId, conversationId);
+    const lines: string[] = [];
+
+    lines.push(`🪽 Mercury ${pkg.version}`);
+    lines.push(`🧠 ${core.config.modelProvider}/${core.config.model}`);
+
+    if (fs.existsSync(sessionFile)) {
+      try {
+        const sm = SessionManager.open(sessionFile);
+        const entries = sm.getEntries();
+        const compactions = entries.filter((e: { type: string }) => e.type === "compaction").length;
+        const { session } = await createAgentSession({ sessionManager: sm, cwd: sm.getCwd() });
+        const stats = session.getSessionStats();
+        const fmt = (n: number) => n > 1000 ? `${(n / 1000).toFixed(1)}k` : String(n);
+        const totalInput = stats.tokens.input + stats.tokens.cacheRead;
+        lines.push(`📚 Session: ${stats.totalMessages} msgs · ↑${fmt(totalInput)} ↓${fmt(stats.tokens.output)}`);
+        if (stats.tokens.cacheRead > 0) {
+          const cacheHitPct = Math.round((stats.tokens.cacheRead / totalInput) * 100);
+          lines.push(`🗄️ Cache: ${cacheHitPct}% hit`);
+        }
+        if (stats.cost > 0) lines.push(`💰 Cost: $${stats.cost.toFixed(3)}`);
+        lines.push(`🧹 Compactions: ${compactions}`);
+      } catch {
+        lines.push("📚 Session: error reading");
+      }
+    } else {
+      lines.push("📚 Session: none");
+    }
+
+    const agentState = core.agent.isRunning ? "busy" : "idle";
+    const queueDepth = core.queue.pendingCount;
+    lines.push(`⚙️ Agent: ${agentState}${queueDepth > 0 ? ` · Queue: ${queueDepth}` : ""}`);
+
+    const patterns = core.config.triggerPatterns.split(",").map((s: string) => s.trim()).join(", ");
+    lines.push(`👥 Triggers: ${patterns}`);
+
+    const extCount = core.extensionRegistry?.list().length ?? 0;
+    if (extCount > 0) {
+      const extNames = core.extensionRegistry!.list().map((e: { name: string }) => e.name).join(", ");
+      lines.push(`🧩 Extensions: ${extNames}`);
+    }
+
+    return { handled: true, reply: lines.join("\n") };
   }
 
   if (cmd === "/stop") {

@@ -33,14 +33,30 @@ export function createChatSdkAdapter(opts: {
       const callerId = getCallerId(platform, message.author);
       const authorName = message.author.userName || message.author.fullName;
 
-      // Detect WhatsApp @mentions
-      const rawMentions = message.raw?.message?.extendedTextMessage?.contextInfo?.mentionedJid ?? [];
+      // Detect WhatsApp @mentions and reply-to-bot
       if (!cachedBotJids) cachedBotJids = getBotJids(adapters);
+      const contextInfo = extractContextInfo(message.raw);
+      const rawMentions = contextInfo?.mentionedJid ?? [];
       const isWhatsAppMention = platform === "whatsapp" && rawMentions.some((jid: string) => cachedBotJids!.has(jid));
-      const effectiveMention = isMention || isWhatsAppMention;
+      const repliedToJid = contextInfo?.participant;
+      const isReplyToBot = platform === "whatsapp" && !!repliedToJid && cachedBotJids.has(repliedToJid);
+      const effectiveMention = isMention || isWhatsAppMention || isReplyToBot;
 
-      // Strip mention IDs from text
-      const cleanText = effectiveMention ? stripMentionIds(text, cachedBotJids) : text;
+      log.info("Message received", {
+        platform,
+        callerId,
+        authorName,
+        text,
+        isDM,
+        isMention,
+        isWhatsAppMention,
+        isReplyToBot,
+        effectiveMention,
+        attachments: message.attachments?.length ?? 0,
+      });
+
+      // Replace bot JID mentions with bot name
+      const cleanText = effectiveMention ? replaceMentionIds(text, cachedBotJids, config.botUsername) : text;
 
       // Download attachments
       const attachments = await downloadAttachments(message.attachments, config, log);
@@ -107,6 +123,7 @@ function createChannel(
     async startTyping() {
       await thread.startTyping();
     },
+
   };
 }
 
@@ -215,6 +232,16 @@ async function sendWhatsAppFiles(
   }
 }
 
+function extractContextInfo(raw: any): any {
+  if (!raw?.message) return null;
+  for (const val of Object.values(raw.message)) {
+    if (val && typeof val === "object" && "contextInfo" in (val as any)) {
+      return (val as any).contextInfo;
+    }
+  }
+  return null;
+}
+
 function getBotJids(adapters: Record<string, any>): Set<string> {
   const jids = new Set<string>();
   try {
@@ -232,11 +259,11 @@ function getBotJids(adapters: Record<string, any>): Set<string> {
   return jids;
 }
 
-function stripMentionIds(text: string, botJids: Set<string>): string {
+function replaceMentionIds(text: string, botJids: Set<string>, botName: string): string {
   let result = text;
   for (const jid of botJids) {
     const num = jid.split("@")[0].split(":")[0];
-    result = result.replace(new RegExp(`@${num}\\b`, "g"), "").trim();
+    result = result.replace(new RegExp(`@${num}\\b`, "g"), `@${botName}`);
   }
-  return result || text;
+  return result.trim() || text;
 }
