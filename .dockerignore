@@ -1,0 +1,44 @@
+# Git
+.git
+.gitignore
+.gitmodules
+
+# Dependencies
+node_modules
+
+# Build outputs
+dist
+build
+*.log
+
+# IDE
+.idea
+.vscode
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Mercury project files (not needed in build context)
+mercury-source
+state.db*
+.env
+.env.example
+.env.*
+workspace
+sessions
+pi-agent
+whatsapp-auth
+extensions
+.dockerignore
+
+# Tests
+tests
+*.test.ts
+
+# Docs
+docs
+*.md
+!README.md
