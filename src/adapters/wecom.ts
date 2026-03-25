@@ -159,32 +159,72 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
     const attachments: MessageAttachment[] = [];
 
     switch (msgtype) {
-      case "text":
-        text = (body as any).text?.content || "";
+      // Text and voice messages: extract content directly (no download needed)
+      case "text": {
+        text = (body as { text?: { content?: string } }).text?.content || "";
         break;
-      case "voice":
-        text = (body as any).voice?.content || "[Voice message]";
+      }
+
+      case "voice": {
+        // WeCom provides automatic speech-to-text
+        const voiceInfo = (body as { voice?: { content?: string } }).voice;
+        text = voiceInfo?.content || "[未识别的语音消息]";
         break;
+      }
+
+      // Per WeCom docs: mixed contains text + image items
+      // Need to extract text and download images
       case "mixed": {
-        const mixed = (body as any).mixed?.msg_item || [];
-        for (const item of mixed) {
+        const mixedBody = body as any;
+        const mixed: any = mixedBody.mixed;
+        if (!mixed?.msg_item) {
+          this.log.warn("WeCom: mixed message without msg_item", { body });
+          return { text: "", attachments: [] };
+        }
+
+        // Process each item in the mixed message
+        for (const item of mixed.msg_item) {
           if (item.msgtype === "text") {
             text += item.text?.content ?? "";
           } else if (item.msgtype === "image") {
-            text += " [image]";
-            attachments.push(...(await this.downloadMedia(item.image, "image")));
+            // Download image from mixed message
+            const downloaded = await this.downloadMedia(item.image, "image");
+            if (downloaded.length > 0) {
+              attachments.push(...downloaded);
+            } else {
+              text += "[未接受成功图片]";
+            }
           }
         }
         text = text.trim();
         break;
       }
+
+      // Per WeCom docs:
+      // - image/file/video: have url + aeskey, need download + decryption
+      // - voice: already includes text transcription in voice.content, no download needed
       case "image":
       case "file":
-      case "video":
-        attachments.push(...(await this.downloadMedia((body as any)[msgtype], msgtype)));
-        text = `[Received ${msgtype} message]`;
+      case "video": {
+        const mediaInfo = (body as Record<string, unknown>)[msgtype] as
+          | { url?: string; aeskey?: string }
+          | undefined;
+        if (!mediaInfo?.url) {
+          this.log.warn("WeCom: media message without URL", { msgtype, body });
+          return { text: `[收到 ${msgtype}，请稍候]`, attachments: [] };
+        }
+
+        // Download and decrypt media using WeCom SDK
+        const downloaded = await this.downloadMedia(mediaInfo, msgtype);
+        if (downloaded.length > 0) {
+          attachments.push(...downloaded);
+        }
+        text = `[收到 ${msgtype}，请稍候]`;
         break;
+      }
+
       default:
+        this.log.warn("WeCom: unsupported msgtype", { msgtype });
         text = "";
     }
 
@@ -209,22 +249,48 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
     fs.mkdirSync(inboxDir, { recursive: true });
 
     try {
+      // WeCom SDK downloadFile handles both download and AES-256-CBC decryption
       const { buffer } = await this.client.downloadFile(
         mediaInfo.url,
         mediaInfo.aeskey,
       );
 
-      const ext = type === "image" ? "jpg" : type === "video" ? "mp4" : type === "voice" ? "ogg" : "bin";
+      // Generate local filename with msgid if available
+      // Extract extension from URL if available, otherwise use default
+      const urlExt = mediaInfo.url.split('?')[0].split('/').pop()?.split('.').pop();
+      const ext =
+        type === "image"
+          ? "jpg"
+          : type === "video"
+            ? "mp4"
+            : urlExt && urlExt.length <= 5
+              ? urlExt
+              : "bin";
       const filename = `${Date.now()}.${ext}`;
       const filePath = path.join(inboxDir, filename);
       fs.writeFileSync(filePath, buffer);
 
-      const mimeType = type === "image" ? "image/jpeg" : type === "video" ? "video/mp4" : type === "voice" ? "audio/ogg" : "application/octet-stream";
-      const mediaType = type === "image" ? "image" : type === "video" ? "video" : type === "voice" ? "voice" : "document";
+      const mimeType =
+        type === "image"
+          ? "image/jpeg"
+          : type === "video"
+            ? "video/mp4"
+            : "application/octet-stream";
+
+      const mediaType =
+        type === "image" ? "image" : type === "video" ? "video" : "document";
+
+      this.log.info("WeCom: media downloaded and decrypted", {
+        type,
+        sizeBytes: buffer.length,
+        path: filePath,
+      });
 
       return [{ path: filePath, type: mediaType, mimeType, filename, sizeBytes: buffer.length }];
     } catch (e) {
-      this.log.error("[WeCom] download failed", { error: (e as Error).message });
+      this.log.error("WeCom: failed to download/decrypt media", {
+        error: (e as Error).message,
+      });
       return [];
     }
   }
@@ -259,17 +325,128 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
       return { id: "error", threadId, raw: undefined };
     }
 
-    const { convId: chatid } = this.decodeThreadId(threadId);
+    const { convId: chatid, reqId } = this.decodeThreadId(threadId);
     const text = typeof msg === "string" ? msg : (msg as any).text || "";
+    // Note: chatsdk-adapter.ts passes { text, files } where files is OutputFile[]
+    const files = (msg as any).files as OutputFile[] | undefined;
 
-    if (text) {
-      await client.sendMessage(chatid, {
-        msgtype: "markdown",
-        markdown: { content: text },
+    // Check if this is an active push message (scheduler) or a reply
+    const isActivePush = reqId.startsWith("sched-");
+
+    try {
+      if (isActivePush) {
+        // Active push: use sendMessage/sendMediaMessage (aibot_send_msg)
+        this.log.debug("[WeCom] sending active push message", { chatid, reqId });
+
+        // Send text using sendMessage
+        if (text) {
+          await client.sendMessage(chatid, {
+            msgtype: "markdown",
+            markdown: { content: text },
+          });
+        }
+
+        // Send files using uploadMedia + sendMediaMessage
+        if (files && files.length > 0) {
+          for (const file of files) {
+            try {
+              const fileBuffer = fs.readFileSync(file.path);
+
+              const mediaType =
+                file.mimeType?.startsWith("image/")
+                  ? "image"
+                  : file.mimeType?.startsWith("video/")
+                    ? "video"
+                    : file.mimeType?.startsWith("audio/")
+                      ? "voice"
+                      : "file";
+
+              const uploadResult = await client.uploadMedia(fileBuffer, {
+                type: mediaType,
+                filename: file.filename,
+              });
+
+              this.log.info("WeCom: file uploaded for active push", {
+                filename: file.filename,
+                mediaType,
+                mediaId: uploadResult.media_id,
+              });
+
+              await client.sendMediaMessage(chatid, mediaType, uploadResult.media_id);
+
+              this.log.info("WeCom: file sent via active push", {
+                filename: file.filename,
+                mediaType,
+              });
+            } catch (error) {
+              this.log.error("WeCom: failed to send file via active push", {
+                filename: file.filename,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        }
+      } else {
+        // Reply to user message: use replyStream/replyMedia (aibot_respond_msg)
+        this.log.debug("[WeCom] sending reply message", { chatid, reqId });
+
+        const frame = { headers: { req_id: reqId } };
+
+        // Send text reply using replyStream for markdown support
+        if (text) {
+          const streamId = `stream-${reqId}`;
+          await client.replyStream(frame, streamId, text, true);
+        }
+
+        // Send files using uploadMedia + replyMedia
+        if (files && files.length > 0) {
+          for (const file of files) {
+            try {
+              const fileBuffer = fs.readFileSync(file.path);
+
+              const mediaType =
+                file.mimeType?.startsWith("image/")
+                  ? "image"
+                  : file.mimeType?.startsWith("video/")
+                    ? "video"
+                    : file.mimeType?.startsWith("audio/")
+                      ? "voice"
+                      : "file";
+
+              const uploadResult = await client.uploadMedia(fileBuffer, {
+                type: mediaType,
+                filename: file.filename,
+              });
+
+              this.log.info("WeCom: file uploaded for reply", {
+                filename: file.filename,
+                mediaType,
+                mediaId: uploadResult.media_id,
+              });
+
+              await client.replyMedia(frame, mediaType, uploadResult.media_id);
+
+              this.log.info("WeCom: file sent via reply", {
+                filename: file.filename,
+                mediaType,
+              });
+            } catch (error) {
+              this.log.error("WeCom: failed to send file via reply", {
+                filename: file.filename,
+                error: error instanceof Error ? error.message : String(error),
+              });
+            }
+          }
+        }
+      }
+
+      return { id: "ok", threadId, raw: undefined };
+    } catch (error) {
+      this.log.error("WeCom: failed to send message", {
+        error: error instanceof Error ? error.message : String(error),
       });
+      return { id: "error", threadId, raw: undefined };
     }
-
-    return { id: "ok", threadId, raw: undefined };
   }
 
   async fetchMessages(
