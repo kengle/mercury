@@ -26,9 +26,6 @@ export function startAction(): void {
   spawnSync("docker", ["rm", "-f", CONTAINER_NAME], { stdio: "pipe" });
 
   const tag = getImageTag(envPath);
-  const dataDir = join(CWD, ".mercury");
-  mkdirSync(dataDir, { recursive: true });
-
   const port = getPort();
   const args = [
     "run", "-d",
@@ -36,7 +33,7 @@ export function startAction(): void {
     "--restart", "unless-stopped",
     "--cap-add", "SYS_ADMIN",
     "--security-opt", "seccomp=unconfined",
-    "-v", `${dataDir}:/app/.mercury`,
+    "-v", `${CWD}:/data`,
     "-p", `${port}:${port}`,
   ];
 
@@ -82,7 +79,7 @@ export function restartAction(): void {
   console.log("\nRebuilding image...\n");
   // Dynamic import to avoid circular deps
   import("./build.js").then(async ({ buildAction }) => {
-    await buildAction();
+    await buildAction({});
     console.log();
     startAction();
   });

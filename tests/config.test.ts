@@ -26,7 +26,7 @@ describe("loadConfig", () => {
 
   test("defaults", () => {
     const config = loadConfig();
-    expect(config.dataDir).toBe(".mercury");
+    expect(config.projectRoot).toBe(".");
     expect(config.triggerPatterns).toBe("@Pi,Pi");
     expect(config.triggerMatch).toBe("mention");
     expect(config.port).toBe(8787);
@@ -35,12 +35,11 @@ describe("loadConfig", () => {
     expect(config.logFormat).toBe("text");
   });
 
-  test("derived paths use dataDir", () => {
-    process.env.MERCURY_DATA_DIR = "/custom/data";
+  test("derived paths use CWD", () => {
     const config = loadConfig();
-    expect(config.dbPath).toBe("/custom/data/state.db");
-    expect(config.workspaceDir).toBe("/custom/data/workspace");
-    expect(config.whatsappAuthDir).toBe("/custom/data/whatsapp-auth");
+    expect(config.dbPath).toBe("state.db");
+    expect(config.workspaceDir).toBe("workspace");
+    expect(config.whatsappAuthDir).toBe("whatsapp-auth");
   });
 
   test("env overrides", () => {
@@ -65,7 +64,7 @@ describe("resolveProjectPath", () => {
   });
 
   test("relative path resolves against cwd", () => {
-    const result = resolveProjectPath(".mercury/state.db");
-    expect(result).toBe(path.join(process.cwd(), ".mercury/state.db"));
+    const result = resolveProjectPath("state.db");
+    expect(result).toBe(path.join(process.cwd(), "state.db"));
   });
 });

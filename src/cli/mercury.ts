@@ -2,7 +2,7 @@
 
 import { Command } from "commander";
 import { registerAuthCommands } from "./commands/auth.js";
-import { buildAction } from "./commands/build.js";
+import { buildAction, dockerfileAction } from "./commands/build.js";
 import { chatAction } from "./commands/chat.js";
 import {
   pairAction,
@@ -32,7 +32,17 @@ program.command("start").description("Start Mercury container").action(startActi
 program.command("stop").description("Stop Mercury container").action(stopAction);
 program.command("restart").description("Rebuild and restart Mercury").action(restartAction);
 program.command("logs").description("View container logs").option("-f, --follow", "Follow log output").action(logsAction);
-program.command("build").description("Build the deployment image").action(buildAction);
+program.command("dockerfile")
+  .description("Generate Dockerfile from extensions")
+  .option("--mercury-version <version>", "Mercury npm version or tag (default: current version)")
+  .option("--local-source <path>", "Build from local Mercury source path (e.g., /path/to/mercury)")
+  .action((opts) => dockerfileAction({ version: opts.mercuryVersion, localSource: opts.localSource }));
+
+program.command("build")
+  .description("Generate Dockerfile and build image locally")
+  .option("--mercury-version <version>", "Mercury npm version or tag (default: current version)")
+  .option("--local-source <path>", "Build from local Mercury source path (e.g., /path/to/mercury)")
+  .action((opts) => buildAction({ version: opts.mercuryVersion, localSource: opts.localSource }));
 program.command("status").description("Show current status and configuration").action(statusAction);
 program.command("doctor").description("Check environment and configuration").action(doctorAction);
 
