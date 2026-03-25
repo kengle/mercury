@@ -127,6 +127,33 @@ mercury logs [-f]               # View logs
 mercury status                  # Check status
 mercury doctor                  # Preflight checks
 
+# Dockerfile (advanced)
+mercury dockerfile              # Generate Dockerfile only
+mercury dockerfile --local-source /path/to/mercury  # Use local Mercury source
+```
+
+### Local Development Workflow (Modifying Mercury Source)
+
+When developing Mercury itself, use `--local-source` to build from your local code:
+
+```bash
+# 1. Build image from local Mercury source
+mercury build --local-source /path/to/mercury
+
+# 2. Start the container
+mercury start
+
+# 3. View logs
+mercury logs -f
+
+# After making changes to Mercury source:
+mercury build --local-source /path/to/mercury  # Rebuild image
+docker restart mercury                          # Restart container
+# or: mercury stop && mercury start
+```
+
+> ⚠️ **Note**: Avoid using `mercury restart` during local development — it calls `buildAction({})` which regenerates the Dockerfile and overwrites your local source configuration. Use `docker restart mercury` or `mercury stop && mercury start` instead.
+
 # Auth
 mercury auth login [provider]   # OAuth login
 mercury auth whatsapp           # WhatsApp QR/pairing code
