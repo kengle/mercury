@@ -147,12 +147,12 @@ mercury start
 mercury logs -f
 
 # After making changes to Mercury source:
-mercury build --local-source /path/to/mercury  # Rebuild image
+mercury build --local-source /path/to/mercury  # Rebuild image (copies source into build context)
 docker restart mercury                          # Restart container
 # or: mercury stop && mercury start
 ```
 
-> ⚠️ **Note**: Avoid using `mercury restart` during local development — it calls `buildAction({})` which regenerates the Dockerfile and overwrites your local source configuration. Use `docker restart mercury` or `mercury stop && mercury start` instead.
+> ℹ️ **How it works**: The `--local-source` flag copies your Mercury source code into the Docker build context as `mercury-source/`, then modifies the Dockerfile to install from that local copy instead of npm. The temporary source directory is cleaned up after the build completes.
 
 # Auth
 mercury auth login [provider]   # OAuth login
