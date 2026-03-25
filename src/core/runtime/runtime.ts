@@ -8,7 +8,6 @@ import type { ExtensionRegistry } from "../../extensions/loader.js";
 import type { MercuryExtensionContext } from "../../extensions/types.js";
 import { logger } from "../logger.js";
 import { ensurePiResourceDir } from "./workspace.js";
-import { getApiKeyFromPiAuthFile } from "../auth.js";
 
 import type {
   AgentOutput,
@@ -41,7 +40,7 @@ export class MercuryCoreRuntime {
   readonly agent: Agent;
   hooks: HookDispatcher | null = null;
   private extensionCtx: MercuryExtensionContext | null = null;
-  private extensionRegistry: ExtensionRegistry | null = null;
+  extensionRegistry: ExtensionRegistry | null = null;
   private readonly shutdownHooks: ShutdownHook[] = [];
   private shuttingDown = false;
   private signalHandlersInstalled = false;
@@ -58,19 +57,6 @@ export class MercuryCoreRuntime {
     ensurePiResourceDir(this.workspace);
   }
 
-  async initialize(): Promise<void> {
-
-    const authPath = path.join(this.workspace, "auth.json");
-    const providerApiKey = await getApiKeyFromPiAuthFile({
-      provider: this.config.modelProvider,
-      authPath,
-    });
-    if (providerApiKey) {
-      const envKey = `${this.config.modelProvider.toUpperCase()}_API_KEY`;
-      process.env[envKey] = providerApiKey;
-      logger.info("Loaded API key from OAuth credentials");
-    }
-  }
 
   initExtensions(registry: ExtensionRegistry): void {
     this.hooks = new HookDispatcher(registry, logger);

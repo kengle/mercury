@@ -84,12 +84,10 @@ function matchSinglePattern(
       return stripPrefix(text, pattern, config.caseSensitive);
 
     case "mention": {
-      // Word-boundary match — works for "@Mick", "Mick", "@Mercury", etc.
       const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const flags = config.caseSensitive ? "" : "i";
-      // Use \b for word chars, but @ isn't a word char so we handle it:
-      // Match at start-of-string or after whitespace, and before end-of-string or whitespace
-      const regex = new RegExp(`(?:^|(?<=\\s))${escaped}(?=\\s|$)`, flags);
+      // Match pattern with optional @ prefix and trailing punctuation
+      const regex = new RegExp(`(?:^|(?<=\\s))@?${escaped}[?!.,;:]*(?=\\s|$)`, flags);
       const match = regex.exec(text);
       if (!match) return null;
       const before = text.slice(0, match.index).trim();

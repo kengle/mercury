@@ -33,26 +33,12 @@ export function loadEnvFile(envPath: string): Record<string, string> {
   return vars;
 }
 
-export function getProjectDataDir(): string {
-  if (process.env.MERCURY_DATA_DIR) return process.env.MERCURY_DATA_DIR;
-  const envPath = join(CWD, ".env");
-  if (existsSync(envPath)) {
-    const envVars = loadEnvFile(envPath);
-    if (envVars.MERCURY_DATA_DIR) return envVars.MERCURY_DATA_DIR;
-  }
-  return ".mercury";
-}
-
-export function getDataDir(): string {
-  return getProjectDataDir();
-}
-
 export function getUserExtensionsDir(): string {
-  return join(CWD, getDataDir(), "extensions");
+  return join(CWD, "extensions");
 }
 
 export function getWorkspaceDir(): string {
-  return join(CWD, getDataDir(), "workspace");
+  return join(CWD, "workspace");
 }
 
 export function getMercuryUrl(): string {
