@@ -95,7 +95,7 @@ function generateEnvExample(extensions: ExtensionMeta[]): string {
   return lines.join("\n");
 }
 
-export async function dockerfileAction(options: { version?: string; localSource?: string }): Promise<void> {
+export async function dockerfileAction(options: { version?: string; localSource?: string; isLocalBuild?: boolean }): Promise<void> {
   const mercuryVersion = options.version ?? getVersion();
   const extensions = await loadExtensions();
 
@@ -109,11 +109,15 @@ export async function dockerfileAction(options: { version?: string; localSource?
     }
   }
 
-  const dockerfileContent = await generateDockerfileContent(extensions, mercuryVersion, { localSource: options.localSource });
+  const dockerfileContent = await generateDockerfileContent(extensions, mercuryVersion, { localSource: options.localSource, isLocalBuild: options.isLocalBuild });
   writeFileSync(join(CWD, "Dockerfile"), dockerfileContent);
   
   if (options.localSource) {
-    console.log(`✓ Generated Dockerfile (mercury-ai@file:${options.localSource})`);
+    if (options.isLocalBuild) {
+      console.log(`✓ Generated Dockerfile (mercury-ai from local source)`);
+    } else {
+      console.log(`✓ Generated Dockerfile (mercury-ai@file:${options.localSource})`);
+    }
   } else {
     console.log(`✓ Generated Dockerfile (mercury-ai@${mercuryVersion})`);
   }
@@ -144,15 +148,17 @@ export async function buildAction(options: { version?: string; localSource?: str
     console.log(`📦 Copying Mercury source from ${options.localSource}...`);
     
     // 使用 rsync 或 cp 复制文件
-    const result = spawnSync("rsync", ["-av", "--delete", `${options.localSource}/`, mercurySourceDir], {
-      stdio: "pipe",
+    const srcPath = options.localSource.endsWith("/") ? options.localSource : `${options.localSource}/`;
+    const result = spawnSync("rsync", ["-av", "--delete", srcPath, mercurySourceDir], {
+      stdio: "inherit",
       timeout: 120_000,
     });
     
     if (result.status !== 0) {
+      console.error("rsync failed, trying cp...");
       // rsync 失败，尝试用 cp
-      const cpResult = spawnSync("cp", ["-R", `${options.localSource}/.`, mercurySourceDir], {
-        stdio: "pipe",
+      const cpResult = spawnSync("cp", ["-R", srcPath, mercurySourceDir], {
+        stdio: "inherit",
         timeout: 120_000,
       });
       if (cpResult.status !== 0) {
