@@ -8,6 +8,7 @@ import type { OutputFile, MessageAttachment } from "../../core/types.js";
 import type { IngressService, MessageChannel } from "./interface.js";
 import type { IncomingMessage } from "./models.js";
 import { mkdirSync, writeFileSync } from "node:fs";
+import { Markit, createLlmFunctions, type MarkitOptions } from "markit-ai";
 
 export function createChatSdkAdapter(opts: {
   ingress: IngressService;
@@ -58,15 +59,19 @@ export function createChatSdkAdapter(opts: {
       // Replace bot JID mentions with bot name
       const cleanText = effectiveMention ? replaceMentionIds(text, cachedBotJids, config.botUsername) : text;
 
-      // Download attachments
+      // Download attachments and transcribe audio
       const attachments = await downloadAttachments(message.attachments, config, log);
+      const transcription = await transcribeAudio(attachments, log);
+      const messageText = transcription
+        ? (cleanText ? `${cleanText}\n\n[Voice note transcription: ${transcription}]` : `[Voice note transcription: ${transcription}]`)
+        : cleanText;
 
       const incoming: IncomingMessage = {
         platform,
         externalId,
         callerId,
         authorName,
-        text: cleanText,
+        text: messageText,
         isDM,
         isMention: effectiveMention,
         attachments,
@@ -226,6 +231,48 @@ async function sendWhatsAppFiles(
 
   if (!textSent) {
     await sock.sendMessage(chatJid, { text });
+  }
+}
+
+let markitInstance: Markit | null = null;
+
+function getMarkit(): Markit | null {
+  if (markitInstance) return markitInstance;
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const opts = createLlmFunctions({ llm: { provider: "openai" } });
+    markitInstance = new Markit(opts);
+    return markitInstance;
+  } catch {
+    return null;
+  }
+}
+
+async function transcribeAudio(
+  attachments: MessageAttachment[],
+  log: Logger,
+): Promise<string | null> {
+  const audio = attachments.find((a) => a.type === "audio");
+  if (!audio) return null;
+
+  const markit = getMarkit();
+  if (!markit) return null;
+
+  try {
+    const buffer = readFileSync(audio.path);
+    const result = await markit.convert(buffer, {
+      mimetype: audio.mimeType,
+      filename: audio.filename,
+    });
+    const text = result.markdown.trim();
+    if (!text) return null;
+    log.info("Transcribed audio", { filename: audio.filename, length: text.length });
+    return text;
+  } catch (err) {
+    log.warn("Audio transcription failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
   }
 }
 
