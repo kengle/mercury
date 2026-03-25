@@ -147,16 +147,27 @@ export async function buildAction(options: { version?: string; localSource?: str
     mkdirSync(mercurySourceDir, { recursive: true });
     console.log(`📦 Copying Mercury source from ${options.localSource}...`);
     
-    // 使用 rsync 或 cp 复制文件
+    // 使用 rsync 或 cp 复制文件（排除 .git 和其他不必要的文件）
     const srcPath = options.localSource.endsWith("/") ? options.localSource : `${options.localSource}/`;
-    const result = spawnSync("rsync", ["-av", "--delete", srcPath, mercurySourceDir], {
+    const result = spawnSync("rsync", [
+      "-av",
+      "--delete",
+      "--exclude", ".git",
+      "--exclude", ".gitignore",
+      "--exclude", ".gitmodules",
+      "--exclude", "node_modules",
+      "--exclude", "dist",
+      "--exclude", ".DS_Store",
+      srcPath,
+      mercurySourceDir,
+    ], {
       stdio: "inherit",
       timeout: 120_000,
     });
     
     if (result.status !== 0) {
       console.error("rsync failed, trying cp...");
-      // rsync 失败，尝试用 cp
+      // rsync 失败，尝试用 cp（cp 无法排除，后续由 .dockerignore 处理）
       const cpResult = spawnSync("cp", ["-R", srcPath, mercurySourceDir], {
         stdio: "inherit",
         timeout: 120_000,
