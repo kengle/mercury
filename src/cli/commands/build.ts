@@ -1,7 +1,10 @@
 import { spawnSync } from "node:child_process";
 import {
+  copyFileSync,
   existsSync,
+  mkdirSync,
   readFileSync,
+  rmSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
@@ -32,7 +35,7 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
   return registry.list();
 }
 
-async function generateDockerfileContent(extensions: ExtensionMeta[], mercuryVersion: string, options?: { localSource?: string }): Promise<string> {
+async function generateDockerfileContent(extensions: ExtensionMeta[], mercuryVersion: string, options?: { localSource?: string; isLocalBuild?: boolean }): Promise<string> {
   const baseDockerfile = join(PACKAGE_ROOT, "container/Dockerfile");
   let content = readFileSync(baseDockerfile, "utf8");
 
@@ -47,7 +50,19 @@ async function generateDockerfileContent(extensions: ExtensionMeta[], mercuryVer
   );
 
   // 支持本地路径或自定义安装命令
-  if (options?.localSource) {
+  if (options?.localSource && options?.isLocalBuild) {
+    // 本地构建模式：从构建上下文安装
+    content = content.replace(
+      /^ARG MERCURY_INSTALL="bun add -g mercury-ai@\$\{MERCURY_VERSION\}"/m,
+      `ARG MERCURY_INSTALL="bun add -g /mercury-source"`,
+    );
+    // 添加 COPY 指令将本地源码复制到镜像中
+    content = content.replace(
+      /^# Mercury$/m,
+      `# Mercury (local source)\nCOPY mercury-source /mercury-source`,
+    );
+  } else if (options?.localSource) {
+    // 仅生成 Dockerfile 模式：使用 file: 协议（用户需要自己处理构建上下文）
     content = content.replace(
       /^ARG MERCURY_INSTALL="bun add -g mercury-ai@\$\{MERCURY_VERSION\}"/m,
       `ARG MERCURY_INSTALL="bun add -g mercury-ai@file:${options.localSource}"`,
@@ -111,8 +126,52 @@ export async function dockerfileAction(options: { version?: string; localSource?
 export async function buildAction(options: { version?: string; localSource?: string }): Promise<void> {
   const envPath = join(CWD, ".env");
   const tag = getImageTag(envPath);
+  const isLocalBuild = !!options.localSource;
 
-  await dockerfileAction(options);
+  // 如果是本地构建，需要复制源码到构建上下文
+  let cleanupFn: (() => void) | undefined;
+  
+  if (isLocalBuild && options.localSource) {
+    const mercurySourceDir = join(CWD, "mercury-source");
+    
+    // 清理旧的源码目录
+    if (existsSync(mercurySourceDir)) {
+      rmSync(mercurySourceDir, { recursive: true, force: true });
+    }
+    
+    // 创建新目录并复制源码
+    mkdirSync(mercurySourceDir, { recursive: true });
+    console.log(`📦 Copying Mercury source from ${options.localSource}...`);
+    
+    // 使用 rsync 或 cp 复制文件
+    const result = spawnSync("rsync", ["-av", "--delete", `${options.localSource}/`, mercurySourceDir], {
+      stdio: "pipe",
+      timeout: 120_000,
+    });
+    
+    if (result.status !== 0) {
+      // rsync 失败，尝试用 cp
+      const cpResult = spawnSync("cp", ["-R", `${options.localSource}/.`, mercurySourceDir], {
+        stdio: "pipe",
+        timeout: 120_000,
+      });
+      if (cpResult.status !== 0) {
+        console.error("Failed to copy Mercury source");
+        process.exit(1);
+      }
+    }
+    
+    console.log(`✓ Copied Mercury source to ${mercurySourceDir}`);
+    
+    // 清理函数
+    cleanupFn = () => {
+      if (existsSync(mercurySourceDir)) {
+        rmSync(mercurySourceDir, { recursive: true, force: true });
+      }
+    };
+  }
+
+  await dockerfileAction({ ...options, isLocalBuild });
 
   console.log(`\n📦 Building ${tag}...\n`);
   const result = spawnSync(
@@ -120,6 +179,12 @@ export async function buildAction(options: { version?: string; localSource?: str
     ["build", "-t", tag, "."],
     { stdio: "inherit", cwd: CWD, timeout: 600_000 },
   );
+
+  // 清理临时源码目录
+  if (cleanupFn) {
+    cleanupFn();
+    console.log(`✓ Cleaned up temporary source directory`);
+  }
 
   if (result.status !== 0) process.exit(result.status ?? 1);
   console.log(`\n✓ Built ${tag}`);
