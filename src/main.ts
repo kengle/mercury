@@ -79,13 +79,12 @@ async function main() {
 
   const agent = new SubprocessAgent(config);
   const core = new MercuryCoreRuntime({ config, database, services, agent });
-  await core.initialize();
 
   // ─── Load Extensions ────────────────────────────────────────────────────
 
   const registry = new ExtensionRegistry();
   const configRegistry = new ConfigRegistry();
-  const extensionsDir = resolveProjectPath(`${config.dataDir}/extensions`);
+  const extensionsDir = resolveProjectPath(`${config.projectRoot}/extensions`);
   const builtinExtDir = join(__dirname, "extensions");
   const extState = createExtensionStateService(database);
 
@@ -145,9 +144,6 @@ async function main() {
 
     bot.onNewMention(async (thread, message) => {
       await handleMessage(thread, message, true);
-    });
-    bot.onSubscribedMessage(async (thread, message) => {
-      await handleMessage(thread, message, false);
     });
     bot.onNewMessage(/.+/, async (thread, message) => {
       await handleMessage(thread, message, false);
