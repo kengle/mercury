@@ -25,7 +25,8 @@ export function createChatSdkAdapter(opts: {
       if (message.author.isMe) return null;
 
       const text = (message.text || "").trim();
-      if (!text) return null;
+      const hasAttachments = message.attachments && message.attachments.length > 0;
+      if (!text && !hasAttachments) return null;
 
       const threadId = thread.id || "";
       const platform = getPlatformFromThreadId(threadId);
