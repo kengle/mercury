@@ -109,7 +109,10 @@ export class MercuryCoreRuntime {
     span.attr("message.source", source);
     span.attr("message.platform", message.platform);
     span.attr("message.caller_id", message.callerId);
+    span.attr("message.author_name", message.authorName ?? "");
     span.attr("message.is_dm", message.isDM);
+    span.attr("message.text", message.text);
+    span.attr("message.attachments", message.attachments?.length ?? 0);
 
     try {
       const outcome = await this.routeMessage(message, source, traceId, span.id);
@@ -360,6 +363,7 @@ export class MercuryCoreRuntime {
       agentSpan.attr("agent.caller_id", callerId);
       agentSpan.attr("agent.caller_role", callerRole);
       agentSpan.attr("agent.conversation_id", conversationId);
+      agentSpan.attr("agent.prompt", prompt);
       extraEnv = {
         ...extraEnv,
         OTEL_TRACE_ID: traceId,
@@ -377,6 +381,8 @@ export class MercuryCoreRuntime {
 
         const durationMs = Date.now() - startTime;
         agentSpan.attr("agent.duration_ms", durationMs);
+        agentSpan.attr("agent.reply", result.text);
+        agentSpan.attr("agent.files", result.files.length);
 
         if (this.hooks && this.extensionCtx) {
           const hookResult = await this.hooks.emitAfterContainer(
