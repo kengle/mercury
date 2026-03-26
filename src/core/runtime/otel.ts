@@ -118,6 +118,7 @@ export default function (pi: ExtensionAPI) {
     const span = tracer.startSpan(`tool.${event.toolName}`, traceId, turnSpan?.id);
     span.attr("tool.name", event.toolName);
     span.attr("tool.call_id", event.toolCallId);
+    span.attr("tool.input", JSON.stringify(event.args ?? ""));
     toolSpans.set(event.toolCallId, span);
   });
 
@@ -125,6 +126,7 @@ export default function (pi: ExtensionAPI) {
     const span = toolSpans.get(event.toolCallId);
     if (!span) return;
     span.attr("tool.is_error", event.isError ?? false);
+    span.attr("tool.output", String(event.result ?? ""));
     span.end(!event.isError);
     toolSpans.delete(event.toolCallId);
   });
@@ -146,3 +148,5 @@ export default function (pi: ExtensionAPI) {
     sessionSpan?.event("session.compacted");
   });
 }
+
+
