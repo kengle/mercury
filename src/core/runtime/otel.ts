@@ -126,7 +126,8 @@ export default function (pi: ExtensionAPI) {
     const span = toolSpans.get(event.toolCallId);
     if (!span) return;
     span.attr("tool.is_error", event.isError ?? false);
-    span.attr("tool.output", String(event.result ?? ""));
+    const result = event.result;
+    span.attr("tool.output", typeof result === "string" ? result : JSON.stringify(result ?? ""));
     span.end(!event.isError);
     toolSpans.delete(event.toolCallId);
   });
