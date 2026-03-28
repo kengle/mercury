@@ -1,8 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
+import { extToMime } from "../ingress/media.js";
 import { logger } from "../logger.js";
 import type { OutputFile } from "../types.js";
-import { extToMime } from "../ingress/media.js";
 
 /** Default max file size for outbox files (25 MB) */
 const DEFAULT_MAX_FILE_SIZE = 25 * 1024 * 1024;

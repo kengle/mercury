@@ -11,10 +11,11 @@ const VALID_MATCHES: Set<string> = new Set(["prefix", "mention", "always"]);
 export function loadTriggerConfig(
   config: ConfigService,
   defaults: { patterns: string[]; match: string },
+  workspaceId: number,
 ): TriggerConfig {
-  const match = config.get("trigger.match") as TriggerMatch | null;
-  const patternsRaw = config.get("trigger.patterns");
-  const caseSensitive = config.get("trigger.case_sensitive");
+  const match = config.get(workspaceId, "trigger.match") as TriggerMatch | null;
+  const patternsRaw = config.get(workspaceId, "trigger.patterns");
+  const caseSensitive = config.get(workspaceId, "trigger.case_sensitive");
 
   const defaultMatch = VALID_MATCHES.has(defaults.match)
     ? (defaults.match as TriggerMatch)
@@ -87,7 +88,10 @@ function matchSinglePattern(
       const escaped = pattern.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       const flags = config.caseSensitive ? "" : "i";
       // Match pattern with optional @ prefix and trailing punctuation
-      const regex = new RegExp(`(?:^|(?<=\\s))@?${escaped}[?!.,;:]*(?=\\s|$)`, flags);
+      const regex = new RegExp(
+        `(?:^|(?<=\\s))@?${escaped}[?!.,;:]*(?=\\s|$)`,
+        flags,
+      );
       const match = regex.exec(text);
       if (!match) return null;
       const before = text.slice(0, match.index).trim();

@@ -10,6 +10,7 @@ export const ChatRequest = z.object({
   text: z.string().min(1),
   callerId: z.string().optional(),
   authorName: z.string().optional(),
+  workspace: z.string().optional(),
   files: z.array(ChatFileInput).optional(),
 });
 export type ChatRequest = z.infer<typeof ChatRequest>;

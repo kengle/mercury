@@ -1,22 +1,23 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Database } from "bun:sqlite";
-import { createDatabase } from "../src/core/db.js";
 import type { AppConfig } from "../src/core/config.js";
+import { createDatabase } from "../src/core/db.js";
 import type { Agent, AgentInput } from "../src/core/runtime/agent-interface.js";
-import type { AgentOutput, IngressMessage } from "../src/core/types.js";
+import { RateLimiter } from "../src/core/runtime/rate-limiter.js";
 import { MercuryCoreRuntime } from "../src/core/runtime/runtime.js";
+import type { AgentOutput, IngressMessage } from "../src/core/types.js";
 import { createConfigService } from "../src/services/config/service.js";
 import { createConversationService } from "../src/services/conversations/service.js";
 import { createMessageService } from "../src/services/messages/service.js";
-import { createTaskService } from "../src/services/tasks/service.js";
-import { createRoleService } from "../src/services/roles/service.js";
 import { createMuteService } from "../src/services/mutes/service.js";
-import { createUserService } from "../src/services/users/service.js";
 import { createPolicyService } from "../src/services/policy/service.js";
-import { RateLimiter } from "../src/core/runtime/rate-limiter.js";
+import { createRoleService } from "../src/services/roles/service.js";
+import { createTaskService } from "../src/services/tasks/service.js";
+import { createUserService } from "../src/services/users/service.js";
+import { createWorkspaceService } from "../src/services/workspaces/service.js";
 
 let tmpDir: string;
 let db: Database;
@@ -33,13 +34,16 @@ function makeConfig(dir: string, overrides?: Partial<AppConfig>): AppConfig {
     port: 0,
     botUsername: "bot",
     dbPath: path.join(dir, "state.db"),
-    workspaceDir: path.join(dir, "workspace"),
+    workspacesDir: path.join(dir, "workspaces"),
     whatsappAuthDir: path.join(dir, "wa-auth"),
     rateLimitPerUser: 0,
     rateLimitWindowMs: 60000,
     ...overrides,
   } as AppConfig;
 }
+
+let defaultWsId: number;
+let defaultWsName: string;
 
 function msg(overrides?: Partial<IngressMessage>): IngressMessage {
   return {
@@ -50,11 +54,16 @@ function msg(overrides?: Partial<IngressMessage>): IngressMessage {
     isDM: false,
     isReplyToBot: false,
     attachments: [],
+    workspaceId: defaultWsId,
+    workspaceName: defaultWsName,
     ...overrides,
   };
 }
 
-function setup(agentReply = "agent reply", configOverrides?: Partial<AppConfig>) {
+function setup(
+  agentReply = "agent reply",
+  configOverrides?: Partial<AppConfig>,
+) {
   tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "mercury-runtime-"));
   db = createDatabase(path.join(tmpDir, "state.db"));
   const cfg = makeConfig(tmpDir, configOverrides);
@@ -65,14 +74,24 @@ function setup(agentReply = "agent reply", configOverrides?: Partial<AppConfig>)
       agentCalls.push(input);
       return { text: agentReply, files: [] };
     },
-    abort() { return false; },
+    abort() {
+      return false;
+    },
     kill() {},
-    get isRunning() { return false; },
+    get isRunning() {
+      return false;
+    },
   };
 
   const configSvc = createConfigService(db);
   const rolesSvc = createRoleService(db, configSvc);
   const muteSvc = createMuteService(db);
+  const wsRoot = path.join(tmpDir, "workspaces");
+  fs.mkdirSync(wsRoot, { recursive: true });
+  const workspacesSvc = createWorkspaceService(db, wsRoot, configSvc);
+  const defaultWs = workspacesSvc.create("default");
+  defaultWsId = defaultWs.id;
+  defaultWsName = defaultWs.name;
   const services = {
     config: configSvc,
     conversations: createConversationService(db, configSvc),
@@ -82,9 +101,15 @@ function setup(agentReply = "agent reply", configOverrides?: Partial<AppConfig>)
     mutes: muteSvc,
     users: createUserService(db),
     policy: createPolicyService(cfg, rolesSvc, configSvc, muteSvc),
+    workspaces: workspacesSvc,
   };
 
-  core = new MercuryCoreRuntime({ config: cfg, database: db, services, agent: mockAgent });
+  core = new MercuryCoreRuntime({
+    config: cfg,
+    database: db,
+    services,
+    agent: mockAgent,
+  });
 }
 
 afterEach(() => {
@@ -95,7 +120,10 @@ afterEach(() => {
 describe("Runtime.handleMessage", () => {
   test("processes triggered message and returns agent output", async () => {
     setup("hello world");
-    const result = await core.handleMessage(msg({ text: "bot hi" }), "chat-sdk");
+    const result = await core.handleMessage(
+      msg({ text: "bot hi" }),
+      "chat-sdk",
+    );
     expect(result.action).toBe("process");
     expect(result.result?.text).toBe("hello world");
     expect(agentCalls).toHaveLength(1);
@@ -105,7 +133,7 @@ describe("Runtime.handleMessage", () => {
   test("stores user and assistant messages", async () => {
     setup("response");
     await core.handleMessage(msg({ text: "bot question" }), "chat-sdk");
-    const history = core.services.messages.list("conv1");
+    const history = core.services.messages.list(defaultWsId, "conv1", 200);
     const roles = history.map((m) => m.role);
     expect(roles).toContain("user");
     expect(roles).toContain("assistant");
@@ -122,50 +150,77 @@ describe("Runtime.handleMessage", () => {
 
   test("passes caller role to agent", async () => {
     setup();
-    core.services.roles.set("user1", "admin", "test");
+    core.services.roles.set(defaultWsId, "user1", "admin", "test");
     await core.handleMessage(msg({ text: "bot do stuff" }), "chat-sdk");
     expect(agentCalls[0].callerRole).toBe("admin");
   });
 
   test("passes attachments to agent", async () => {
     setup();
-    const att = [{ path: "/tmp/test.jpg", type: "image" as const, mimeType: "image/jpeg", filename: "test.jpg", sizeBytes: 100 }];
-    await core.handleMessage(msg({ text: "bot look", attachments: att }), "chat-sdk");
+    const att = [
+      {
+        path: "/tmp/test.jpg",
+        type: "image" as const,
+        mimeType: "image/jpeg",
+        filename: "test.jpg",
+        sizeBytes: 100,
+      },
+    ];
+    await core.handleMessage(
+      msg({ text: "bot look", attachments: att }),
+      "chat-sdk",
+    );
     expect(agentCalls[0].attachments).toHaveLength(1);
     expect(agentCalls[0].attachments![0].filename).toBe("test.jpg");
   });
 
   test("passes authorName to agent", async () => {
     setup();
-    await core.handleMessage(msg({ text: "bot hi", authorName: "Bob" }), "chat-sdk");
+    await core.handleMessage(
+      msg({ text: "bot hi", authorName: "Bob" }),
+      "chat-sdk",
+    );
     expect(agentCalls[0].authorName).toBe("Bob");
   });
 
   test("passes conversationId to agent", async () => {
     setup();
-    await core.handleMessage(msg({ text: "bot hi", conversationExternalId: "my-conv" }), "chat-sdk");
+    await core.handleMessage(
+      msg({ text: "bot hi", conversationExternalId: "my-conv" }),
+      "chat-sdk",
+    );
     expect(agentCalls[0].conversationId).toBe("my-conv");
   });
 
   test("passes isDM to agent", async () => {
     setup();
-    core.services.roles.set("user1", "admin", "test");
+    core.services.roles.set(defaultWsId, "user1", "admin", "test");
     await core.handleMessage(msg({ text: "hello", isDM: true }), "chat-sdk");
     expect(agentCalls[0].isDM).toBe(true);
   });
 
   test("denied policy returns deny without calling agent", async () => {
     setup();
-    core.services.roles.set("user1", "guest", "test");
-    const result = await core.handleMessage(msg({ text: "bot hi" }), "chat-sdk");
+    core.services.roles.set(defaultWsId, "user1", "guest", "test");
+    const result = await core.handleMessage(
+      msg({ text: "bot hi" }),
+      "chat-sdk",
+    );
     expect(result.action).toBe("deny");
     expect(agentCalls).toHaveLength(0);
   });
 
   test("muted user returns ignore without calling agent", async () => {
     setup();
-    core.services.mutes.create({ userId: "user1", duration: "10m", confirm: true }, "admin");
-    const result = await core.handleMessage(msg({ text: "bot hi" }), "chat-sdk");
+    core.services.mutes.create(
+      defaultWsId,
+      { userId: "user1", duration: "10m", confirm: true },
+      "admin",
+    );
+    const result = await core.handleMessage(
+      msg({ text: "bot hi" }),
+      "chat-sdk",
+    );
     expect(result.action).toBe("ignore");
     expect(agentCalls).toHaveLength(0);
   });
@@ -182,11 +237,23 @@ describe("Runtime.handleMessage", () => {
     const rolesSvc = createRoleService(db, configSvc);
     const muteSvc = createMuteService(db);
     const rateLimiter = new RateLimiter(1, 60000);
-    const cfg = makeConfig(tmpDir, { rateLimitPerUser: 1, rateLimitWindowMs: 60000 });
-    core.services.policy = createPolicyService(cfg, rolesSvc, configSvc, muteSvc, rateLimiter);
+    const cfg = makeConfig(tmpDir, {
+      rateLimitPerUser: 1,
+      rateLimitWindowMs: 60000,
+    });
+    core.services.policy = createPolicyService(
+      cfg,
+      rolesSvc,
+      configSvc,
+      muteSvc,
+      rateLimiter,
+    );
 
     await core.handleMessage(msg({ text: "bot one" }), "chat-sdk");
-    const result = await core.handleMessage(msg({ text: "bot two" }), "chat-sdk");
+    const result = await core.handleMessage(
+      msg({ text: "bot two" }),
+      "chat-sdk",
+    );
     expect(result.action).toBe("deny");
     if (result.action === "deny") {
       expect(result.reason).toContain("Rate limit");

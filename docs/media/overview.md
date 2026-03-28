@@ -1,18 +1,18 @@
 # Media Handling
 
-Mercury downloads media attachments from chat platforms, saves them to the workspace, and passes them to the agent. The agent can also produce files via the `outbox/` directory.
+Mercury downloads media attachments from chat platforms, saves them to the workspace's inbox, and passes them to the agent. The agent can also produce files via the `outbox/` directory.
 
 ## Inbox (Incoming)
 
-Incoming media is saved to the workspace:
+Incoming media is saved to the conversation's workspace:
 
 ```
-workspace/inbox/<timestamp>-<filename>
+workspaces/<name>/inbox/<timestamp>-<filename>
 ```
 
 Examples:
 ```
-workspace/inbox/
+workspaces/acme/inbox/
 ├── 1741243200000-photo.jpg
 ├── 1741243500000-voice.ogg
 └── 1741244000000-report.pdf
@@ -31,7 +31,7 @@ The agent receives attachments as XML in the prompt:
 The agent writes files to `outbox/` during a run. After the agent exits, the runtime scans for files with `mtime >= startTime` and attaches them to the reply:
 
 ```
-workspace/outbox/
+workspaces/<name>/outbox/
 ├── chart.png
 └── summary.pdf
 ```

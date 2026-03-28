@@ -1,21 +1,35 @@
 import path from "node:path";
 import type { AppConfig } from "../../core/config.js";
 import { resolveProjectPath } from "../../core/config.js";
-import { compactSession, newSession } from "../../core/runtime/compact.js";
 import type { Agent } from "../../core/runtime/agent-interface.js";
+import { compactSession, newSession } from "../../core/runtime/compact.js";
 import type { AgentQueue } from "../../core/runtime/queue.js";
-import type { RoleService } from "../roles/interface.js";
 import type { MessageService } from "../messages/interface.js";
+import type { RoleService } from "../roles/interface.js";
 import type { ControlService } from "./interface.js";
-import type { WhoamiResponse, StopResponse, CompactResponse, NewSessionResponse } from "./models.js";
+import type {
+  CompactResponse,
+  NewSessionResponse,
+  StopResponse,
+  WhoamiResponse,
+} from "./models.js";
 
 function sanitizeFilename(id: string): string {
   return id.replace(/[^a-zA-Z0-9_-]/g, "_");
 }
 
-function resolveSessionFile(config: AppConfig, conversationId: string): string {
-  const root = resolveProjectPath(config.projectRoot);
-  return path.join(root, "sessions", sanitizeFilename(conversationId), "session.jsonl");
+function resolveSessionFile(
+  config: AppConfig,
+  conversationId: string,
+  workspaceName: string,
+): string {
+  return path.join(
+    resolveProjectPath(config.workspacesDir),
+    workspaceName,
+    "sessions",
+    sanitizeFilename(conversationId),
+    "session.jsonl",
+  );
 }
 
 export function createControlService(
@@ -37,17 +51,29 @@ export function createControlService(
       return { stopped, dropped };
     },
 
-    async compact(conversationId): Promise<CompactResponse> {
-      const sessionFile = resolveSessionFile(config, conversationId);
+    async compact(
+      workspaceId,
+      workspaceName,
+      conversationId,
+    ): Promise<CompactResponse> {
+      const sessionFile = resolveSessionFile(
+        config,
+        conversationId,
+        workspaceName,
+      );
       const result = await compactSession(sessionFile, config);
-      const boundary = messages.setSessionBoundary(conversationId);
+      const boundary = messages.setSessionBoundary(workspaceId, conversationId);
       return { boundary, compaction: result };
     },
 
-    newSession(conversationId): NewSessionResponse {
-      const sessionFile = resolveSessionFile(config, conversationId);
+    newSession(workspaceId, workspaceName, conversationId): NewSessionResponse {
+      const sessionFile = resolveSessionFile(
+        config,
+        conversationId,
+        workspaceName,
+      );
       const reset = newSession(sessionFile);
-      const boundary = messages.setSessionBoundary(conversationId);
+      const boundary = messages.setSessionBoundary(workspaceId, conversationId);
       return { boundary, reset };
     },
   };

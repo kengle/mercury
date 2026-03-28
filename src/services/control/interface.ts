@@ -1,8 +1,21 @@
-import type { WhoamiResponse, StopResponse, CompactResponse, NewSessionResponse } from "./models.js";
+import type {
+  CompactResponse,
+  NewSessionResponse,
+  StopResponse,
+  WhoamiResponse,
+} from "./models.js";
 
 export interface ControlService {
   whoami(callerId: string, role: string): WhoamiResponse;
   stop(): StopResponse;
-  compact(conversationId: string): Promise<CompactResponse>;
-  newSession(conversationId: string): NewSessionResponse;
+  compact(
+    workspaceId: number,
+    workspaceName: string,
+    conversationId: string,
+  ): Promise<CompactResponse>;
+  newSession(
+    workspaceId: number,
+    workspaceName: string,
+    conversationId: string,
+  ): NewSessionResponse;
 }

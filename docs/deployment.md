@@ -85,14 +85,14 @@ If no chat adapters are enabled, Mercury runs with only the HTTP API:
 
 ## Data Directory
 
-`` contains all persistent state:
+The project root contains all persistent state:
 
 ```
-
-├── state.db          # SQLite: conversations, messages, tasks, roles, config, mutes, api keys
-├── workspace/        # Agent workspace (AGENTS.md, skills, extensions, inbox, outbox)
-├── sessions/         # Per-conversation pi session files
-├── extensions/       # Installed Mercury extensions
+├── state.db          # SQLite: workspaces, conversations, messages, tasks, roles, config, mutes
+├── workspaces/       # Per-workspace directories
+│   └── <name>/       # Each with AGENTS.md, .pi/skills/, inbox, outbox, sessions, knowledge
+├── extensions/       # Installed Mercury extensions (shared across workspaces)
+├── pi-agent/         # Pi auth tokens
 └── whatsapp-auth/    # WhatsApp credentials (if enabled)
 ```
 

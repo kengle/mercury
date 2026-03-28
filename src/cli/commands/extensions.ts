@@ -8,14 +8,9 @@ import {
   rmSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { RESERVED_EXTENSION_NAMES } from "../../extensions/reserved.js";
-import {
-  CWD,
-  getUserExtensionsDir,
-  getWorkspaceDir,
-  VALID_EXT_NAME_RE,
-} from "../helpers.js";
+import { CWD, getUserExtensionsDir, VALID_EXT_NAME_RE } from "../helpers.js";
 
 function resolveExtensionSource(source: string): {
   dir: string;
@@ -156,14 +151,8 @@ async function dryRunExtension(dir: string, name: string): Promise<void> {
   }
 }
 
-function installSkillIfPresent(extDir: string, name: string): boolean {
-  const skillDir = join(extDir, "skill");
-  if (!existsSync(join(skillDir, "SKILL.md"))) return false;
-  const dst = join(getWorkspaceDir(), ".pi", "skills", name);
-  mkdirSync(dirname(dst), { recursive: true });
-  rmSync(dst, { recursive: true, force: true });
-  cpSync(skillDir, dst, { recursive: true });
-  return true;
+function hasSkillDir(extDir: string): boolean {
+  return existsSync(join(extDir, "skill", "SKILL.md"));
 }
 
 async function readExtensionInfo(dir: string): Promise<{
@@ -174,7 +163,9 @@ async function readExtensionInfo(dir: string): Promise<{
 }> {
   const { MercuryExtensionAPIImpl } = await import("../../extensions/api.js");
   const { createDatabase } = await import("../../core/db.js");
-  const { createExtensionStateService } = await import("../../extensions/state-service.js");
+  const { createExtensionStateService } = await import(
+    "../../extensions/state-service.js"
+  );
 
   const tmpDbPath = join(tmpdir(), `mercury-dryrun-${Date.now()}.db`);
   const db = createDatabase(tmpDbPath);
@@ -222,7 +213,7 @@ export async function addAction(source: string): Promise<void> {
         console.error("Warning: dependency installation failed");
     }
 
-    const hasSkill = installSkillIfPresent(destDir, name);
+    const hasSkill = hasSkillDir(destDir);
 
     let info: Awaited<ReturnType<typeof readExtensionInfo>>;
     try {
@@ -265,8 +256,6 @@ export function removeAction(name: string): void {
     process.exit(1);
   }
 
-  const skillDst = join(getWorkspaceDir(), ".pi", "skills", name);
-  if (existsSync(skillDst)) rmSync(skillDst, { recursive: true });
   rmSync(extDir, { recursive: true });
 
   console.log(`✓ Extension "${name}" removed`);

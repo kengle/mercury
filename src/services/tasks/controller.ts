@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { checkPerm, type Env, getApiCtx, getAuth } from "../../core/api-types.js";
+import {
+  checkPerm,
+  type Env,
+  getApiCtx,
+  getAuth,
+} from "../../core/api-types.js";
 import { CreateTask } from "./models.js";
 
 export const tasks = new Hono<Env>();
@@ -8,7 +13,8 @@ tasks.get("/", (c) => {
   const denied = checkPerm(c, "tasks.list");
   if (denied) return denied;
   const { services } = getApiCtx(c);
-  return c.json({ tasks: services.tasks.list() });
+  const { workspaceId } = getAuth(c);
+  return c.json({ tasks: services.tasks.list(workspaceId) });
 });
 
 tasks.post("/", async (c) => {
@@ -22,8 +28,18 @@ tasks.post("/", async (c) => {
 
   const conversationId = c.req.header("x-mercury-conversation") ?? "";
   try {
-    const result = services.tasks.create({ ...body.data, createdBy: callerId, conversationId });
-    return c.json({ ...body.data, ...result, createdBy: callerId, conversationId });
+    const { workspaceId } = getAuth(c);
+    const result = services.tasks.create(workspaceId, {
+      ...body.data,
+      createdBy: callerId,
+      conversationId,
+    });
+    return c.json({
+      ...body.data,
+      ...result,
+      createdBy: callerId,
+      conversationId,
+    });
   } catch (e) {
     return c.json({ error: (e as Error).message }, 400);
   }
@@ -34,7 +50,8 @@ tasks.post("/:id/pause", (c) => {
   if (denied) return denied;
   const { services } = getApiCtx(c);
   const taskId = Number(c.req.param("id"));
-  if (!Number.isFinite(taskId) || taskId < 1) return c.json({ error: "Invalid task ID" }, 400);
+  if (!Number.isFinite(taskId) || taskId < 1)
+    return c.json({ error: "Invalid task ID" }, 400);
   try {
     const task = services.tasks.pause(taskId);
     return c.json({ id: task.id, active: task.active });
@@ -48,7 +65,8 @@ tasks.post("/:id/resume", (c) => {
   if (denied) return denied;
   const { services } = getApiCtx(c);
   const taskId = Number(c.req.param("id"));
-  if (!Number.isFinite(taskId) || taskId < 1) return c.json({ error: "Invalid task ID" }, 400);
+  if (!Number.isFinite(taskId) || taskId < 1)
+    return c.json({ error: "Invalid task ID" }, 400);
   try {
     const task = services.tasks.resume(taskId);
     return c.json({ id: task.id, active: task.active });
@@ -62,7 +80,8 @@ tasks.post("/:id/run", (c) => {
   if (denied) return denied;
   const { services } = getApiCtx(c);
   const taskId = Number(c.req.param("id"));
-  if (!Number.isFinite(taskId) || taskId < 1) return c.json({ error: "Invalid task ID" }, 400);
+  if (!Number.isFinite(taskId) || taskId < 1)
+    return c.json({ error: "Invalid task ID" }, 400);
 
   const task = services.tasks.get(taskId);
   if (!task) return c.json({ error: "Task not found" }, 404);
@@ -77,7 +96,8 @@ tasks.delete("/:id", (c) => {
   if (denied) return denied;
   const { services } = getApiCtx(c);
   const taskId = Number(c.req.param("id"));
-  if (!Number.isFinite(taskId) || taskId < 1) return c.json({ error: "Invalid task ID" }, 400);
+  if (!Number.isFinite(taskId) || taskId < 1)
+    return c.json({ error: "Invalid task ID" }, 400);
   const deleted = services.tasks.delete(taskId);
   if (!deleted) return c.json({ error: "Task not found" }, 404);
   return c.json({ id: taskId, deleted: true });

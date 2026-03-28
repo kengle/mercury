@@ -240,8 +240,7 @@ export function registerAuthCommands(authCommand: Command): void {
       const envPath = join(CWD, ".env");
 
       const authDir =
-        process.env.MERCURY_WHATSAPP_AUTH_DIR ||
-        join(CWD, "whatsapp-auth");
+        process.env.MERCURY_WHATSAPP_AUTH_DIR || join(CWD, "whatsapp-auth");
       const statusDir = CWD;
 
       try {

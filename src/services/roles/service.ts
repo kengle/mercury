@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
-import type { RoleEntity } from "./models.js";
-import type { RoleService } from "./interface.js";
 import type { ConfigService } from "../config/interface.js";
+import type { RoleService } from "./interface.js";
+import type { RoleEntity } from "./models.js";
 
 const BUILT_IN_PERMISSIONS = new Set([
   "prompt.group",
@@ -26,28 +26,36 @@ const BUILT_IN_PERMISSIONS = new Set([
 const SYSTEM_CALLERS = new Set(["system"]);
 const DEFAULT_MEMBER_PERMISSIONS = new Set(["prompt.group"]);
 
-export function createRoleService(db: Database, config: ConfigService): RoleService {
+export function createRoleService(
+  db: Database,
+  config: ConfigService,
+): RoleService {
   const registeredPermissions = new Map<string, { defaultRoles: string[] }>();
 
-  const insertMember = db.prepare<void, [string, number, number]>(
-    `INSERT OR IGNORE INTO roles(user_id, role, granted_by, created_at, updated_at)
-     VALUES (?, 'member', NULL, ?, ?)`,
+  const insertMember = db.prepare<void, [number, string, number, number]>(
+    `INSERT OR IGNORE INTO roles(workspace_id, user_id, role, granted_by, created_at, updated_at)
+     VALUES (?, ?, 'member', NULL, ?, ?)`,
   );
-  const upsertRole = db.prepare<void, [string, string, string, number, number]>(
-    `INSERT INTO roles(user_id, role, granted_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(user_id)
+  const upsertRole = db.prepare<
+    void,
+    [number, string, string, string, number, number]
+  >(
+    `INSERT INTO roles(workspace_id, user_id, role, granted_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(workspace_id, user_id)
      DO UPDATE SET role = excluded.role, granted_by = excluded.granted_by, updated_at = excluded.updated_at`,
   );
-  const selectRole = db.prepare<{ role: string }, [string]>(
-    "SELECT role FROM roles WHERE user_id = ?",
+  const selectRole = db.prepare<{ role: string }, [number, string]>(
+    "SELECT role FROM roles WHERE workspace_id = ? AND user_id = ?",
   );
-  const selectAll = db.prepare<RoleEntity, []>(
+  const selectAll = db.prepare<RoleEntity, [number]>(
     `SELECT user_id as userId, role, granted_by as grantedBy,
             created_at as createdAt, updated_at as updatedAt
-     FROM roles ORDER BY created_at ASC`,
+     FROM roles WHERE workspace_id = ? ORDER BY created_at ASC`,
   );
-  const deleteById = db.prepare<void, [string]>("DELETE FROM roles WHERE user_id = ?");
+  const deleteById = db.prepare<void, [number, string]>(
+    "DELETE FROM roles WHERE workspace_id = ? AND user_id = ?",
+  );
 
   function getAllPerms(): string[] {
     return [...BUILT_IN_PERMISSIONS, ...registeredPermissions.keys()];
@@ -71,27 +79,27 @@ export function createRoleService(db: Database, config: ConfigService): RoleServ
   }
 
   return {
-    get(userId) {
-      return selectRole.get(userId)?.role ?? undefined;
+    get(workspaceId, userId) {
+      return selectRole.get(workspaceId, userId)?.role ?? undefined;
     },
-    list() {
-      return selectAll.all();
+    list(workspaceId) {
+      return selectAll.all(workspaceId);
     },
-    set(userId, role, grantedBy) {
+    set(workspaceId, userId, role, grantedBy) {
       const now = Date.now();
-      upsertRole.run(userId, role, grantedBy, now, now);
+      upsertRole.run(workspaceId, userId, role, grantedBy, now, now);
     },
-    delete(userId) {
-      return deleteById.run(userId).changes > 0;
+    delete(workspaceId, userId) {
+      return deleteById.run(workspaceId, userId).changes > 0;
     },
-    upsertMember(userId) {
+    upsertMember(workspaceId, userId) {
       const now = Date.now();
-      insertMember.run(userId, now, now);
+      insertMember.run(workspaceId, userId, now, now);
     },
-    resolveRole(userId) {
+    resolveRole(workspaceId, userId) {
       if (SYSTEM_CALLERS.has(userId)) return "system";
-      this.upsertMember(userId);
-      return this.get(userId) ?? "member";
+      this.upsertMember(workspaceId, userId);
+      return this.get(workspaceId, userId) ?? "member";
     },
     hasPermission(role, permission) {
       return this.getRolePermissions(role).has(permission);
@@ -99,7 +107,7 @@ export function createRoleService(db: Database, config: ConfigService): RoleServ
     getRolePermissions(role) {
       if (role === "system") return getDefaultPermissions("system");
       const key = `role.${role}.permissions`;
-      const stored = config.get(key);
+      const stored = config.get(0, key);
       if (stored !== null) {
         const perms = stored
           .split(",")
@@ -113,7 +121,9 @@ export function createRoleService(db: Database, config: ConfigService): RoleServ
     isValidPermission: isValid,
     registerPermission(name, opts) {
       if (BUILT_IN_PERMISSIONS.has(name)) {
-        throw new Error(`Permission "${name}" is a built-in and cannot be overridden`);
+        throw new Error(
+          `Permission "${name}" is a built-in and cannot be overridden`,
+        );
       }
       registeredPermissions.set(name, opts);
     },

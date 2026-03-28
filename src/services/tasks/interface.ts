@@ -5,14 +5,18 @@ export type TaskHandler = (task: {
   prompt: string;
   createdBy: string;
   conversationId: string;
+  workspaceId: number;
   silent: boolean;
 }) => Promise<void>;
 
 export interface TaskService {
   get(id: number): TaskEntity | null;
-  list(): TaskEntity[];
+  list(workspaceId: number): TaskEntity[];
   listDue(now?: number): TaskEntity[];
-  create(input: CreateTask): { id: number; nextRunAt: number };
+  create(
+    workspaceId: number,
+    input: CreateTask,
+  ): { id: number; nextRunAt: number };
   pause(id: number): TaskEntity;
   resume(id: number): TaskEntity;
   delete(id: number): boolean;

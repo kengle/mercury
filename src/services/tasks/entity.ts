@@ -1,6 +1,7 @@
 export const schema = `
   CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL,
     cron TEXT,
     at TEXT,
     prompt TEXT NOT NULL,
@@ -15,4 +16,7 @@ export const schema = `
 
   CREATE INDEX IF NOT EXISTS idx_tasks_next
   ON tasks(active, next_run_at);
+
+  CREATE INDEX IF NOT EXISTS idx_tasks_workspace
+  ON tasks(workspace_id);
 `;

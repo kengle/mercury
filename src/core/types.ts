@@ -19,60 +19,6 @@ export interface StoredMessage {
   updatedAt: number;
 }
 
-export interface ScheduledTask {
-  id: number;
-  cron: string | null;
-  at: string | null;
-  prompt: string;
-  active: number;
-  silent: number;
-  nextRunAt: number;
-  createdBy: string;
-  conversationId: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface Conversation {
-  id: number;
-  platform: string;
-  externalId: string;
-  kind: string;
-  observedTitle: string | null;
-  paired: number;
-  firstSeenAt: number;
-  lastSeenAt: number;
-}
-
-export interface Role {
-  platformUserId: string;
-  role: string;
-  grantedBy: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface ConfigEntry {
-  key: string;
-  value: string;
-  updatedBy: string | null;
-  createdAt: number;
-  updatedAt: number;
-}
-
-export interface Mute {
-  platformUserId: string;
-  expiresAt: number;
-  reason: string | null;
-  mutedBy: string;
-  createdAt: number;
-}
-
-export interface ExtensionStateEntry {
-  key: string;
-  value: string;
-}
-
 export type TriggerMatch = "prefix" | "mention" | "always";
 
 export interface TriggerConfig {
@@ -82,7 +28,11 @@ export interface TriggerConfig {
 }
 
 export interface MessageSender {
-  send(text: string, conversationId: string, files?: OutputFile[]): Promise<void>;
+  send(
+    text: string,
+    conversationId: string,
+    files?: OutputFile[],
+  ): Promise<void>;
 }
 
 export interface IngressMessage {
@@ -94,6 +44,8 @@ export interface IngressMessage {
   isDM: boolean;
   isReplyToBot: boolean;
   attachments: MessageAttachment[];
+  workspaceId?: number;
+  workspaceName?: string;
 }
 
 export interface OutputFile {

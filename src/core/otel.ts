@@ -80,10 +80,14 @@ export function createTracer(config: TracerConfig): Tracer {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        resourceSpans: [{
-          resource: { attributes: resourceAttrs },
-          scopeSpans: [{ scope: { name: "mercury", version: "1.0.0" }, spans }],
-        }],
+        resourceSpans: [
+          {
+            resource: { attributes: resourceAttrs },
+            scopeSpans: [
+              { scope: { name: "mercury", version: "1.0.0" }, spans },
+            ],
+          },
+        ],
       }),
     }).catch(() => {});
   }
@@ -91,7 +95,11 @@ export function createTracer(config: TracerConfig): Tracer {
   const interval = setInterval(flush, flushMs);
   interval.unref(); // Don't keep the process alive just for flushing
 
-  function startSpan(name: string, traceId: string, parentSpanId?: string): SpanHandle {
+  function startSpan(
+    name: string,
+    traceId: string,
+    parentSpanId?: string,
+  ): SpanHandle {
     const id = hex(8);
     const attrs: WireAttr[] = [];
     const events: WireEvent[] = [];
@@ -100,17 +108,24 @@ export function createTracer(config: TracerConfig): Tracer {
     return {
       id,
       traceId,
-      attr(key, value) { attrs.push(kv(key, value)); },
+      attr(key, value) {
+        attrs.push(kv(key, value));
+      },
       event(evName, evAttrs) {
         events.push({
           name: evName,
           timeUnixNano: nowNano(),
-          attributes: evAttrs ? Object.entries(evAttrs).map(([k, v]) => kv(k, v)) : [],
+          attributes: evAttrs
+            ? Object.entries(evAttrs).map(([k, v]) => kv(k, v))
+            : [],
         });
       },
       end(ok = true) {
         buffer.push({
-          traceId, spanId: id, parentSpanId, name,
+          traceId,
+          spanId: id,
+          parentSpanId,
+          name,
           kind: 1, // INTERNAL
           startTimeUnixNano: startNano,
           endTimeUnixNano: nowNano(),
@@ -151,7 +166,12 @@ interface WireSpan {
 
 interface WireAttr {
   key: string;
-  value: { stringValue?: string; intValue?: string; doubleValue?: string; boolValue?: boolean };
+  value: {
+    stringValue?: string;
+    intValue?: string;
+    doubleValue?: string;
+    boolValue?: boolean;
+  };
 }
 
 interface WireEvent {
@@ -173,6 +193,7 @@ function nowNano(): string {
 function kv(key: string, value: string | number | boolean): WireAttr {
   if (typeof value === "string") return { key, value: { stringValue: value } };
   if (typeof value === "boolean") return { key, value: { boolValue: value } };
-  if (Number.isInteger(value)) return { key, value: { intValue: String(value) } };
+  if (Number.isInteger(value))
+    return { key, value: { intValue: String(value) } };
   return { key, value: { doubleValue: String(value) } };
 }

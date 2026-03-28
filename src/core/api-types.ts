@@ -1,17 +1,18 @@
 import type { Context } from "hono";
-import type { Agent } from "./runtime/agent-interface.js";
-import type { AppConfig } from "./config.js";
-import type { ConfigRegistry } from "../services/config/registry.js";
 import type { ExtensionRegistry } from "../extensions/loader.js";
-import type { AgentQueue } from "./runtime/queue.js";
+import type { ConfigService } from "../services/config/interface.js";
+import type { ConfigRegistry } from "../services/config/registry.js";
 import type { ConversationService } from "../services/conversations/interface.js";
 import type { MessageService } from "../services/messages/interface.js";
-import type { TaskService } from "../services/tasks/interface.js";
-import type { RoleService } from "../services/roles/interface.js";
-import type { ConfigService } from "../services/config/interface.js";
 import type { MuteService } from "../services/mutes/interface.js";
-import type { UserService } from "../services/users/interface.js";
 import type { PolicyService } from "../services/policy/interface.js";
+import type { RoleService } from "../services/roles/interface.js";
+import type { TaskService } from "../services/tasks/interface.js";
+import type { UserService } from "../services/users/interface.js";
+import type { WorkspaceService } from "../services/workspaces/interface.js";
+import type { AppConfig } from "./config.js";
+import type { Agent } from "./runtime/agent-interface.js";
+import type { AgentQueue } from "./runtime/queue.js";
 
 export interface Services {
   conversations: ConversationService;
@@ -22,6 +23,7 @@ export interface Services {
   mutes: MuteService;
   users: UserService;
   policy: PolicyService;
+  workspaces: WorkspaceService;
 }
 
 export interface ApiContext {
@@ -36,6 +38,8 @@ export interface ApiContext {
 export interface AuthContext {
   callerId: string;
   role: string;
+  workspaceId: number;
+  workspaceName: string;
 }
 
 export type Env = {

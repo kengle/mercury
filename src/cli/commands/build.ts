@@ -1,13 +1,14 @@
 import { spawnSync } from "node:child_process";
-import {
-  existsSync,
-  readFileSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { CWD, getImageTag, getVersion, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
 import type { ExtensionMeta } from "../../extensions/types.js";
+import {
+  CWD,
+  getImageTag,
+  getVersion,
+  PACKAGE_ROOT,
+  TEMPLATES_DIR,
+} from "../helpers.js";
 
 async function loadExtensions(): Promise<ExtensionMeta[]> {
   const extensionsDir = join(CWD, "extensions");
@@ -15,9 +16,13 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
 
   const { ExtensionRegistry } = await import("../../extensions/loader.js");
   const { createDatabase } = await import("../../core/db.js");
-  const { createExtensionStateService } = await import("../../extensions/state-service.js");
+  const { createExtensionStateService } = await import(
+    "../../extensions/state-service.js"
+  );
   const { createRoleService } = await import("../../services/roles/service.js");
-  const { createConfigService } = await import("../../services/config/service.js");
+  const { createConfigService } = await import(
+    "../../services/config/service.js"
+  );
 
   const tmpDbPath = join(CWD, "build-tmp.db");
   const db = createDatabase(tmpDbPath);
@@ -27,17 +32,24 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
   const registry = new ExtensionRegistry();
   await registry.loadAll(extensionsDir, extState, rolesSvc, console as any);
   db.close();
-  try { unlinkSync(tmpDbPath); } catch {}
+  try {
+    unlinkSync(tmpDbPath);
+  } catch {}
 
   return registry.list();
 }
 
-async function generateDockerfileContent(extensions: ExtensionMeta[], mercuryVersion: string): Promise<string> {
+async function generateDockerfileContent(
+  extensions: ExtensionMeta[],
+  mercuryVersion: string,
+): Promise<string> {
   const baseDockerfile = join(PACKAGE_ROOT, "container/Dockerfile");
   let content = readFileSync(baseDockerfile, "utf8");
 
   if (extensions.some((e) => e.clis.length > 0)) {
-    const { injectExtensionInstalls } = await import("../../extensions/image-builder.js");
+    const { injectExtensionInstalls } = await import(
+      "../../extensions/image-builder.js"
+    );
     content = injectExtensionInstalls(content, extensions);
   }
 
@@ -58,7 +70,11 @@ function generateEnvExample(extensions: ExtensionMeta[]): string {
 
   if (extEnvVars.length === 0) return base;
 
-  const lines = [base.trimEnd(), "", "# ─── Extensions ────────────────────────────────────────────────────────"];
+  const lines = [
+    base.trimEnd(),
+    "",
+    "# ─── Extensions ────────────────────────────────────────────────────────",
+  ];
   let currentExt = "";
   for (const v of extEnvVars) {
     if (v.ext !== currentExt) {
@@ -72,7 +88,9 @@ function generateEnvExample(extensions: ExtensionMeta[]): string {
   return lines.join("\n");
 }
 
-export async function dockerfileAction(options: { version?: string }): Promise<void> {
+export async function dockerfileAction(options: {
+  version?: string;
+}): Promise<void> {
   const mercuryVersion = options.version ?? getVersion();
   const extensions = await loadExtensions();
 
@@ -86,7 +104,10 @@ export async function dockerfileAction(options: { version?: string }): Promise<v
     }
   }
 
-  const dockerfileContent = await generateDockerfileContent(extensions, mercuryVersion);
+  const dockerfileContent = await generateDockerfileContent(
+    extensions,
+    mercuryVersion,
+  );
   writeFileSync(join(CWD, "Dockerfile"), dockerfileContent);
   console.log(`✓ Generated Dockerfile (mercury-ai@${mercuryVersion})`);
 
@@ -95,18 +116,20 @@ export async function dockerfileAction(options: { version?: string }): Promise<v
   console.log("✓ Generated .env.example");
 }
 
-export async function buildAction(options: { version?: string }): Promise<void> {
+export async function buildAction(options: {
+  version?: string;
+}): Promise<void> {
   const envPath = join(CWD, ".env");
   const tag = getImageTag(envPath);
 
   await dockerfileAction(options);
 
   console.log(`\n📦 Building ${tag}...\n`);
-  const result = spawnSync(
-    "docker",
-    ["build", "-t", tag, "."],
-    { stdio: "inherit", cwd: CWD, timeout: 600_000 },
-  );
+  const result = spawnSync("docker", ["build", "-t", tag, "."], {
+    stdio: "inherit",
+    cwd: CWD,
+    timeout: 600_000,
+  });
 
   if (result.status !== 0) process.exit(result.status ?? 1);
   console.log(`\n✓ Built ${tag}`);

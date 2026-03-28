@@ -31,7 +31,7 @@ The extension registers:
 ## Data Layout
 
 ```
-workspace/
+workspaces/<name>/
 ├── .messages/
 │   └── YYYY-MM-DD.jsonl
 └── knowledge/

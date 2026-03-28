@@ -11,12 +11,14 @@ import { createTracer, type SpanHandle } from "../otel.js";
 
 export default function (pi: ExtensionAPI) {
   // Runtime strips MERCURY_ prefix from env vars passed to subprocess
-  const endpoint = process.env.OTEL_ENDPOINT || process.env.MERCURY_OTEL_ENDPOINT || "";
+  const endpoint =
+    process.env.OTEL_ENDPOINT || process.env.MERCURY_OTEL_ENDPOINT || "";
   if (!endpoint) return;
 
   const tracer = createTracer({
     endpoint,
-    serviceName: process.env.OTEL_SERVICE || process.env.MERCURY_OTEL_SERVICE || "mercury",
+    serviceName:
+      process.env.OTEL_SERVICE || process.env.MERCURY_OTEL_SERVICE || "mercury",
   });
 
   const parentTraceId = process.env.OTEL_TRACE_ID || "";
@@ -36,8 +38,15 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("session_start", async (_event, ctx) => {
     if (!parentTraceId) traceId = tracer.newTraceId();
-    sessionSpan = tracer.startSpan("pi.session", traceId, parentSpanId || undefined);
-    sessionSpan.attr("session.id", ctx.sessionManager.getSessionFile() ?? "ephemeral");
+    sessionSpan = tracer.startSpan(
+      "pi.session",
+      traceId,
+      parentSpanId || undefined,
+    );
+    sessionSpan.attr(
+      "session.id",
+      ctx.sessionManager.getSessionFile() ?? "ephemeral",
+    );
     sessionSpan.attr("session.cwd", ctx.cwd);
     turnCount = 0;
     totalToolCalls = 0;
@@ -120,7 +129,11 @@ export default function (pi: ExtensionAPI) {
 
   pi.on("tool_execution_start", async (event) => {
     totalToolCalls++;
-    const span = tracer.startSpan(`tool.${event.toolName}`, traceId, turnSpan?.id);
+    const span = tracer.startSpan(
+      `tool.${event.toolName}`,
+      traceId,
+      turnSpan?.id,
+    );
     span.attr("tool.name", event.toolName);
     span.attr("tool.call_id", event.toolCallId);
     span.attr("tool.input", JSON.stringify(event.args ?? ""));
@@ -132,7 +145,10 @@ export default function (pi: ExtensionAPI) {
     if (!span) return;
     span.attr("tool.is_error", event.isError ?? false);
     const result = event.result;
-    span.attr("tool.output", typeof result === "string" ? result : JSON.stringify(result ?? ""));
+    span.attr(
+      "tool.output",
+      typeof result === "string" ? result : JSON.stringify(result ?? ""),
+    );
     span.end(!event.isError);
     toolSpans.delete(event.toolCallId);
   });
@@ -154,5 +170,3 @@ export default function (pi: ExtensionAPI) {
     sessionSpan?.event("session.compacted");
   });
 }
-
-

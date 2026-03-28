@@ -37,10 +37,6 @@ export function getUserExtensionsDir(): string {
   return join(CWD, "extensions");
 }
 
-export function getWorkspaceDir(): string {
-  return join(CWD, "workspace");
-}
-
 export function getMercuryUrl(): string {
   const envPath = join(CWD, ".env");
   let port = "3000";
@@ -68,9 +64,10 @@ export async function apiCall<T = unknown>(
     headers: hdrs,
     body: body ? JSON.stringify(body) : undefined,
   });
-  const data = await res.json() as Record<string, unknown>;
+  const data = (await res.json()) as Record<string, unknown>;
   if (!res.ok) {
-    const msg = typeof data.error === "string" ? data.error : JSON.stringify(data);
+    const msg =
+      typeof data.error === "string" ? data.error : JSON.stringify(data);
     throw new Error(`${res.status}: ${msg}`);
   }
   return data as T;

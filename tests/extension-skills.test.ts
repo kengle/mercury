@@ -87,9 +87,9 @@ describe("installExtensionSkills", () => {
 
   it("skips extensions without skillDir", () => {
     installExtensionSkills([makeMeta("no-skill", undefined)], globalDir, log);
-    expect(fs.existsSync(path.join(globalDir, ".pi", "skills", "no-skill"))).toBe(
-      false,
-    );
+    expect(
+      fs.existsSync(path.join(globalDir, ".pi", "skills", "no-skill")),
+    ).toBe(false);
   });
 
   it("handles multiple extensions", () => {
@@ -162,7 +162,9 @@ describe("installExtensionSkills", () => {
     const skillDir = makeSkillDir("test");
     installExtensionSkills([makeMeta("test", skillDir)], freshGlobal, log);
     expect(
-      fs.existsSync(path.join(freshGlobal, ".pi", "skills", "test", "SKILL.md")),
+      fs.existsSync(
+        path.join(freshGlobal, ".pi", "skills", "test", "SKILL.md"),
+      ),
     ).toBe(true);
   });
 
@@ -195,9 +197,9 @@ describe("installBuiltinSkills", () => {
     fs.writeFileSync(path.join(builtinDir, "readme.txt"), "ignore me");
 
     installBuiltinSkills(builtinDir, globalDir, log);
-    expect(fs.existsSync(path.join(globalDir, ".pi", "skills", "readme.txt"))).toBe(
-      false,
-    );
+    expect(
+      fs.existsSync(path.join(globalDir, ".pi", "skills", "readme.txt")),
+    ).toBe(false);
   });
 
   it("handles missing builtin skills directory", () => {
