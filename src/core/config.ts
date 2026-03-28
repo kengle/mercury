@@ -1,3 +1,4 @@
+import fs from "node:fs";
 import path from "node:path";
 import { z } from "zod";
 
@@ -78,7 +79,7 @@ const schema = z.object({
 export type AppConfig = z.infer<typeof schema> & {
   projectRoot: string;
   dbPath: string;
-  workspaceDir: string;
+  workspacesDir: string;
   whatsappAuthDir: string;
 };
 
@@ -139,7 +140,7 @@ export function loadConfig(): AppConfig {
     ...base,
     projectRoot,
     dbPath: path.join(projectRoot, "state.db"),
-    workspaceDir: path.join(projectRoot, "workspace"),
+    workspacesDir: path.join(projectRoot, "workspaces"),
     whatsappAuthDir:
       process.env.MERCURY_WHATSAPP_AUTH_DIR ??
       path.join(projectRoot, "whatsapp-auth"),
@@ -149,4 +150,127 @@ export function loadConfig(): AppConfig {
 export function resolveProjectPath(p: string): string {
   if (path.isAbsolute(p)) return p;
   return path.join(process.cwd(), p);
+}
+
+/** Fields that workspace .env can override on AppConfig */
+export interface WorkspaceConfigOverrides {
+  botUsername?: string;
+  triggerPatterns?: string;
+  triggerMatch?: string;
+  modelProvider?: string;
+  model?: string;
+  agentTimeoutMs?: number;
+  rateLimitPerUser?: number;
+  rateLimitWindowMs?: number;
+  /** Raw MERCURY_* env vars from workspace .env (for extension env passthrough) */
+  env: Record<string, string>;
+}
+
+/**
+ * Parse a .env file into key=value pairs.
+ * Handles quotes, comments, and empty lines.
+ */
+export function parseEnvFile(filePath: string): Record<string, string> {
+  if (!fs.existsSync(filePath)) return {};
+
+  const content = fs.readFileSync(filePath, "utf8");
+  const result: Record<string, string> = {};
+
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eqIdx = trimmed.indexOf("=");
+    if (eqIdx < 1) continue;
+    const key = trimmed.slice(0, eqIdx).trim();
+    let value = trimmed.slice(eqIdx + 1).trim();
+    // Strip surrounding quotes
+    if (
+      (value.startsWith('"') && value.endsWith('"')) ||
+      (value.startsWith("'") && value.endsWith("'"))
+    ) {
+      value = value.slice(1, -1);
+    }
+    result[key] = value;
+  }
+
+  return result;
+}
+
+/**
+ * Load workspace-specific config overrides from workspaces/<name>/.env.
+ * Returns overrides for AppConfig fields + raw env vars for extension passthrough.
+ */
+export function loadWorkspaceConfig(
+  workspaceDir: string,
+): WorkspaceConfigOverrides {
+  const envPath = path.join(workspaceDir, ".env");
+  const raw = parseEnvFile(envPath);
+
+  const env: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (key.startsWith("MERCURY_")) {
+      env[key] = value;
+    }
+  }
+
+  const overrides: WorkspaceConfigOverrides = { env };
+
+  if (raw.MERCURY_BOT_USERNAME)
+    overrides.botUsername = raw.MERCURY_BOT_USERNAME;
+  if (raw.MERCURY_TRIGGER_PATTERNS)
+    overrides.triggerPatterns = raw.MERCURY_TRIGGER_PATTERNS;
+  if (raw.MERCURY_TRIGGER_MATCH)
+    overrides.triggerMatch = raw.MERCURY_TRIGGER_MATCH;
+  if (raw.MERCURY_MODEL_PROVIDER)
+    overrides.modelProvider = raw.MERCURY_MODEL_PROVIDER;
+  if (raw.MERCURY_MODEL) overrides.model = raw.MERCURY_MODEL;
+  if (raw.MERCURY_AGENT_TIMEOUT_MS) {
+    const ms = Number.parseInt(raw.MERCURY_AGENT_TIMEOUT_MS, 10);
+    if (!Number.isNaN(ms)) overrides.agentTimeoutMs = ms;
+  }
+  if (raw.MERCURY_RATE_LIMIT_PER_USER) {
+    const n = Number.parseInt(raw.MERCURY_RATE_LIMIT_PER_USER, 10);
+    if (!Number.isNaN(n)) overrides.rateLimitPerUser = n;
+  }
+  if (raw.MERCURY_RATE_LIMIT_WINDOW_MS) {
+    const ms = Number.parseInt(raw.MERCURY_RATE_LIMIT_WINDOW_MS, 10);
+    if (!Number.isNaN(ms)) overrides.rateLimitWindowMs = ms;
+  }
+
+  return overrides;
+}
+
+/**
+ * Merge workspace overrides into a base AppConfig, returning a new config.
+ * Non-overridable fields (port, adapters, logging, telemetry) are preserved from base.
+ */
+export function mergeWorkspaceConfig(
+  base: AppConfig,
+  overrides: WorkspaceConfigOverrides,
+): AppConfig {
+  return {
+    ...base,
+    ...(overrides.botUsername !== undefined && {
+      botUsername: overrides.botUsername,
+    }),
+    ...(overrides.triggerPatterns !== undefined && {
+      triggerPatterns: overrides.triggerPatterns,
+    }),
+    ...(overrides.triggerMatch !== undefined && {
+      triggerMatch: overrides.triggerMatch,
+    }),
+    ...(overrides.modelProvider !== undefined && {
+      modelProvider: overrides.modelProvider,
+    }),
+    ...(overrides.model !== undefined && { model: overrides.model }),
+    ...(overrides.agentTimeoutMs !== undefined && {
+      agentTimeoutMs: overrides.agentTimeoutMs,
+    }),
+    ...(overrides.rateLimitPerUser !== undefined && {
+      rateLimitPerUser: overrides.rateLimitPerUser,
+    }),
+    ...(overrides.rateLimitWindowMs !== undefined && {
+      rateLimitWindowMs: overrides.rateLimitWindowMs,
+    }),
+  };
 }

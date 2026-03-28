@@ -1,14 +1,13 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import fs from "node:fs";
-import path from "node:path";
+import path, { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PERMISSION_GUARD_PATH = join(__dirname, "permission-guard.ts");
 const OTEL_EXTENSION_PATH = join(__dirname, "otel.ts");
+
 import type { AppConfig } from "../config.js";
-import { scanOutbox } from "./outbox.js";
 import { type Logger, logger } from "../logger.js";
 import type {
   AgentOutput,
@@ -16,6 +15,7 @@ import type {
   StoredMessage,
 } from "../types.js";
 import { AgentError } from "./agent-error.js";
+import { scanOutbox } from "./outbox.js";
 
 function formatContextTimestamp(ms: number): string {
   return new Date(ms).toLocaleString("en-GB", {
@@ -119,6 +119,11 @@ export interface AgentInput {
   attachments?: MessageAttachment[];
   extraEnv?: Record<string, string>;
   extensionSystemPrompt?: string;
+  workspaceId: number;
+  workspaceName: string;
+  modelProvider: string;
+  model: string;
+  agentTimeoutMs: number;
 }
 
 function sanitizeFilename(id: string): string {
@@ -181,10 +186,15 @@ export class SubprocessAgent implements Agent {
 
     if (process.platform === "linux") {
       const bwrapArgs = [
-        "--bind", "/", "/",
-        "--tmpfs", projectRoot,
-        "--dev", "/dev",
-        "--proc", "/proc",
+        "--bind",
+        "/",
+        "/",
+        "--tmpfs",
+        projectRoot,
+        "--dev",
+        "/dev",
+        "--proc",
+        "/proc",
       ];
 
       for (const p of allowedPaths) {
@@ -200,11 +210,13 @@ export class SubprocessAgent implements Agent {
   }
 
   async run(input: AgentInput): Promise<AgentOutput> {
-    const projectRoot = path.resolve(path.join(input.workspace, ".."));
+    // projectRoot is the deployment root (parent of workspaces/<name>)
+    const projectRoot = path.resolve(path.join(input.workspace, "..", ".."));
     const conversationId = sanitizeFilename(
       input.isDM ? `dm-${input.callerId}` : input.conversationId || "default",
     );
-    const sessionDir = path.join(projectRoot, "sessions", conversationId);
+    // Sessions live under the workspace dir (workspaces/<name>/sessions/)
+    const sessionDir = path.join(input.workspace, "sessions", conversationId);
     fs.mkdirSync(sessionDir, { recursive: true });
     const sessionFile = path.join(sessionDir, "session.jsonl");
 
@@ -216,9 +228,9 @@ export class SubprocessAgent implements Agent {
       "--session",
       sessionFile,
       "--provider",
-      this.config.modelProvider,
+      input.modelProvider,
       "--model",
-      this.config.model,
+      input.model,
       "--append-system-prompt",
       systemPrompt,
       "-e",
@@ -238,6 +250,8 @@ export class SubprocessAgent implements Agent {
     env.CALLER_ID = input.callerId;
     env.CONVERSATION_ID = input.conversationId;
     env.API_URL = `http://localhost:${this.config.port}`;
+    env.WORKSPACE_ID = String(input.workspaceId);
+    env.WORKSPACE_NAME = input.workspaceName;
 
     if (input.extraEnv) {
       Object.assign(env, input.extraEnv);
@@ -248,8 +262,7 @@ export class SubprocessAgent implements Agent {
 
     const piAgentDir = path.join(projectRoot, "pi-agent");
     const { cmd, cmdArgs } = this.wrapWithSandbox("pi", args, projectRoot, [
-      input.workspace,
-      sessionDir,
+      input.workspace, // sessions/ is now under workspace dir
       piAgentDir,
     ]);
 
@@ -278,7 +291,7 @@ export class SubprocessAgent implements Agent {
             if (this.running === proc) proc.kill("SIGKILL");
           }, 5000);
         }
-      }, this.config.agentTimeoutMs);
+      }, input.agentTimeoutMs);
 
       const cleanup = () => {
         if (timeoutTimer) {

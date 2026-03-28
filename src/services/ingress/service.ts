@@ -1,11 +1,17 @@
-import type { AppConfig } from "../../core/config.js";
-import type { Logger } from "../../core/logger.js";
-import type { IngressMessage } from "../../core/types.js";
-import type { MercuryCoreRuntime } from "../../core/runtime/runtime.js";
+import path from "node:path";
+import {
+  type AppConfig,
+  loadWorkspaceConfig,
+  mergeWorkspaceConfig,
+  resolveProjectPath,
+} from "../../core/config.js";
 import { handleCommand } from "../../core/ingress/commands.js";
 import { loadTriggerConfig, matchTrigger } from "../../core/ingress/trigger.js";
-import type { IncomingMessage } from "./models.js";
+import type { Logger } from "../../core/logger.js";
+import type { MercuryCoreRuntime } from "../../core/runtime/runtime.js";
+import type { IngressMessage } from "../../core/types.js";
 import type { IngressService, MessageChannel } from "./interface.js";
+import type { IncomingMessage } from "./models.js";
 
 export function createIngressService(
   core: MercuryCoreRuntime,
@@ -13,47 +19,122 @@ export function createIngressService(
   log: Logger,
 ): IngressService {
   return {
-    async handleMessage(input: IncomingMessage, channel: MessageChannel): Promise<void> {
-      const { platform, externalId, callerId, authorName, text, isDM, isMention, attachments } = input;
+    async handleMessage(
+      input: IncomingMessage,
+      channel: MessageChannel,
+    ): Promise<void> {
+      const {
+        platform,
+        externalId,
+        callerId,
+        authorName,
+        text,
+        isDM,
+        isMention,
+        attachments,
+      } = input;
 
       if (!text) return;
 
-      const paired = isDM || core.services.conversations.isPaired(platform, externalId);
+      // ─── Resolve workspace from conversation ──────────────────────────
+      const workspaceId = core.services.conversations.getWorkspaceId(
+        platform,
+        externalId,
+      );
+      const assigned = workspaceId != null;
 
-      // ─── Unpaired: only /pair allowed ─────────────────────────────────
-      if (!paired) {
+      // ─── Unassigned: only /pair allowed ───────────────────────────────
+      if (!assigned) {
         if (!text.startsWith("/pair ")) {
-          log.info("Unpaired conversation, ignoring", { platform, externalId, text });
+          log.info("Unassigned conversation, ignoring", {
+            platform,
+            externalId,
+          });
           return;
         }
 
-        core.services.conversations.create(platform, externalId, "group");
+        // Ensure conversation exists in DB
+        core.services.conversations.create(
+          platform,
+          externalId,
+          isDM ? "dm" : "group",
+        );
         const code = text.slice(6).trim().toUpperCase();
-        const expected = core.services.conversations.getPairingCode();
-        if (code === expected) {
-          core.services.conversations.regeneratePairingCode();
-          core.services.conversations.pair(platform, externalId);
-          await channel.send("✅ Paired. This conversation is now active.");
-          log.info("Conversation paired", { platform, externalId });
+
+        const ws = core.services.workspaces.findByPairingCode(code);
+        if (ws) {
+          core.services.workspaces.regeneratePairingCode(ws.id);
+          core.services.conversations.assignWorkspace(
+            platform,
+            externalId,
+            ws.id,
+          );
+          if (isDM) {
+            core.services.roles.set(ws.id, callerId, "admin", "pair");
+            await channel.send(
+              `✅ Paired to workspace "${ws.name}". You are now an admin.`,
+            );
+            log.info("DM paired to workspace", {
+              callerId,
+              workspace: ws.name,
+            });
+          } else {
+            await channel.send(
+              `✅ Paired to workspace "${ws.name}". This conversation is now active.`,
+            );
+            log.info("Conversation paired to workspace", {
+              platform,
+              externalId,
+              workspace: ws.name,
+            });
+          }
         } else {
           await channel.send("❌ Invalid pairing code.");
         }
         return;
       }
 
-      // ─── Paired from here ─────────────────────────────────────────────
+      // ─── Assigned to workspace from here ──────────────────────────────
+      const workspace = core.services.workspaces.getById(workspaceId);
+      if (!workspace) {
+        log.warn("Conversation assigned to non-existent workspace", {
+          platform,
+          externalId,
+          workspaceId,
+        });
+        return;
+      }
+      const workspaceName = workspace.name;
 
-      try { await channel.markRead(); } catch {}
-      core.services.conversations.create(platform, externalId, isDM ? "dm" : "group");
+      // Load workspace-specific config for trigger matching
+      const wsDir = path.join(
+        resolveProjectPath(config.workspacesDir),
+        workspaceName,
+      );
+      const wsOverrides = loadWorkspaceConfig(wsDir);
+      const effectiveConfig = mergeWorkspaceConfig(config, wsOverrides);
+
+      try {
+        await channel.markRead();
+      } catch {}
+      core.services.conversations.create(
+        platform,
+        externalId,
+        isDM ? "dm" : "group",
+      );
 
       // ─── Check if addressed to bot via mention or trigger pattern ─────
       let effectiveMention = isMention || isDM;
 
       if (!effectiveMention && !isDM) {
-        const triggerConfig = loadTriggerConfig(core.services.config, {
-          patterns: config.triggerPatterns.split(","),
-          match: config.triggerMatch,
-        });
+        const triggerConfig = loadTriggerConfig(
+          core.services.config,
+          {
+            patterns: effectiveConfig.triggerPatterns.split(","),
+            match: effectiveConfig.triggerMatch,
+          },
+          workspaceId,
+        );
         const result = matchTrigger(text, triggerConfig, false);
         if (result.matched) {
           effectiveMention = true;
@@ -64,39 +145,39 @@ export function createIngressService(
       const slashMatch = text.match(/(?:^|\s)(\/\S+.*)/);
       const slashText = slashMatch ? slashMatch[1].trim() : null;
       if (slashText && effectiveMention) {
-        // DM pairing
-        if (slashText.startsWith("/pair ") && isDM) {
-          const code = slashText.slice(6).trim().toUpperCase();
-          const expected = core.services.conversations.getPairingCode();
-          if (code === expected) {
-            core.services.conversations.regeneratePairingCode();
-            core.services.roles.set(callerId, "admin", "pair");
-            await channel.send("✅ Paired. You are now an admin.");
-            log.info("Admin paired via DM", { callerId });
-          } else {
-            await channel.send("❌ Invalid pairing code.");
+        if (slashText === "/unpair") {
+          const isAdmin =
+            core.services.roles.get(workspaceId, callerId) === "admin";
+          if (!isAdmin) {
+            await channel.send("⛔ Admin only.");
+            return;
           }
+          core.services.conversations.unassignWorkspace(platform, externalId);
+          await channel.send("✅ Unpaired. I will no longer respond here.");
+          log.info("Conversation unpaired", {
+            platform,
+            externalId,
+            workspace: workspaceName,
+          });
           return;
         }
 
-        const isAdmin = core.services.roles.get(callerId) === "admin";
+        const isAdmin =
+          core.services.roles.get(workspaceId, callerId) === "admin";
         if (!isAdmin) {
           await channel.send("⛔ Admin only.");
           return;
         }
 
-        if (slashText === "/unpair") {
-          if (core.services.conversations.isPaired(platform, externalId)) {
-            core.services.conversations.unpair(platform, externalId);
-            await channel.send("✅ Unpaired. I will no longer respond here.");
-            log.info("Conversation unpaired", { platform, externalId });
-          } else {
-            await channel.send("This conversation is not paired.");
-          }
-          return;
-        }
-
-        const cmd = await handleCommand(core, slashText, isDM, callerId, externalId);
+        const cmd = await handleCommand(
+          core,
+          slashText,
+          isDM,
+          callerId,
+          externalId,
+          workspaceId,
+          workspaceName,
+        );
         if (cmd.handled) {
           if (cmd.reply) await channel.send(cmd.reply);
           return;
@@ -109,15 +190,29 @@ export function createIngressService(
           ? `${authorName}: ${text.trim()}`
           : text.trim();
         if (ambientText) {
-          core.services.messages.create("ambient", ambientText, externalId);
+          core.services.messages.create(
+            workspaceId,
+            externalId,
+            "ambient",
+            ambientText,
+          );
         }
         return;
       }
 
-      log.info("Addressed to bot", { callerId, authorName, isDM, isMention, text: text });
+      log.info("Addressed to bot", {
+        callerId,
+        authorName,
+        isDM,
+        isMention,
+        text,
+        workspace: workspaceName,
+      });
 
       // ─── Addressed to bot: run through policy → agent ─────────────────
-      try { await channel.startTyping(); } catch {}
+      try {
+        await channel.startTyping();
+      } catch {}
 
       const ingress: IngressMessage = {
         platform,
@@ -128,6 +223,8 @@ export function createIngressService(
         isDM,
         isReplyToBot: effectiveMention,
         attachments,
+        workspaceId,
+        workspaceName,
       };
 
       void (async () => {

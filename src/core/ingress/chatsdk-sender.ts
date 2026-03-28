@@ -1,7 +1,7 @@
 import type { Chat } from "chat";
-import type { Logger } from "../logger.js";
 import type { ConversationService } from "../../services/conversations/interface.js";
-import type { OutputFile, MessageSender } from "../types.js";
+import type { Logger } from "../logger.js";
+import type { MessageSender, OutputFile } from "../types.js";
 
 export function createChatSdkSender(
   bot: Chat,
@@ -9,7 +9,11 @@ export function createChatSdkSender(
   log: Logger,
 ): MessageSender {
   return {
-    async send(text: string, conversationId: string, _files?: OutputFile[]): Promise<void> {
+    async send(
+      text: string,
+      conversationId: string,
+      _files?: OutputFile[],
+    ): Promise<void> {
       if (!conversationId) {
         log.warn("No conversation target for scheduled message");
         return;
@@ -18,7 +22,9 @@ export function createChatSdkSender(
       const convos = conversations.list();
       const conv = convos.find((c) => c.externalId === conversationId);
       if (!conv) {
-        log.warn("Conversation not found for scheduled message", { conversationId });
+        log.warn("Conversation not found for scheduled message", {
+          conversationId,
+        });
         return;
       }
 
@@ -27,7 +33,10 @@ export function createChatSdkSender(
       try {
         const channel = bot.channel(threadId);
         await channel.post(text);
-        log.debug("Scheduled message sent", { platform: conv.platform, conversationId: conv.externalId });
+        log.debug("Scheduled message sent", {
+          platform: conv.platform,
+          conversationId: conv.externalId,
+        });
       } catch (err) {
         log.error("Failed to send scheduled message", {
           error: err instanceof Error ? err.message : String(err),

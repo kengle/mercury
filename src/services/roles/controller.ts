@@ -1,6 +1,11 @@
 import { Hono } from "hono";
-import { checkPerm, type Env, getApiCtx, getAuth } from "../../core/api-types.js";
-import { UpdateRole, SetPermissions } from "./models.js";
+import {
+  checkPerm,
+  type Env,
+  getApiCtx,
+  getAuth,
+} from "../../core/api-types.js";
+import { SetPermissions, UpdateRole } from "./models.js";
 
 export const roles = new Hono<Env>();
 
@@ -9,7 +14,8 @@ roles.get("/", (c) => {
   if (denied) return denied;
 
   const { services } = getApiCtx(c);
-  return c.json({ roles: services.roles.list() });
+  const { workspaceId } = getAuth(c);
+  return c.json({ roles: services.roles.list(workspaceId) });
 });
 
 roles.post("/", async (c) => {
@@ -21,8 +27,9 @@ roles.post("/", async (c) => {
   const body = UpdateRole.safeParse(await c.req.json());
   if (!body.success) return c.json({ error: body.error.message }, 400);
 
+  const { workspaceId } = getAuth(c);
   const { userId, role } = body.data;
-  services.roles.set(userId, role, callerId);
+  services.roles.set(workspaceId, userId, role, callerId);
   return c.json({ userId, role });
 });
 
@@ -32,8 +39,9 @@ roles.delete("/:userId", (c) => {
   if (denied) return denied;
 
   const { services } = getApiCtx(c);
+  const { workspaceId } = getAuth(c);
   const userId = decodeURIComponent(c.req.param("userId"));
-  services.roles.set(userId, "member", callerId);
+  services.roles.set(workspaceId, userId, "member", callerId);
   return c.json({ userId, role: "member" });
 });
 
@@ -57,13 +65,17 @@ permissions.get("/", (c) => {
     allRoles[r] = [...services.roles.getRolePermissions(r)];
   }
 
-  const dbRoles = services.roles.list();
+  const { workspaceId } = getAuth(c);
+  const dbRoles = services.roles.list(workspaceId);
   const roleNames = new Set(dbRoles.map((r) => r.role));
   for (const r of roleNames) {
     if (!allRoles[r]) allRoles[r] = [...services.roles.getRolePermissions(r)];
   }
 
-  return c.json({ permissions: allRoles, available: services.roles.getAllPermissions() });
+  return c.json({
+    permissions: allRoles,
+    available: services.roles.getAllPermissions(),
+  });
 });
 
 permissions.put("/", async (c) => {
@@ -81,7 +93,8 @@ permissions.put("/", async (c) => {
     return c.json({ error: `Invalid permissions: ${invalid.join(", ")}` }, 400);
   }
 
+  const { workspaceId } = getAuth(c);
   const key = `role.${role}.permissions`;
-  services.config.set(key, perms.join(","), callerId);
+  services.config.set(workspaceId, key, perms.join(","), callerId);
   return c.json({ role, permissions: perms });
 });

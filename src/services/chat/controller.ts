@@ -7,7 +7,8 @@ export function createChatController(chatService: ChatService): Hono {
 
   app.post("/", async (c) => {
     const body = ChatRequest.safeParse(await c.req.json().catch(() => null));
-    if (!body.success) return c.json({ error: "Missing or empty 'text' field" }, 400);
+    if (!body.success)
+      return c.json({ error: "Missing or empty 'text' field" }, 400);
 
     try {
       const result = await chatService.send(body.data);

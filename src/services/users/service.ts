@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { UserEntity } from "./models.js";
 import type { UserService } from "./interface.js";
+import type { UserEntity } from "./models.js";
 
 export function createUserService(db: Database): UserService {
   const selectById = db.prepare<UserEntity, [string]>(
@@ -13,7 +13,10 @@ export function createUserService(db: Database): UserService {
             first_seen_at as firstSeenAt, last_seen_at as lastSeenAt
      FROM users ORDER BY last_seen_at DESC`,
   );
-  const insertIgnore = db.prepare<void, [string, string, string | null, number, number]>(
+  const insertIgnore = db.prepare<
+    void,
+    [string, string, string | null, number, number]
+  >(
     `INSERT OR IGNORE INTO users(id, platform, display_name, first_seen_at, last_seen_at)
      VALUES (?, ?, ?, ?, ?)`,
   );
@@ -23,7 +26,9 @@ export function createUserService(db: Database): UserService {
   const updateName = db.prepare<void, [string | null, number, string]>(
     "UPDATE users SET display_name = ?, last_seen_at = ? WHERE id = ?",
   );
-  const deleteById = db.prepare<void, [string]>("DELETE FROM users WHERE id = ?");
+  const deleteById = db.prepare<void, [string]>(
+    "DELETE FROM users WHERE id = ?",
+  );
 
   return {
     get(id) {

@@ -3,18 +3,19 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AppConfig } from "../src/core/config.js";
+import { createDatabase } from "../src/core/db.js";
+import type { Agent } from "../src/core/runtime/agent-interface.js";
 import { AgentQueue } from "../src/core/runtime/queue.js";
 import { MercuryCoreRuntime } from "../src/core/runtime/runtime.js";
-import { createDatabase } from "../src/core/db.js";
 import { createConfigService } from "../src/services/config/service.js";
 import { createConversationService } from "../src/services/conversations/service.js";
 import { createMessageService } from "../src/services/messages/service.js";
-import { createTaskService } from "../src/services/tasks/service.js";
-import { createRoleService } from "../src/services/roles/service.js";
 import { createMuteService } from "../src/services/mutes/service.js";
-import { createUserService } from "../src/services/users/service.js";
-import type { Agent } from "../src/core/runtime/agent-interface.js";
 import { createPolicyService } from "../src/services/policy/service.js";
+import { createRoleService } from "../src/services/roles/service.js";
+import { createTaskService } from "../src/services/tasks/service.js";
+import { createUserService } from "../src/services/users/service.js";
+import { createWorkspaceService } from "../src/services/workspaces/service.js";
 
 describe("AgentQueue shutdown", () => {
   test("cancelPending cancels all pending work", () => {
@@ -77,10 +78,16 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
   let core: MercuryCoreRuntime;
 
   const mockAgent: Agent = {
-    async run() { return { text: "", files: [] }; },
-    abort() { return false; },
+    async run() {
+      return { text: "", files: [] };
+    },
+    abort() {
+      return false;
+    },
     kill() {},
-    get isRunning() { return false; },
+    get isRunning() {
+      return false;
+    },
   };
 
   function makeConfig(dir: string): AppConfig {
@@ -97,7 +104,7 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
       enableWhatsApp: false,
       authPath: undefined,
       dbPath: path.join(dir, "state.db"),
-      workspaceDir: path.join(dir, "workspace"),
+      workspacesDir: path.join(dir, "workspaces"),
       whatsappAuthDir: path.join(dir, "wa-auth"),
     } as AppConfig;
   }
@@ -108,6 +115,8 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
     const database = createDatabase(path.join(tmpDir, "state.db"));
     const configSvc = createConfigService(database);
     const muteSvc = createMuteService(database);
+    const wsRoot = path.join(tmpDir, "workspaces");
+    fs.mkdirSync(wsRoot, { recursive: true });
     const services = {
       config: configSvc,
       conversations: createConversationService(database, configSvc),
@@ -116,9 +125,20 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
       roles: createRoleService(database, configSvc),
       mutes: muteSvc,
       users: createUserService(database),
-      policy: createPolicyService(cfg, createRoleService(database, configSvc), configSvc, muteSvc),
+      workspaces: createWorkspaceService(database, wsRoot, configSvc),
+      policy: createPolicyService(
+        cfg,
+        createRoleService(database, configSvc),
+        configSvc,
+        muteSvc,
+      ),
     };
-    core = new MercuryCoreRuntime({ config: cfg, database, services, agent: mockAgent });
+    core = new MercuryCoreRuntime({
+      config: cfg,
+      database,
+      services,
+      agent: mockAgent,
+    });
   });
 
   afterEach(() => {
@@ -130,14 +150,16 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
     core.startScheduler();
 
     // Write something to DB to confirm it's open
-    core.services.messages.create("user", "test");
+    core.services.messages.create(1, "conv1", "user", "test");
 
     await core.shutdown(5000);
 
     expect(core.isShuttingDown).toBe(true);
 
     // DB should be closed — further writes should throw
-    expect(() => core.services.messages.create("user", "test")).toThrow();
+    expect(() =>
+      core.services.messages.create(1, "conv1", "user", "test"),
+    ).toThrow();
   });
 
   test("shutdown is idempotent — second call is a no-op", async () => {
@@ -178,7 +200,9 @@ describe("MercuryCoreRuntime.shutdown (real runtime)", () => {
 
     expect(order).toEqual(["hook1", "hook2"]);
     // DB should still be closed despite hook error
-    expect(() => core.services.messages.create("user", "test")).toThrow();
+    expect(() =>
+      core.services.messages.create(1, "conv1", "user", "test"),
+    ).toThrow();
   });
 
   test("shutdown cancels pending queue entries", async () => {

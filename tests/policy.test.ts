@@ -1,19 +1,19 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Database } from "bun:sqlite";
-import { createDatabase } from "../src/core/db.js";
-import { createConfigService } from "../src/services/config/service.js";
-import { createRoleService } from "../src/services/roles/service.js";
-import { createMuteService } from "../src/services/mutes/service.js";
-import { createPolicyService } from "../src/services/policy/service.js";
-import { RateLimiter } from "../src/core/runtime/rate-limiter.js";
-import type { PolicyService } from "../src/services/policy/interface.js";
 import type { AppConfig } from "../src/core/config.js";
+import { createDatabase } from "../src/core/db.js";
+import { RateLimiter } from "../src/core/runtime/rate-limiter.js";
 import type { IngressMessage } from "../src/core/types.js";
-import type { RoleService } from "../src/services/roles/interface.js";
+import { createConfigService } from "../src/services/config/service.js";
 import type { MuteService } from "../src/services/mutes/interface.js";
+import { createMuteService } from "../src/services/mutes/service.js";
+import type { PolicyService } from "../src/services/policy/interface.js";
+import { createPolicyService } from "../src/services/policy/service.js";
+import type { RoleService } from "../src/services/roles/interface.js";
+import { createRoleService } from "../src/services/roles/service.js";
 
 let tmpDir: string;
 let db: Database;
@@ -31,6 +31,8 @@ function makeConfig(overrides?: Partial<AppConfig>): AppConfig {
   } as AppConfig;
 }
 
+const W = 1;
+
 function msg(overrides?: Partial<IngressMessage>): IngressMessage {
   return {
     platform: "test",
@@ -40,6 +42,8 @@ function msg(overrides?: Partial<IngressMessage>): IngressMessage {
     isDM: false,
     isReplyToBot: false,
     attachments: [],
+    workspaceId: W,
+    workspaceName: "default",
     ...overrides,
   };
 }
@@ -74,7 +78,7 @@ describe("PolicyService", () => {
     });
 
     test("DMs trigger for admin", () => {
-      roles.set("user1", "admin", "test");
+      roles.set(W, "user1", "admin", "test");
       const result = policy.evaluate(msg({ text: "hello", isDM: true }));
       expect(result.action).toBe("process");
     });
@@ -85,7 +89,9 @@ describe("PolicyService", () => {
     });
 
     test("reply-to-bot triggers in group", () => {
-      const result = policy.evaluate(msg({ text: "hello", isReplyToBot: true }));
+      const result = policy.evaluate(
+        msg({ text: "hello", isReplyToBot: true }),
+      );
       expect(result.action).toBe("process");
     });
 
@@ -115,19 +121,19 @@ describe("PolicyService", () => {
     });
 
     test("admin can prompt in DM", () => {
-      roles.set("user1", "admin", "test");
+      roles.set(W, "user1", "admin", "test");
       const result = policy.evaluate(msg({ text: "hello", isDM: true }));
       expect(result.action).toBe("process");
     });
 
     test("denied role gets deny result", () => {
-      roles.set("user1", "guest", "test");
+      roles.set(W, "user1", "guest", "test");
       const result = policy.evaluate(msg({ text: "bot hello" }));
       expect(result.action).toBe("deny");
     });
 
     test("admin always has permission", () => {
-      roles.set("user1", "admin", "test");
+      roles.set(W, "user1", "admin", "test");
       const result = policy.evaluate(msg({ text: "bot hello" }));
       expect(result.action).toBe("process");
       if (result.action === "process") {
@@ -138,7 +144,11 @@ describe("PolicyService", () => {
 
   describe("mute check", () => {
     test("muted user is ignored", () => {
-      mutes.create({ userId: "user1", duration: "10m", confirm: true }, "admin");
+      mutes.create(
+        W,
+        { userId: "user1", duration: "10m", confirm: true },
+        "admin",
+      );
       const result = policy.evaluate(msg({ text: "bot hello" }));
       expect(result.action).toBe("ignore");
     });
@@ -153,7 +163,13 @@ describe("PolicyService", () => {
     test("rate limited user gets denied", () => {
       const configSvc = createConfigService(db);
       const rateLimiter = new RateLimiter(2, 60000);
-      const limited = createPolicyService(makeConfig({ rateLimitPerUser: 2 }), roles, configSvc, mutes, rateLimiter);
+      const limited = createPolicyService(
+        makeConfig({ rateLimitPerUser: 2 }),
+        roles,
+        configSvc,
+        mutes,
+        rateLimiter,
+      );
 
       limited.evaluate(msg({ text: "bot one" }));
       limited.evaluate(msg({ text: "bot two" }));
@@ -174,8 +190,10 @@ describe("PolicyService", () => {
 
   describe("caller identity", () => {
     test("returns callerId and role in process result", () => {
-      roles.set("user1", "admin", "test");
-      const result = policy.evaluate(msg({ text: "bot hello", callerId: "user1" }));
+      roles.set(W, "user1", "admin", "test");
+      const result = policy.evaluate(
+        msg({ text: "bot hello", callerId: "user1" }),
+      );
       expect(result.action).toBe("process");
       if (result.action === "process") {
         expect(result.callerId).toBe("user1");

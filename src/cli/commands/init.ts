@@ -1,8 +1,14 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
-import { CWD, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
 import { createDatabase } from "../../core/db.js";
 import { createApiKeyService } from "../../services/api-keys/service.js";
+import { CWD, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
 
 const GITIGNORE = `.env
 state.db
@@ -10,13 +16,7 @@ state.db-shm
 state.db-wal
 whatsapp-auth/
 pi-agent/
-sessions/
-workspace/outbox/
-workspace/inbox/
-workspace/auth.json
-workspace/.messages/
-workspace/.pi/skills/
-workspace/.pi/extensions/
+workspaces/
 extensions/*/dist/
 extensions/*/node_modules/
 .build-context/
@@ -53,7 +53,7 @@ jobs:
 
       - name: Lowercase repo name
         id: lower
-        run: echo "repo=\${GITHUB_REPOSITORY,,}" >> \$GITHUB_OUTPUT
+        run: echo "repo=\${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -86,28 +86,9 @@ export function initAction(): void {
     console.log("  • .env (already exists)");
   }
 
-  const wsDir = join(CWD, "workspace");
-  mkdirSync(wsDir, { recursive: true });
-  console.log("  ✓ workspace/");
-
-  const agentsMdPath = join(wsDir, "AGENTS.md");
-  if (!existsSync(agentsMdPath)) {
-    copyFileSync(join(TEMPLATES_DIR, "AGENTS.md"), agentsMdPath);
-    console.log("  ✓ workspace/AGENTS.md");
-  } else {
-    console.log("  • workspace/AGENTS.md (already exists)");
-  }
-
-  const srcExtDir = join(PACKAGE_ROOT, "resources/extensions/subagent");
-  if (existsSync(srcExtDir)) {
-    console.log("\nCopying subagent extension:");
-    const extensionsDir = join(wsDir, ".pi/extensions/subagent");
-    mkdirSync(extensionsDir, { recursive: true });
-    for (const file of readdirSync(srcExtDir)) {
-      copyFileSync(join(srcExtDir, file), join(extensionsDir, file));
-      console.log(`  ✓ .pi/extensions/subagent/${file}`);
-    }
-  }
+  const wsRoot = join(CWD, "workspaces");
+  mkdirSync(wsRoot, { recursive: true });
+  console.log("  ✓ workspaces/");
 
   const gitignorePath = join(CWD, ".gitignore");
   if (!existsSync(gitignorePath)) {
@@ -145,7 +126,8 @@ export function initAction(): void {
   console.log("\n🪽 Initialization complete!");
   console.log("\nNext steps:");
   console.log("  1. Edit .env with your API keys and adapter settings");
-  console.log("  2. mercury ext add <source>   — install extensions");
-  console.log("  3. mercury dockerfile          — generate Dockerfile");
-  console.log("  4. mercury build               — build image locally");
+  console.log("  2. mercury workspace create <name>  — create a workspace");
+  console.log("  3. mercury ext add <source>          — install extensions");
+  console.log("  4. mercury dockerfile                — generate Dockerfile");
+  console.log("  5. mercury build                     — build image locally");
 }

@@ -1,5 +1,10 @@
 import { Hono } from "hono";
-import { checkPerm, type Env, getApiCtx, getAuth } from "../../core/api-types.js";
+import {
+  checkPerm,
+  type Env,
+  getApiCtx,
+  getAuth,
+} from "../../core/api-types.js";
 import { UpdateConfig } from "./models.js";
 
 export const config = new Hono<Env>();
@@ -9,7 +14,8 @@ config.get("/", (c) => {
   if (denied) return denied;
 
   const { services, configRegistry } = getApiCtx(c);
-  const entries = services.config.list();
+  const { workspaceId } = getAuth(c);
+  const entries = services.config.list(workspaceId);
   const configMap: Record<string, string> = {};
   for (const e of entries) configMap[e.key] = e.value;
 
@@ -32,11 +38,13 @@ config.put("/", async (c) => {
   if (!body.success) return c.json({ error: body.error.message }, 400);
 
   const { key, value } = body.data;
-  if (!services.config.isValidKey(key)) return c.json({ error: "Invalid config key" }, 400);
+  if (!services.config.isValidKey(key))
+    return c.json({ error: "Invalid config key" }, 400);
 
   const error = services.config.validate(key, value);
   if (error) return c.json({ error }, 400);
 
-  services.config.set(key, value, callerId);
+  const { workspaceId } = getAuth(c);
+  services.config.set(workspaceId, key, value, callerId);
   return c.json({ key, value });
 });

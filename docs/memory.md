@@ -1,41 +1,45 @@
 # Memory
 
-Mercury stores memory in a single workspace directory and per-conversation session files.
+Mercury stores memory in per-workspace directories and per-conversation session files. Each workspace is fully isolated.
 
 ## Workspace
 
 ```
-workspace/
+workspaces/<name>/
 ├── inbox/              # Media received from users
 ├── outbox/             # Files produced by the agent
-├── AGENTS.md           # Agent instructions
+├── AGENTS.md           # Agent instructions (per workspace)
+├── .env                # Workspace-specific config overrides
 ├── .pi/
 │   ├── skills/         # Installed skills (built-in + extension)
 │   └── extensions/     # Pi extensions (permission guard)
+├── sessions/           # Per-conversation session files
+│   └── <conv-id>/session.jsonl
+├── .messages/          # Daily message logs
 └── (extension dirs)    # Created by extensions (e.g., knowledge/)
 ```
 
-The workspace is shared across all conversations. Extensions create additional directories via the `workspace_init` hook.
+Extensions create additional directories via the `workspace_init` hook.
 
 ## Sessions
 
-Each conversation gets its own pi session file:
+Each conversation gets its own pi session file within its workspace:
 
 ```
-sessions/<conversation-id>/session.jsonl
+workspaces/<name>/sessions/<conversation-id>/session.jsonl
 ```
 
 Sessions persist agent conversation history across messages. The `/compact` command resets the session (fresh context). The `/new` command starts a new session without compacting.
 
 ## Ambient Messages
 
-Non-triggering messages in paired group conversations are stored as ambient context in the `messages` table. When the agent is triggered, recent ambient messages are included in the prompt so the agent has conversational context.
+Non-triggering messages in workspace-assigned group conversations are stored as ambient context in the `messages` table (scoped by workspace_id). When the agent is triggered, recent ambient messages are included in the prompt so the agent has conversational context.
 
 Format: `AuthorName: message text`
 
 ## Message History
 
-The agent receives recent message history (up to 200 messages) from the current conversation, starting after the last session boundary. This includes:
+The agent receives recent message history (up to 200 messages) from the current conversation and workspace, starting after the last session boundary. This includes:
 - `user` — messages that triggered the agent
 - `assistant` — agent responses
 - `ambient` — non-triggering group messages
@@ -47,8 +51,8 @@ The workspace structure beyond `inbox/`/`outbox/` is extension-driven. For examp
 ## Persistence
 
 Memory persists because:
-1. The workspace is on disk (mounted as `/data/workspace` in Docker)
+1. Each workspace directory is on disk (mounted as `/data/workspaces/<name>` in Docker)
 2. Session files accumulate conversation history
-3. The SQLite database stores messages, conversations, tasks, roles, config
+3. The SQLite database stores workspace-scoped messages, conversations, tasks, roles, config
 
-The workspace is plain files. You can browse it, edit files directly, or back it up.
+Workspaces are plain files. You can browse them, edit files directly, or back them up.

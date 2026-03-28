@@ -10,6 +10,7 @@ export const TaskEntity = z.object({
   nextRunAt: z.number(),
   createdBy: z.string(),
   conversationId: z.string(),
+  workspaceId: z.number(),
   createdAt: z.number(),
   updatedAt: z.number(),
 });

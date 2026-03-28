@@ -1,9 +1,10 @@
 export const schema = `
   CREATE TABLE IF NOT EXISTS messages (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    workspace_id INTEGER NOT NULL,
+    conversation_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    conversation_id TEXT NOT NULL DEFAULT '',
     attachments TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -15,9 +16,14 @@ export const schema = `
   CREATE INDEX IF NOT EXISTS idx_messages_conversation
   ON messages(conversation_id, created_at);
 
+  CREATE INDEX IF NOT EXISTS idx_messages_workspace
+  ON messages(workspace_id, conversation_id, created_at);
+
   CREATE TABLE IF NOT EXISTS session_boundaries (
-    conversation_id TEXT PRIMARY KEY,
+    workspace_id INTEGER NOT NULL,
+    conversation_id TEXT NOT NULL,
     min_message_id INTEGER NOT NULL DEFAULT 0,
-    updated_at INTEGER NOT NULL
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (workspace_id, conversation_id)
   );
 `;

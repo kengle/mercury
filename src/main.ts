@@ -12,38 +12,39 @@ console.warn = (...args: unknown[]) => {
 
 import { createMemoryState } from "@chat-adapter/state-memory";
 import { Chat } from "chat";
+import { loadConfig, resolveProjectPath } from "./core/config.js";
+import { createDatabase } from "./core/db.js";
 import {
   connectAdapters,
   disconnectAdapters,
   setupChatSdkAdapters,
 } from "./core/ingress/chatsdk.js";
 import { createChatSdkSender } from "./core/ingress/chatsdk-sender.js";
-import { loadConfig, resolveProjectPath } from "./core/config.js";
-import { createIngressService } from "./services/ingress/service.js";
-import { createChatSdkAdapter } from "./services/ingress/chatsdk-adapter.js";
+import { configureLogger, logger } from "./core/logger.js";
+import { RateLimiter } from "./core/runtime/rate-limiter.js";
 import { MercuryCoreRuntime } from "./core/runtime/runtime.js";
 import { SubprocessAgent } from "./core/runtime/subprocess.js";
-import { createDatabase } from "./core/db.js";
-import { createConfigService } from "./services/config/service.js";
-import { createConversationService } from "./services/conversations/service.js";
-import { createMessageService } from "./services/messages/service.js";
-import { createTaskService } from "./services/tasks/service.js";
-import { createRoleService } from "./services/roles/service.js";
-import { createMuteService } from "./services/mutes/service.js";
-import { createUserService } from "./services/users/service.js";
-import { createPolicyService } from "./services/policy/service.js";
-import { RateLimiter } from "./core/runtime/rate-limiter.js";
-import { ConfigRegistry } from "./services/config/registry.js";
 import { JobRunner } from "./extensions/jobs.js";
 import { ExtensionRegistry } from "./extensions/loader.js";
 import {
   installBuiltinSkills,
   installExtensionSkills,
 } from "./extensions/skills.js";
-import { configureLogger, logger } from "./core/logger.js";
 import { createExtensionStateService } from "./extensions/state-service.js";
 import { createApp } from "./server.js";
 import { createApiKeyService } from "./services/api-keys/service.js";
+import { ConfigRegistry } from "./services/config/registry.js";
+import { createConfigService } from "./services/config/service.js";
+import { createConversationService } from "./services/conversations/service.js";
+import { createChatSdkAdapter } from "./services/ingress/chatsdk-adapter.js";
+import { createIngressService } from "./services/ingress/service.js";
+import { createMessageService } from "./services/messages/service.js";
+import { createMuteService } from "./services/mutes/service.js";
+import { createPolicyService } from "./services/policy/service.js";
+import { createRoleService } from "./services/roles/service.js";
+import { createTaskService } from "./services/tasks/service.js";
+import { createUserService } from "./services/users/service.js";
+import { createWorkspaceService } from "./services/workspaces/service.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = join(__dirname, "..");
@@ -63,8 +64,18 @@ async function main() {
   const configService = createConfigService(database);
   const muteService = createMuteService(database);
   const rolesService = createRoleService(database, configService);
-  const rateLimiter = new RateLimiter(config.rateLimitPerUser, config.rateLimitWindowMs);
+  const rateLimiter = new RateLimiter(
+    config.rateLimitPerUser,
+    config.rateLimitWindowMs,
+  );
   rateLimiter.startCleanup();
+
+  const workspacesRoot = resolveProjectPath(config.workspacesDir);
+  const workspaceService = createWorkspaceService(
+    database,
+    workspacesRoot,
+    configService,
+  );
 
   const services = {
     config: configService,
@@ -74,7 +85,14 @@ async function main() {
     roles: rolesService,
     mutes: muteService,
     users: createUserService(database),
-    policy: createPolicyService(config, rolesService, configService, muteService, rateLimiter),
+    policy: createPolicyService(
+      config,
+      rolesService,
+      configService,
+      muteService,
+      rateLimiter,
+    ),
+    workspaces: workspaceService,
   };
 
   const agent = new SubprocessAgent(config);
@@ -100,7 +118,7 @@ async function main() {
 
   core.initExtensions(registry);
 
-  const workspace = resolveProjectPath(config.workspaceDir);
+  // Install skills into all existing workspaces at startup
   const builtinSkillsDir = join(PACKAGE_ROOT, "resources/skills");
   const builtinSkillNames = new Set<string>();
   if (fs.existsSync(builtinSkillsDir)) {
@@ -108,8 +126,11 @@ async function main() {
       if (e.isDirectory()) builtinSkillNames.add(e.name);
     }
   }
-  installExtensionSkills(registry.list(), workspace, logger, builtinSkillNames);
-  installBuiltinSkills(builtinSkillsDir, workspace, logger);
+  for (const ws of workspaceService.list()) {
+    const wsDir = join(workspacesRoot, ws.name);
+    installExtensionSkills(registry.list(), wsDir, logger, builtinSkillNames);
+    installBuiltinSkills(builtinSkillsDir, wsDir, logger);
+  }
 
   // ─── Setup Chat SDK Adapters (optional) ──────────────────────────────────
 
@@ -123,7 +144,8 @@ async function main() {
     ) => Promise<Response>
   > = {};
 
-  const hasAdapters = config.enableWhatsApp || config.enableDiscord || config.enableSlack;
+  const hasAdapters =
+    config.enableWhatsApp || config.enableDiscord || config.enableSlack;
 
   if (hasAdapters) {
     adapters = await setupChatSdkAdapters(config, logger);
@@ -134,6 +156,8 @@ async function main() {
       config,
       log: logger,
       adapters,
+      conversations: services.conversations,
+      workspaces: workspaceService,
     });
 
     bot = new Chat({
@@ -152,7 +176,11 @@ async function main() {
     await bot.initialize();
     await connectAdapters(adapters, logger);
 
-    const messageSender = createChatSdkSender(bot, core.services.conversations, logger);
+    const messageSender = createChatSdkSender(
+      bot,
+      core.services.conversations,
+      logger,
+    );
     core.startScheduler(messageSender);
 
     for (const [name, adapter] of Object.entries(adapters)) {

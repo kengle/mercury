@@ -1,14 +1,14 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AppConfig } from "../src/core/config.js";
-import { MercuryExtensionAPIImpl } from "../src/extensions/api.js";
-import type { MercuryExtensionContext } from "../src/extensions/types.js";
 import { createDatabase } from "../src/core/db.js";
-import { createExtensionStateService } from "../src/extensions/state-service.js";
-import type { Database } from "bun:sqlite";
+import { MercuryExtensionAPIImpl } from "../src/extensions/api.js";
 import type { ExtensionStateService } from "../src/extensions/state-service.js";
+import { createExtensionStateService } from "../src/extensions/state-service.js";
+import type { MercuryExtensionContext } from "../src/extensions/types.js";
 
 let tmpDir: string;
 let db: Database;
@@ -39,7 +39,12 @@ afterEach(() => {
 
 describe("Widget registration via API", () => {
   test("widget is registered in meta", () => {
-    const api = new MercuryExtensionAPIImpl("test-ext", tmpDir, extState, () => {});
+    const api = new MercuryExtensionAPIImpl(
+      "test-ext",
+      tmpDir,
+      extState,
+      () => {},
+    );
     api.widget({ label: "Status", render: () => "<p>OK</p>" });
 
     const meta = api.getMeta();
@@ -48,7 +53,12 @@ describe("Widget registration via API", () => {
   });
 
   test("multiple widgets registered", () => {
-    const api = new MercuryExtensionAPIImpl("test-ext", tmpDir, extState, () => {});
+    const api = new MercuryExtensionAPIImpl(
+      "test-ext",
+      tmpDir,
+      extState,
+      () => {},
+    );
     api.widget({ label: "A", render: () => "<p>A</p>" });
     api.widget({ label: "B", render: () => "<p>B</p>" });
 
@@ -57,7 +67,12 @@ describe("Widget registration via API", () => {
   });
 
   test("widget render returns HTML", () => {
-    const api = new MercuryExtensionAPIImpl("test-ext", tmpDir, extState, () => {});
+    const api = new MercuryExtensionAPIImpl(
+      "test-ext",
+      tmpDir,
+      extState,
+      () => {},
+    );
     api.widget({ label: "Stats", render: () => "<div>42</div>" });
 
     const meta = api.getMeta();
@@ -66,12 +81,17 @@ describe("Widget registration via API", () => {
   });
 
   test("widget render can use store", () => {
-    const api = new MercuryExtensionAPIImpl("test-ext", tmpDir, extState, () => {});
+    const api = new MercuryExtensionAPIImpl(
+      "test-ext",
+      tmpDir,
+      extState,
+      () => {},
+    );
     api.store.set("count", "5");
     api.widget({
       label: "Count",
       render: (c) => {
-        const count = extState.get("test-ext", "count") ?? "0";
+        const count = extState.get(0, "test-ext", "count") ?? "0";
         return `<p>${count}</p>`;
       },
     });
@@ -82,7 +102,12 @@ describe("Widget registration via API", () => {
   });
 
   test("widget render error is isolatable", () => {
-    const api = new MercuryExtensionAPIImpl("test-ext", tmpDir, extState, () => {});
+    const api = new MercuryExtensionAPIImpl(
+      "test-ext",
+      tmpDir,
+      extState,
+      () => {},
+    );
     api.widget({
       label: "Broken",
       render: () => {

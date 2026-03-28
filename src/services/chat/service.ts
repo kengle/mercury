@@ -2,12 +2,12 @@ import fs from "node:fs";
 import path from "node:path";
 import type { AppConfig } from "../../core/config.js";
 import { resolveProjectPath } from "../../core/config.js";
-import { logger } from "../../core/logger.js";
-import type { IngressMessage, MessageAttachment } from "../../core/types.js";
 import { extToMime, mimeToMediaType } from "../../core/ingress/media.js";
+import { logger } from "../../core/logger.js";
 import type { MercuryCoreRuntime } from "../../core/runtime/runtime.js";
-import type { ChatRequest, ChatResponse, ChatFileOutput } from "./models.js";
+import type { IngressMessage, MessageAttachment } from "../../core/types.js";
 import type { ChatService } from "./interface.js";
+import type { ChatFileOutput, ChatRequest, ChatResponse } from "./models.js";
 
 export function createChatService(core: MercuryCoreRuntime): ChatService {
   return {
@@ -15,10 +15,29 @@ export function createChatService(core: MercuryCoreRuntime): ChatService {
       const callerId = request.callerId?.trim() || "system";
       const authorName = request.authorName?.trim() || undefined;
 
+      // Resolve workspace
+      let workspaceId: number | undefined;
+      let workspaceName: string | undefined;
+      if (request.workspace && core.services.workspaces) {
+        const ws = core.services.workspaces.get(request.workspace);
+        if (ws) {
+          workspaceId = ws.id;
+          workspaceName = ws.name;
+        }
+      }
+
       const attachments: MessageAttachment[] = [];
       if (request.files?.length) {
-        const workspace = resolveProjectPath(core.config.workspaceDir);
-        const inboxDir = path.join(workspace, "inbox");
+        if (!workspaceName) {
+          throw new Error(
+            "Workspace is required when sending files. Specify 'workspace' in the request.",
+          );
+        }
+        const wsDir = path.join(
+          resolveProjectPath(core.config.workspacesDir),
+          workspaceName,
+        );
+        const inboxDir = path.join(wsDir, "inbox");
         fs.mkdirSync(inboxDir, { recursive: true });
 
         for (const file of request.files) {
@@ -47,6 +66,14 @@ export function createChatService(core: MercuryCoreRuntime): ChatService {
 
       const conversationExternalId = `api:${callerId}`;
       core.services.conversations.create("api", conversationExternalId, "dm");
+      // Assign conversation to workspace if specified
+      if (workspaceId !== undefined) {
+        core.services.conversations.assignWorkspace(
+          "api",
+          conversationExternalId,
+          workspaceId,
+        );
+      }
 
       const ingress: IngressMessage = {
         platform: "api",
@@ -57,6 +84,8 @@ export function createChatService(core: MercuryCoreRuntime): ChatService {
         isDM: true,
         isReplyToBot: true,
         attachments,
+        workspaceId,
+        workspaceName,
       };
 
       const result = await core.handleMessage(ingress, "cli");

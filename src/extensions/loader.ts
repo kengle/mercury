@@ -8,11 +8,11 @@
 import fs from "node:fs";
 import path from "node:path";
 import type { Logger } from "../core/logger.js";
-import type { ExtensionStateService } from "./state-service.js";
+import type { ConfigRegistry } from "../services/config/registry.js";
 import type { RoleService } from "../services/roles/interface.js";
 import { MercuryExtensionAPIImpl } from "./api.js";
-import type { ConfigRegistry } from "../services/config/registry.js";
 import { RESERVED_EXTENSION_NAMES } from "./reserved.js";
+import type { ExtensionStateService } from "./state-service.js";
 import type {
   EventHandler,
   ExtensionMeta,
@@ -93,7 +93,13 @@ export class ExtensionRegistry {
       }
 
       try {
-        const meta = await loadExtension(name, extDir, indexPath, extState, roles);
+        const meta = await loadExtension(
+          name,
+          extDir,
+          indexPath,
+          extState,
+          roles,
+        );
         // Register extension config keys in the config registry
         if (configRegistry) {
           for (const [key, def] of meta.configs) {

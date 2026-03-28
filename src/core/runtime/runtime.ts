@@ -1,25 +1,29 @@
-import path from "node:path";
 import type { Database } from "bun:sqlite";
-import { AgentError } from "./agent-error.js";
-import type { Agent } from "./agent-interface.js";
-import { type AppConfig, resolveProjectPath } from "../config.js";
+import path from "node:path";
 import { HookDispatcher } from "../../extensions/hooks.js";
 import type { ExtensionRegistry } from "../../extensions/loader.js";
+import { installExtensionSkills } from "../../extensions/skills.js";
 import type { MercuryExtensionContext } from "../../extensions/types.js";
+import type { PolicyResult } from "../../services/policy/interface.js";
+import type { Services } from "../api-types.js";
+import {
+  type AppConfig,
+  loadWorkspaceConfig,
+  mergeWorkspaceConfig,
+  resolveProjectPath,
+} from "../config.js";
 import { logger } from "../logger.js";
-import { ensurePiResourceDir } from "./workspace.js";
 import { createTracer, type Tracer } from "../otel.js";
-
 import type {
   AgentOutput,
   IngressMessage,
   MessageAttachment,
   MessageSender,
 } from "../types.js";
-
-import type { Services } from "../api-types.js";
+import { AgentError } from "./agent-error.js";
+import type { Agent } from "./agent-interface.js";
 import { AgentQueue } from "./queue.js";
-import type { PolicyResult } from "../../services/policy/interface.js";
+import { ensurePiResourceDir } from "./workspace.js";
 
 export type InputSource = "cli" | "scheduler" | "chat-sdk";
 
@@ -45,7 +49,6 @@ export class MercuryCoreRuntime {
   private readonly shutdownHooks: ShutdownHook[] = [];
   private shuttingDown = false;
   private signalHandlersInstalled = false;
-  readonly workspace: string;
   readonly tracer: Tracer;
 
   constructor(deps: RuntimeDeps) {
@@ -55,15 +58,11 @@ export class MercuryCoreRuntime {
     this.agent = deps.agent;
     this.queue = deps.queue ?? new AgentQueue();
 
-    this.workspace = resolveProjectPath(deps.config.workspaceDir);
-    ensurePiResourceDir(this.workspace);
-
     this.tracer = createTracer({
       endpoint: this.config.otelEndpoint ?? "",
       serviceName: this.config.otelService,
     });
   }
-
 
   initExtensions(registry: ExtensionRegistry): void {
     this.hooks = new HookDispatcher(registry, logger);
@@ -80,6 +79,15 @@ export class MercuryCoreRuntime {
       const traceId = this.tracer.newTraceId();
       const span = this.tracer.startSpan("mercury.scheduled_task", traceId);
       span.attr("task.id", String(task.id));
+      const ws = this.services.workspaces.getById(task.workspaceId);
+      if (!ws) {
+        logger.warn("Scheduled task references deleted workspace, skipping", {
+          taskId: task.id,
+          workspaceId: task.workspaceId,
+        });
+        span.end(false);
+        return;
+      }
       const result = await this.executePrompt({
         prompt: task.prompt,
         source: "scheduler",
@@ -88,6 +96,8 @@ export class MercuryCoreRuntime {
         conversationId: task.conversationId,
         traceId,
         parentSpanId: span.id,
+        workspaceId: task.workspaceId,
+        workspaceName: ws.name,
       });
       span.end();
       if (!task.silent && sender) {
@@ -115,7 +125,12 @@ export class MercuryCoreRuntime {
     span.attr("message.attachments", message.attachments?.length ?? 0);
 
     try {
-      const outcome = await this.routeMessage(message, source, traceId, span.id);
+      const outcome = await this.routeMessage(
+        message,
+        source,
+        traceId,
+        span.id,
+      );
       span.attr("message.action", outcome.action);
       span.end(outcome.action !== "deny");
       return outcome;
@@ -131,39 +146,72 @@ export class MercuryCoreRuntime {
     traceId: string,
     parentSpanId: string,
   ): Promise<PolicyResult & { result?: AgentOutput }> {
+    const wsId = message.workspaceId;
+    const wsName = message.workspaceName;
+
+    if (wsId == null || !wsName) {
+      return { action: "ignore" }; // No workspace context — message cannot be processed
+    }
+
     if (source === "cli") {
       const prompt = message.text.trim();
       if (!prompt) return { action: "ignore" };
-      if (this.services.mutes.isMuted(message.callerId)) return { action: "ignore" };
+      if (this.services.mutes.isMuted(wsId, message.callerId))
+        return { action: "ignore" };
 
-      const role = this.services.roles.resolveRole(message.callerId);
+      const role = this.services.roles.resolveRole(wsId, message.callerId);
       try {
         const result = await this.executePrompt({
-          prompt, source, callerId: message.callerId, isDM: message.isDM,
+          prompt,
+          source,
+          callerId: message.callerId,
+          isDM: message.isDM,
           conversationId: message.conversationExternalId,
-          attachments: message.attachments, authorName: message.authorName,
-          traceId, parentSpanId,
+          attachments: message.attachments,
+          authorName: message.authorName,
+          traceId,
+          parentSpanId,
+          workspaceId: wsId,
+          workspaceName: wsName,
         });
-        return { action: "process", prompt, callerId: message.callerId, role, result };
+        return {
+          action: "process",
+          prompt,
+          callerId: message.callerId,
+          role,
+          result,
+        };
       } catch (error) {
         return this.handleAgentError(error);
       }
     }
 
-    const policySpan = this.tracer.startSpan("mercury.policy", traceId, parentSpanId);
+    const policySpan = this.tracer.startSpan(
+      "mercury.policy",
+      traceId,
+      parentSpanId,
+    );
     const policy = this.services.policy.evaluate(message);
     policySpan.attr("policy.action", policy.action);
-    if (policy.action === "deny") policySpan.attr("policy.reason", policy.reason);
+    if (policy.action === "deny")
+      policySpan.attr("policy.reason", policy.reason);
     policySpan.end();
 
     if (policy.action !== "process") return policy;
 
     try {
       const result = await this.executePrompt({
-        prompt: policy.prompt, source, callerId: policy.callerId,
-        isDM: message.isDM, conversationId: message.conversationExternalId,
-        attachments: message.attachments, authorName: message.authorName,
-        traceId, parentSpanId,
+        prompt: policy.prompt,
+        source,
+        callerId: policy.callerId,
+        isDM: message.isDM,
+        conversationId: message.conversationExternalId,
+        attachments: message.attachments,
+        authorName: message.authorName,
+        traceId,
+        parentSpanId,
+        workspaceId: wsId,
+        workspaceName: wsName,
       });
       return { ...policy, result };
     } catch (error) {
@@ -179,7 +227,10 @@ export class MercuryCoreRuntime {
         case "timeout":
           return { action: "deny", reason: "Agent timed out." };
         case "error":
-          logger.error("Agent error", error instanceof Error ? error : undefined);
+          logger.error(
+            "Agent error",
+            error instanceof Error ? error : undefined,
+          );
           throw error;
       }
     }
@@ -290,19 +341,58 @@ export class MercuryCoreRuntime {
     callerId: string;
     isDM: boolean;
     conversationId: string;
+    workspaceId: number;
+    workspaceName: string;
     attachments?: MessageAttachment[];
     authorName?: string;
     traceId: string;
     parentSpanId: string;
   }): Promise<AgentOutput> {
-    const { prompt, callerId, isDM, conversationId, attachments, authorName, traceId, parentSpanId } = opts;
-    this.services.messages.create("user", prompt, conversationId, attachments);
+    const {
+      prompt,
+      callerId,
+      isDM,
+      conversationId,
+      workspaceId,
+      attachments,
+      authorName,
+      traceId,
+      parentSpanId,
+    } = opts;
+
+    this.services.messages.create(
+      workspaceId,
+      conversationId,
+      "user",
+      prompt,
+      attachments,
+    );
 
     return this.queue.enqueue(async () => {
-      const workspace = this.workspace;
+      const workspace = path.join(
+        resolveProjectPath(this.config.workspacesDir),
+        opts.workspaceName,
+      );
+      const wsConfig = loadWorkspaceConfig(workspace);
+      const effectiveConfig = mergeWorkspaceConfig(this.config, wsConfig);
+      const wsEnvOverrides = wsConfig.env;
+
+      // Ensure workspace dir structure and install skills
+      ensurePiResourceDir(workspace);
+      if (this.extensionRegistry) {
+        installExtensionSkills(
+          this.extensionRegistry.list(),
+          workspace,
+          logger,
+        );
+      }
 
       if (this.hooks && this.extensionCtx) {
-        await this.hooks.emit("workspace_init", { workspace }, this.extensionCtx);
+        await this.hooks.emit(
+          "workspace_init",
+          { workspace },
+          this.extensionCtx,
+        );
       }
 
       let extraEnv: Record<string, string> | undefined;
@@ -322,14 +412,18 @@ export class MercuryCoreRuntime {
         }
       }
 
-      const callerRole = this.services.roles.resolveRole(callerId);
+      const callerRole = this.services.roles.resolveRole(workspaceId, callerId);
       const extensionEnvKeys = new Set<string>();
 
       if (this.extensionRegistry) {
         const cliExtensions = this.extensionRegistry.getCliExtensions();
         if (cliExtensions.length > 0) {
           const denied = cliExtensions
-            .filter((ext) => ext.clis.length > 0 && !this.services.roles.hasPermission(callerRole, ext.name))
+            .filter(
+              (ext) =>
+                ext.clis.length > 0 &&
+                !this.services.roles.hasPermission(callerRole, ext.name),
+            )
             .flatMap((ext) => ext.clis.map((c) => c.name));
           if (denied.length > 0) {
             extraEnv = { ...extraEnv, MERCURY_DENIED_CLIS: denied.join(",") };
@@ -341,25 +435,49 @@ export class MercuryCoreRuntime {
             extensionEnvKeys.add(envDef.from);
           }
           if (ext.envVars.length === 0) continue;
-          if (ext.permission && !this.services.roles.hasPermission(callerRole, ext.name)) continue;
+          if (
+            ext.permission &&
+            !this.services.roles.hasPermission(callerRole, ext.name)
+          )
+            continue;
           for (const envDef of ext.envVars) {
-            const value = process.env[envDef.from];
+            // Workspace env overrides take precedence over process env
+            const value =
+              wsEnvOverrides[envDef.from] ?? process.env[envDef.from];
             if (value) {
-              const stripped = envDef.from.startsWith("MERCURY_") ? envDef.from.slice(8) : envDef.from;
+              const stripped = envDef.from.startsWith("MERCURY_")
+                ? envDef.from.slice(8)
+                : envDef.from;
               extraEnv = { ...extraEnv, [envDef.as ?? stripped]: value };
             }
           }
         }
       }
 
+      // Pass through MERCURY_* env vars (workspace overrides take precedence)
       for (const [key, value] of Object.entries(process.env)) {
         if (key.startsWith("MERCURY_") && value && !extensionEnvKeys.has(key)) {
+          const wsValue = wsEnvOverrides[key];
+          extraEnv = { ...extraEnv, [key.slice(8)]: wsValue ?? value };
+        }
+      }
+      // Also pass workspace-only env vars not in process.env
+      for (const [key, value] of Object.entries(wsEnvOverrides)) {
+        if (
+          key.startsWith("MERCURY_") &&
+          !extensionEnvKeys.has(key) &&
+          !process.env[key]
+        ) {
           extraEnv = { ...extraEnv, [key.slice(8)]: value };
         }
       }
 
       // Trace: agent execution span, propagate context to pi subprocess
-      const agentSpan = this.tracer.startSpan("mercury.agent", traceId, parentSpanId);
+      const agentSpan = this.tracer.startSpan(
+        "mercury.agent",
+        traceId,
+        parentSpanId,
+      );
       agentSpan.attr("agent.caller_id", callerId);
       agentSpan.attr("agent.caller_role", callerRole);
       agentSpan.attr("agent.conversation_id", conversationId);
@@ -370,13 +488,31 @@ export class MercuryCoreRuntime {
         OTEL_PARENT_SPAN_ID: agentSpan.id,
       };
 
-      const history = this.services.messages.list(conversationId, 200);
+      const history = this.services.messages.list(
+        workspaceId,
+        conversationId,
+        200,
+      );
       const startTime = Date.now();
 
       try {
         const result = await this.agent.run({
-          workspace, messages: history, prompt, callerId, callerRole,
-          isDM, conversationId, authorName, attachments, extraEnv, extensionSystemPrompt,
+          workspace,
+          messages: history,
+          prompt,
+          callerId,
+          callerRole,
+          isDM,
+          conversationId,
+          authorName,
+          attachments,
+          extraEnv,
+          extensionSystemPrompt,
+          workspaceId,
+          workspaceName: opts.workspaceName,
+          modelProvider: effectiveConfig.modelProvider,
+          model: effectiveConfig.model,
+          agentTimeoutMs: effectiveConfig.agentTimeoutMs,
         });
 
         const durationMs = Date.now() - startTime;
@@ -398,7 +534,12 @@ export class MercuryCoreRuntime {
           }
         }
 
-        this.services.messages.create("assistant", result.text, conversationId);
+        this.services.messages.create(
+          workspaceId,
+          conversationId,
+          "assistant",
+          result.text,
+        );
         agentSpan.end();
         return result;
       } catch (error) {
