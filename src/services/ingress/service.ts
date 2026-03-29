@@ -43,9 +43,8 @@ export function createIngressService(
       );
       let assigned = workspaceId != null;
 
-      // ─── Unassigned: auto-pair or /pair command ───────────────────────
+      // ─── Auto-pair: create dedicated workspace for new conversations ───
       if (!assigned) {
-        // Auto-pair: create dedicated workspace automatically for DMs and groups
         const workspaceName = isDM
           ? `ws-${platform}-${callerId}`
           : `ws-${platform}-group-${externalId}`;
@@ -120,57 +119,6 @@ export function createIngressService(
           workspaceId = workspace.id;
           assigned = true;
         }
-
-        // If still not assigned, check for /pair command
-        if (!assigned) {
-          if (!text.startsWith("/pair ")) {
-            log.info("Unassigned conversation, ignoring", {
-              platform,
-              externalId,
-            });
-            return;
-          }
-
-          // Ensure conversation exists in DB
-          core.services.conversations.create(
-            platform,
-            externalId,
-            isDM ? "dm" : "group",
-          );
-          const code = text.slice(6).trim().toUpperCase();
-
-          const ws = core.services.workspaces.findByPairingCode(code);
-          if (ws) {
-            core.services.workspaces.regeneratePairingCode(ws.id);
-            core.services.conversations.assignWorkspace(
-              platform,
-              externalId,
-              ws.id,
-            );
-            if (isDM) {
-              core.services.roles.set(ws.id, callerId, "admin", "pair");
-              await channel.send(
-                `✅ Paired to workspace "${ws.name}". You are now an admin.`,
-              );
-              log.info("DM paired to workspace", {
-                callerId,
-                workspace: ws.name,
-              });
-            } else {
-              await channel.send(
-                `✅ Paired to workspace "${ws.name}". This conversation is now active.`,
-              );
-              log.info("Conversation paired to workspace", {
-                platform,
-                externalId,
-                workspace: ws.name,
-              });
-            }
-          } else {
-            await channel.send("❌ Invalid pairing code.");
-          }
-          return;
-        }
       }
 
       // ─── Assigned to workspace from here ──────────────────────────────
@@ -224,6 +172,7 @@ export function createIngressService(
       const slashMatch = text.match(/(?:^|\s)(\/\S+.*)/);
       const slashText = slashMatch ? slashMatch[1].trim() : null;
       if (slashText && effectiveMention) {
+        // ─── /unpair: unassign conversation from workspace ────────────────
         if (slashText === "/unpair") {
           const isAdmin =
             core.services.roles.get(workspaceId, callerId) === "admin";
@@ -237,6 +186,43 @@ export function createIngressService(
             platform,
             externalId,
             workspace: workspaceName,
+          });
+          return;
+        }
+
+        // ─── /pair <code>: grant admin role for group conversations ───────
+        if (slashText.startsWith("/pair ")) {
+          // Only allow /pair in group conversations
+          if (isDM) {
+            await channel.send("⛔ /pair is only available in group conversations.");
+            return;
+          }
+
+          const code = slashText.slice(6).trim().toUpperCase();
+          const ws = core.services.workspaces.findByPairingCode(code);
+          
+          if (!ws) {
+            await channel.send("❌ Invalid pairing code.");
+            return;
+          }
+
+          // Verify this conversation is assigned to the workspace
+          const assignedWorkspaceId = core.services.conversations.getWorkspaceId(platform, externalId);
+          if (assignedWorkspaceId !== ws.id) {
+            await channel.send("❌ This conversation is not paired to the specified workspace.");
+            return;
+          }
+
+          // Grant admin role to the caller
+          core.services.roles.set(ws.id, callerId, "admin", "pair");
+          core.services.workspaces.regeneratePairingCode(ws.id);
+          
+          await channel.send(`✅ You are now an admin of workspace "${ws.name}".`);
+          log.info("User granted admin role via /pair", {
+            callerId,
+            workspace: ws.name,
+            platform,
+            externalId,
           });
           return;
         }
