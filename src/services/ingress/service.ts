@@ -98,14 +98,36 @@ export function createIngressService(
           }
 
           // Auto-grant role based on conversation type
-          const targetRole = isDM ? "admin" : "member";
+          // For groups, check if message contains /pair <code> to grant admin
+          let targetRole = isDM ? "admin" : "member";
+          let roleSource = `auto-pair-${isDM ? "dm" : "group"}`;
+
+          // Check for /pair <code> in group messages
+          if (!isDM) {
+            const pairMatch = text.match(/\/pair\s+([A-Za-z0-9]+)/i);
+            if (pairMatch) {
+              const code = pairMatch[1].trim().toUpperCase();
+              const wsFromCode = core.services.workspaces.findByPairingCode(code);
+              
+              if (wsFromCode && wsFromCode.id === workspaceId) {
+                targetRole = "admin";
+                roleSource = `auto-pair-code-${code}`;
+                core.services.workspaces.regeneratePairingCode(workspaceId);
+                log.info("Auto-granted admin role via /pair code in group message", {
+                  callerId,
+                  workspace: workspaceName,
+                  code,
+                });
+              }
+            }
+          }
 
           if (core.services.roles.get(workspaceId, callerId) !== targetRole) {
             core.services.roles.set(
               workspaceId,
               callerId,
               targetRole,
-              `auto-pair-${isDM ? "dm" : "group"}`,
+              roleSource,
             );
 
             log.info(`Auto-granted ${targetRole} role for conversation`, {
@@ -191,6 +213,7 @@ export function createIngressService(
         }
 
         // ─── /pair <code>: grant admin role for group conversations ───────
+        // Note: This is a fallback for when auto-pair didn't process the code
         if (slashText.startsWith("/pair ")) {
           // Only allow /pair in group conversations
           if (isDM) {
@@ -210,6 +233,13 @@ export function createIngressService(
           const assignedWorkspaceId = core.services.conversations.getWorkspaceId(platform, externalId);
           if (assignedWorkspaceId !== ws.id) {
             await channel.send("❌ This conversation is not paired to the specified workspace.");
+            return;
+          }
+
+          // Check if already admin
+          const currentRole = core.services.roles.get(ws.id, callerId);
+          if (currentRole === "admin") {
+            await channel.send("ℹ️ You are already an admin.");
             return;
           }
 
