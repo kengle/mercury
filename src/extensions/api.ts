@@ -29,7 +29,10 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
     readonly name: string,
     private readonly dir: string,
     private readonly extState: ExtensionStateService,
-    private readonly registerPermissionFn: (name: string, opts: { defaultRoles: string[] }) => void,
+    private readonly registerPermissionFn: (
+      name: string,
+      opts: { defaultRoles: string[] },
+    ) => void,
   ) {
     this.meta = {
       name,
@@ -151,11 +154,11 @@ export class MercuryExtensionAPIImpl implements MercuryExtensionAPI {
 
   get store(): ExtensionStore {
     return {
-      get: (key: string) => this.extState.get(this.name, key),
+      get: (key: string) => this.extState.get(0, this.name, key),
       set: (key: string, value: string) =>
-        this.extState.set(this.name, key, value),
-      delete: (key: string) => this.extState.delete(this.name, key),
-      list: () => this.extState.list(this.name),
+        this.extState.set(0, this.name, key, value),
+      delete: (key: string) => this.extState.delete(0, this.name, key),
+      list: () => this.extState.list(0, this.name),
     };
   }
 

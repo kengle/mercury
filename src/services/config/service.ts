@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
-import type { ConfigEntity } from "./models.js";
 import type { ConfigService } from "./interface.js";
+import type { ConfigEntity } from "./models.js";
 import type { ConfigRegistry } from "./registry.js";
 
 const BUILTIN_KEYS = new Set([
@@ -11,41 +11,53 @@ const BUILTIN_KEYS = new Set([
 
 const BUILTIN_VALIDATORS: Record<string, (v: string) => string | null> = {
   "trigger.match": (v) =>
-    ["prefix", "mention", "always"].includes(v) ? null : "Invalid trigger.match. Valid: prefix, mention, always",
+    ["prefix", "mention", "always"].includes(v)
+      ? null
+      : "Invalid trigger.match. Valid: prefix, mention, always",
   "trigger.case_sensitive": (v) =>
-    ["true", "false"].includes(v) ? null : "Invalid trigger.case_sensitive. Valid: true, false",
+    ["true", "false"].includes(v)
+      ? null
+      : "Invalid trigger.case_sensitive. Valid: true, false",
 };
 
-export function createConfigService(db: Database, registry?: ConfigRegistry): ConfigService {
-  const selectByKey = db.prepare<{ value: string }, [string]>(
-    "SELECT value FROM config WHERE key = ?",
+export function createConfigService(
+  db: Database,
+  registry?: ConfigRegistry,
+): ConfigService {
+  const selectByKey = db.prepare<{ value: string }, [number, string]>(
+    "SELECT value FROM config WHERE workspace_id = ? AND key = ?",
   );
-  const selectAll = db.prepare<ConfigEntity, []>(
+  const selectAll = db.prepare<ConfigEntity, [number]>(
     `SELECT key, value, updated_by as updatedBy,
             created_at as createdAt, updated_at as updatedAt
-     FROM config ORDER BY key ASC`,
+     FROM config WHERE workspace_id = ? ORDER BY key ASC`,
   );
-  const upsert = db.prepare<void, [string, string, string, number, number]>(
-    `INSERT INTO config(key, value, updated_by, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(key)
+  const upsert = db.prepare<
+    void,
+    [number, string, string, string, number, number]
+  >(
+    `INSERT INTO config(workspace_id, key, value, updated_by, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(workspace_id, key)
      DO UPDATE SET value = excluded.value, updated_by = excluded.updated_by, updated_at = excluded.updated_at`,
   );
-  const deleteByKey = db.prepare<void, [string]>("DELETE FROM config WHERE key = ?");
+  const deleteByKey = db.prepare<void, [number, string]>(
+    "DELETE FROM config WHERE workspace_id = ? AND key = ?",
+  );
 
   return {
-    get(key) {
-      return selectByKey.get(key)?.value ?? null;
+    get(workspaceId, key) {
+      return selectByKey.get(workspaceId, key)?.value ?? null;
     },
-    list() {
-      return selectAll.all();
+    list(workspaceId) {
+      return selectAll.all(workspaceId);
     },
-    set(key, value, updatedBy) {
+    set(workspaceId, key, value, updatedBy) {
       const now = Date.now();
-      upsert.run(key, value, updatedBy, now, now);
+      upsert.run(workspaceId, key, value, updatedBy, now, now);
     },
-    delete(key) {
-      return deleteByKey.run(key).changes > 0;
+    delete(workspaceId, key) {
+      return deleteByKey.run(workspaceId, key).changes > 0;
     },
     isValidKey(key) {
       return BUILTIN_KEYS.has(key) || (registry?.isValidKey(key) ?? false);
@@ -57,7 +69,9 @@ export function createConfigService(db: Database, registry?: ConfigRegistry): Co
         return null;
       }
       if (registry?.isValidKey(key)) {
-        return registry.validate(key, value) ? null : `Invalid value for ${key}`;
+        return registry.validate(key, value)
+          ? null
+          : `Invalid value for ${key}`;
       }
       return "Invalid config key";
     },

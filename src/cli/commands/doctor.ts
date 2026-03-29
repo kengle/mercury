@@ -77,8 +77,7 @@ export function doctorAction(): void {
   } else {
     if (whatsappEnabled) {
       const whatsappAuthDir =
-        envVars.MERCURY_WHATSAPP_AUTH_DIR ||
-        join(CWD, "whatsapp-auth");
+        envVars.MERCURY_WHATSAPP_AUTH_DIR || join(CWD, "whatsapp-auth");
       const credsFile = join(whatsappAuthDir, "creds.json");
       if (existsSync(credsFile)) {
         pass("WhatsApp: enabled and authenticated");

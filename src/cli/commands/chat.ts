@@ -4,7 +4,13 @@ import { CWD } from "../helpers.js";
 
 export async function chatAction(
   textParts: string[],
-  options: { port: string; file?: string[]; caller: string; json?: boolean },
+  options: {
+    port: string;
+    file?: string[];
+    caller: string;
+    workspace?: string;
+    json?: boolean;
+  },
 ): Promise<void> {
   let text: string;
   if (textParts.length > 0) {
@@ -23,7 +29,17 @@ export async function chatAction(
   }
 
   const url = `http://localhost:${options.port}/chat`;
-  const body: Record<string, unknown> = { text, callerId: options.caller };
+  if (!options.workspace) {
+    console.error("Error: --workspace is required");
+    console.error("Usage: mercury chat --workspace <name> <message>");
+    process.exit(1);
+  }
+
+  const body: Record<string, unknown> = {
+    text,
+    callerId: options.caller,
+    workspace: options.workspace,
+  };
 
   if (options.file && options.file.length > 0) {
     const files: Array<{ name: string; data: string }> = [];

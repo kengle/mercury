@@ -1,12 +1,17 @@
 import type { RoleEntity } from "./models.js";
 
 export interface RoleService {
-  get(userId: string): string | undefined;
-  list(): RoleEntity[];
-  set(userId: string, role: string, grantedBy: string): void;
-  delete(userId: string): boolean;
-  upsertMember(userId: string): void;
-  resolveRole(userId: string): string;
+  get(workspaceId: number, userId: string): string | undefined;
+  list(workspaceId: number): RoleEntity[];
+  set(
+    workspaceId: number,
+    userId: string,
+    role: string,
+    grantedBy: string,
+  ): void;
+  delete(workspaceId: number, userId: string): boolean;
+  upsertMember(workspaceId: number, userId: string): void;
+  resolveRole(workspaceId: number, userId: string): string;
   hasPermission(role: string, permission: string): boolean;
   getRolePermissions(role: string): Set<string>;
   getAllPermissions(): string[];

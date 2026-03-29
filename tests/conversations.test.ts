@@ -1,12 +1,12 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Database } from "bun:sqlite";
 import { createDatabase } from "../src/core/db.js";
 import { createConfigService } from "../src/services/config/service.js";
-import { createConversationService } from "../src/services/conversations/service.js";
 import type { ConversationService } from "../src/services/conversations/interface.js";
+import { createConversationService } from "../src/services/conversations/service.js";
 
 let tmpDir: string;
 let db: Database;
@@ -38,27 +38,15 @@ describe("ConversationService", () => {
     expect(svc.list()).toHaveLength(1);
   });
 
-  test("pair and isPaired", () => {
+  test("assign and unassign workspace", () => {
     svc.create("whatsapp", "ext1", "group");
-    expect(svc.isPaired("whatsapp", "ext1")).toBe(false);
-    svc.pair("whatsapp", "ext1");
-    expect(svc.isPaired("whatsapp", "ext1")).toBe(true);
-  });
-
-  test("unpair by platform and externalId", () => {
-    svc.create("whatsapp", "ext1", "group");
-    svc.pair("whatsapp", "ext1");
-    svc.unpair("whatsapp", "ext1");
-    expect(svc.isPaired("whatsapp", "ext1")).toBe(false);
-  });
-
-  test("pairing code generation and regeneration", () => {
-    const code1 = svc.getPairingCode();
-    expect(code1).toMatch(/^[A-Z0-9]{6}$/);
-    svc.regeneratePairingCode();
-    const code2 = svc.getPairingCode();
-    expect(code2).toMatch(/^[A-Z0-9]{6}$/);
-    expect(code2).not.toBe(code1);
+    expect(svc.isAssigned("whatsapp", "ext1")).toBe(false);
+    svc.assignWorkspace("whatsapp", "ext1", 1);
+    expect(svc.isAssigned("whatsapp", "ext1")).toBe(true);
+    expect(svc.getWorkspaceId("whatsapp", "ext1")).toBe(1);
+    svc.unassignWorkspace("whatsapp", "ext1");
+    expect(svc.isAssigned("whatsapp", "ext1")).toBe(false);
+    expect(svc.getWorkspaceId("whatsapp", "ext1")).toBeNull();
   });
 
   test("get by platform and externalId", () => {

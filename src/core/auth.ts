@@ -30,7 +30,11 @@ function writeAuthFile(authPath: string, auth: AuthFile): void {
 }
 
 const PROVIDER_ENV_KEYS: Record<string, string[]> = {
-  anthropic: ["MERCURY_ANTHROPIC_API_KEY", "MERCURY_ANTHROPIC_OAUTH_TOKEN", "ANTHROPIC_API_KEY"],
+  anthropic: [
+    "MERCURY_ANTHROPIC_API_KEY",
+    "MERCURY_ANTHROPIC_OAUTH_TOKEN",
+    "ANTHROPIC_API_KEY",
+  ],
   openai: ["MERCURY_OPENAI_API_KEY", "OPENAI_API_KEY"],
   "github-copilot": ["MERCURY_GITHUB_COPILOT_TOKEN"],
   "google-gemini-cli": ["MERCURY_GOOGLE_API_KEY", "GOOGLE_API_KEY"],

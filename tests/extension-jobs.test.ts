@@ -1,15 +1,15 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { AppConfig } from "../src/core/config.js";
+import { createDatabase } from "../src/core/db.js";
 import { getNextCronDelay, JobRunner } from "../src/extensions/jobs.js";
 import type {
   ExtensionMeta,
   MercuryExtensionContext,
 } from "../src/extensions/types.js";
-import { createDatabase } from "../src/core/db.js"
-import type { Database } from "bun:sqlite";
 
 let tmpDir: string;
 let db: Database;

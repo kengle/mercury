@@ -1,10 +1,12 @@
+import { join } from "node:path";
 import type { Command } from "commander";
 import { createDatabase } from "../../core/db.js";
 import { createApiKeyService } from "../../services/api-keys/service.js";
-import { join } from "node:path";
 import { CWD } from "../helpers.js";
 
-function withApiKeys<T>(fn: (svc: ReturnType<typeof createApiKeyService>) => T): T {
+function withApiKeys<T>(
+  fn: (svc: ReturnType<typeof createApiKeyService>) => T,
+): T {
   const dbPath = join(CWD, "state.db");
   const db = createDatabase(dbPath);
   db.exec("PRAGMA journal_mode = DELETE");
@@ -38,7 +40,9 @@ export function registerApiKeyCommands(cmd: Command): void {
       for (const k of keys) {
         const status = k.revokedAt ? "revoked" : "active";
         const date = new Date(k.createdAt).toISOString().split("T")[0];
-        console.log(`${k.id}\t${k.keyPrefix}...\t${status}\t${date}\t${k.name}`);
+        console.log(
+          `${k.id}\t${k.keyPrefix}...\t${status}\t${date}\t${k.name}`,
+        );
       }
     });
 

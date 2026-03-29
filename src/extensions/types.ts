@@ -5,10 +5,10 @@
  * No runtime code — types only.
  */
 
-import type { AgentError } from "../core/runtime/agent-error.js";
 import type { AppConfig } from "../core/config.js";
-import type { Logger } from "../core/logger.js";
 import type { Db } from "../core/db.js";
+import type { Logger } from "../core/logger.js";
+import type { AgentError } from "../core/runtime/agent-error.js";
 
 // ---------------------------------------------------------------------------
 // Extension context — passed to event handlers and job runners

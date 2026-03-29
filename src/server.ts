@@ -2,15 +2,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Hono } from "hono";
-import type { AppConfig } from "./core/config.js";
 import { createApiApp } from "./core/api.js";
-import { createChatController } from "./services/chat/controller.js";
+import type { AppConfig } from "./core/config.js";
 import { createDashboardRoutes } from "./core/dashboard.js";
-import type { MercuryCoreRuntime } from "./core/runtime/runtime.js";
-import type { ConfigRegistry } from "./services/config/registry.js";
-import type { ExtensionRegistry } from "./extensions/loader.js";
 import { logger } from "./core/logger.js";
+import type { MercuryCoreRuntime } from "./core/runtime/runtime.js";
+import type { ExtensionRegistry } from "./extensions/loader.js";
+import { createChatController } from "./services/chat/controller.js";
 import { createChatService } from "./services/chat/service.js";
+import type { ConfigRegistry } from "./services/config/registry.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -53,7 +53,10 @@ export function createApp(ctx: ServerContext): Hono {
   app.use("*", async (c, next) => {
     const header = c.req.header("authorization");
     if (!header?.startsWith("Bearer ")) {
-      return c.json({ error: "Missing API key. Use Authorization: Bearer <key>" }, 401);
+      return c.json(
+        { error: "Missing API key. Use Authorization: Bearer <key>" },
+        401,
+      );
     }
     const key = header.slice(7);
     if (!ctx.apiKeys.validate(key)) {
