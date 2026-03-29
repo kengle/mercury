@@ -47,12 +47,39 @@ mercury start                   # Start container
 mercury logs -f                 # View logs
 ```
 
-Pair via WhatsApp DM:
+### Auto-Pairing (Zero-Config Onboarding)
 
+Mercury automatically creates dedicated workspaces for new conversations:
+
+**DM Conversations:**
+```
+User sends first message
+    → Auto-create workspace: ws-{platform}-{userId}
+    → User granted: admin role
+    → Ready to use!
+```
+
+**Group Conversations:**
+```
+Group sends first message
+    → Auto-create workspace: ws-{platform}-group-{groupId}
+    → Sender granted: member role
+    
+To become admin, send: /pair <CODE>
+    → Verify pairing code
+    → User granted: admin role
+    → Pairing code regenerated
+```
+
+**Manual Pairing (for existing workspaces):**
 ```bash
-mercury pair                    # Show pairing code
-# Send "/pair <CODE>" in a WhatsApp DM → grants admin
-# Send "/pair <CODE>" in a group → activates the bot there
+mercury pair                    # Show pairing code for a workspace
+# Send "/pair <CODE>" in a group → grants admin role to sender
+```
+
+**Unpair:**
+```
+/unpair                         # Unassign conversation from workspace (admin only)
 ```
 
 ---
@@ -104,8 +131,8 @@ mercury pair                    # Show pairing code
 |---------|-------------|------|
 | **Multi-platform** | WhatsApp, Slack, Discord, or CLI-only | [pipeline](docs/pipeline.md) |
 | **API key auth** | All endpoints require Bearer token | [auth](docs/auth/overview.md) |
-| **Pairing** | DM pairing for admin, group pairing for activation | [permissions](docs/permissions.md) |
-| **RBAC** | Role-based permissions, extension CLI blocking | [permissions](docs/permissions.md) |
+| **Auto-pairing** | Zero-config onboarding: auto-create workspaces for new conversations | [permissions](docs/permissions.md) |
+| **RBAC** | Role-based permissions (admin/member), extension CLI blocking | [permissions](docs/permissions.md) |
 | **Scheduled tasks** | Cron + one-shot tasks with conversation targeting | [scheduler](docs/scheduler.md) |
 | **Media** | Images, documents, voice notes in/out | [media](docs/media/overview.md) |
 | **Extensions** | CLIs, skills, jobs, hooks, config, widgets | [extensions](docs/extensions.md) |
@@ -165,9 +192,13 @@ mercury chat -f photo.jpg "?"   # With file attachment
 echo "query" | mercury chat     # Piped input
 
 # Conversations
-mercury pair                    # Show pairing code
+mercury pair                    # Show pairing code for workspace
 mercury convos list             # List conversations
 mercury convos unpair <id>      # Unpair a conversation
+
+# In-chat commands
+/pair <CODE>                    # Grant admin role (groups only)
+/unpair                         # Unassign conversation from workspace
 
 # Extensions
 mercury ext add <source>        # Install (path, npm:, git:)
