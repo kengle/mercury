@@ -45,51 +45,80 @@ export function createIngressService(
 
       // ─── Unassigned: auto-pair or /pair command ───────────────────────
       if (!assigned) {
-        // Auto-pair for DMs: create dedicated workspace automatically
-        if (isDM) {
-          const workspaceName = `ws-${platform}-${callerId}`;
-          let workspace = core.services.workspaces.get(workspaceName);
+        // Auto-pair: create dedicated workspace automatically for DMs and groups
+        const workspaceName = isDM
+          ? `ws-${platform}-${callerId}`
+          : `ws-${platform}-group-${externalId}`;
+        
+        let workspace = core.services.workspaces.get(workspaceName);
 
-          if (!workspace) {
-            try {
-              workspace = core.services.workspaces.create(workspaceName);
-              log.info("Auto-created dedicated workspace for conversation", {
+        if (!workspace) {
+          try {
+            workspace = core.services.workspaces.create(workspaceName);
+            log.info("Auto-created dedicated workspace for conversation", {
+              callerId,
+              externalId,
+              platform,
+              isDM,
+              workspace: workspaceName,
+            });
+          } catch (err) {
+            log.error("Failed to auto-create workspace", {
+              workspaceName,
+              error: err instanceof Error ? err.message : String(err),
+            });
+          }
+        }
+
+        if (workspace) {
+          const workspaceId = workspace.id;
+
+          // Ensure conversation exists in DB
+          core.services.conversations.create(
+            platform,
+            externalId,
+            isDM ? "dm" : "group",
+          );
+
+          // Bind conversation to dedicated workspace (strict 1:1)
+          if (!core.services.conversations.isAssigned(platform, externalId)) {
+            const success = core.services.conversations.assignWorkspace(
+              platform,
+              externalId,
+              workspaceId,
+            );
+
+            if (success) {
+              log.info("Auto-paired conversation to dedicated workspace", {
                 callerId,
                 externalId,
-                platform,
                 isDM,
                 workspace: workspaceName,
-              });
-            } catch (err) {
-              log.error("Failed to auto-create workspace", {
-                workspaceName,
-                error: err instanceof Error ? err.message : String(err),
               });
             }
           }
 
-          if (workspace) {
-            // Ensure conversation exists in DB
-            core.services.conversations.create(
-              platform,
-              externalId,
-              isDM ? "dm" : "group",
-            );
-            // Assign conversation to auto-created workspace
-            core.services.conversations.assignWorkspace(
-              platform,
-              externalId,
-              workspace.id,
-            );
-            // Set caller as admin
-            core.services.roles.set(workspace.id, callerId, "admin", "auto-pair");
-            workspaceId = workspace.id;
-            assigned = true;
-            log.info("Auto-paired conversation to workspace", {
+          // Auto-grant role based on conversation type
+          const targetRole = isDM ? "admin" : "member";
+
+          if (core.services.roles.get(workspaceId, callerId) !== targetRole) {
+            core.services.roles.set(
+              workspaceId,
               callerId,
-              workspace: workspace.name,
+              targetRole,
+              `auto-pair-${isDM ? "dm" : "group"}`,
+            );
+
+            log.info(`Auto-granted ${targetRole} role for conversation`, {
+              callerId,
+              externalId,
+              workspace: workspaceName,
+              isDM,
             });
           }
+
+          workspaceId = workspace.id;
+          assigned = true;
         }
 
         // If still not assigned, check for /pair command
