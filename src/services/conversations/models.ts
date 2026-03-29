@@ -6,7 +6,7 @@ export const ConversationEntity = z.object({
   externalId: z.string(),
   kind: z.string(),
   observedTitle: z.string().nullable(),
-  paired: z.number(),
+  workspaceId: z.number().nullable(),
   firstSeenAt: z.number(),
   lastSeenAt: z.number(),
 });
@@ -23,7 +23,7 @@ export type CreateConversation = z.infer<typeof CreateConversation>;
 export const UpdateConversation = z.object({
   kind: z.string().optional(),
   observedTitle: z.string().nullable().optional(),
-  paired: z.number().optional(),
+  workspaceId: z.number().nullable().optional(),
 });
 export type UpdateConversation = z.infer<typeof UpdateConversation>;
 

@@ -16,19 +16,11 @@ export class AgentError extends Error {
   }
 
   static timeout(): AgentError {
-    return new AgentError(
-      "timeout",
-      null,
-      "Agent timed out",
-    );
+    return new AgentError("timeout", null, "Agent timed out");
   }
 
   static aborted(): AgentError {
-    return new AgentError(
-      "aborted",
-      null,
-      "Agent aborted",
-    );
+    return new AgentError("aborted", null, "Agent aborted");
   }
 
   static error(exitCode: number, output: string): AgentError {

@@ -1,30 +1,43 @@
-import { readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { getCallerId, getPlatformFromThreadId } from "../../core/ingress/chatsdk.js";
+import { createLlmFunctions, Markit, type MarkitOptions } from "markit-ai";
 import type { AppConfig } from "../../core/config.js";
 import { resolveProjectPath } from "../../core/config.js";
+import {
+  getCallerId,
+  getPlatformFromThreadId,
+} from "../../core/ingress/chatsdk.js";
 import type { Logger } from "../../core/logger.js";
-import type { OutputFile, MessageAttachment } from "../../core/types.js";
+import type { MessageAttachment, OutputFile } from "../../core/types.js";
+import type { ConversationService } from "../conversations/interface.js";
+import type { WorkspaceService } from "../workspaces/interface.js";
 import type { IngressService, MessageChannel } from "./interface.js";
 import type { IncomingMessage } from "./models.js";
-import { mkdirSync, writeFileSync } from "node:fs";
 
 export function createChatSdkAdapter(opts: {
   ingress: IngressService;
   config: AppConfig;
   log: Logger;
   adapters: Record<string, any>;
+  conversations: ConversationService;
+  workspaces: WorkspaceService;
 }) {
-  const { ingress, config, log, adapters } = opts;
+  const { ingress, config, log, adapters, conversations, workspaces } = opts;
 
   let cachedBotJids: Set<string> | null = null;
 
-  return async (thread: any, message: any, isMention: boolean): Promise<string | null> => {
+  return async (
+    thread: any,
+    message: any,
+    isMention: boolean,
+  ): Promise<string | null> => {
     try {
       if (message.author.isMe) return null;
 
       const text = (message.text || "").trim();
-      if (!text) return null;
+      const hasAttachments =
+        message.attachments && message.attachments.length > 0;
+      if (!text && !hasAttachments) return null;
 
       const threadId = thread.id || "";
       const platform = getPlatformFromThreadId(threadId);
@@ -37,9 +50,14 @@ export function createChatSdkAdapter(opts: {
       if (!cachedBotJids) cachedBotJids = getBotJids(adapters);
       const contextInfo = extractContextInfo(message.raw);
       const rawMentions = contextInfo?.mentionedJid ?? [];
-      const isWhatsAppMention = platform === "whatsapp" && rawMentions.some((jid: string) => cachedBotJids!.has(jid));
+      const isWhatsAppMention =
+        platform === "whatsapp" &&
+        rawMentions.some((jid: string) => cachedBotJids!.has(jid));
       const repliedToJid = contextInfo?.participant;
-      const isReplyToBot = platform === "whatsapp" && !!repliedToJid && cachedBotJids.has(repliedToJid);
+      const isReplyToBot =
+        platform === "whatsapp" &&
+        !!repliedToJid &&
+        cachedBotJids.has(repliedToJid);
       const effectiveMention = isMention || isWhatsAppMention || isReplyToBot;
 
       log.info("Message received", {
@@ -56,17 +74,48 @@ export function createChatSdkAdapter(opts: {
       });
 
       // Replace bot JID mentions with bot name
-      const cleanText = effectiveMention ? replaceMentionIds(text, cachedBotJids, config.botUsername) : text;
+      const cleanText = effectiveMention
+        ? replaceMentionIds(text, cachedBotJids, config.botUsername)
+        : text;
 
-      // Download attachments
-      const attachments = await downloadAttachments(message.attachments, config, log);
+      // Resolve workspace inbox for attachments
+      const wsId = conversations.getWorkspaceId(platform, externalId);
+      let inboxDir: string;
+      if (wsId != null) {
+        const ws = workspaces.getById(wsId);
+        if (ws) {
+          inboxDir = join(
+            resolveProjectPath(config.workspacesDir),
+            ws.name,
+            "inbox",
+          );
+        } else {
+          inboxDir = join(resolveProjectPath(config.projectRoot), "inbox");
+        }
+      } else {
+        // Unassigned conversation — download to project-level inbox (will be ignored anyway)
+        inboxDir = join(resolveProjectPath(config.projectRoot), "inbox");
+      }
+
+      // Download attachments and transcribe audio
+      const attachments = await downloadAttachments(
+        message.attachments,
+        inboxDir,
+        log,
+      );
+      const transcription = await transcribeAudio(attachments, log);
+      const messageText = transcription
+        ? cleanText
+          ? `${cleanText}\n\n[Voice note transcription: ${transcription}]`
+          : `[Voice note transcription: ${transcription}]`
+        : cleanText;
 
       const incoming: IncomingMessage = {
         platform,
         externalId,
         callerId,
         authorName,
-        text: cleanText,
+        text: messageText,
         isDM,
         isMention: effectiveMention,
         attachments,
@@ -123,19 +172,16 @@ function createChannel(
     async startTyping() {
       await thread.startTyping();
     },
-
   };
 }
 
 async function downloadAttachments(
   attachments: any[] | undefined,
-  config: AppConfig,
+  inboxDir: string,
   log: Logger,
 ): Promise<MessageAttachment[]> {
   if (!attachments || attachments.length === 0) return [];
 
-  const workspace = resolveProjectPath(config.workspaceDir);
-  const inboxDir = join(workspace, "inbox");
   mkdirSync(inboxDir, { recursive: true });
 
   const results: MessageAttachment[] = [];
@@ -150,13 +196,22 @@ async function downloadAttachments(
       }
       if (!data) continue;
 
-      const filename = att.name || att.filename || `attachment_${Date.now()}.${att.mimeType?.split("/")[1] || "bin"}`;
+      const filename =
+        att.name ||
+        att.filename ||
+        `attachment_${Date.now()}.${att.mimeType?.split("/")[1] || "bin"}`;
       const filePath = join(inboxDir, filename);
       writeFileSync(filePath, data);
 
       results.push({
         path: filePath,
-        type: (att.type === "image" ? "image" : att.type === "audio" ? "audio" : att.type === "video" ? "video" : "document") as any,
+        type: (att.type === "image"
+          ? "image"
+          : att.type === "audio"
+            ? "audio"
+            : att.type === "video"
+              ? "video"
+              : "document") as any,
         mimeType: att.mimeType || "application/octet-stream",
         filename,
         sizeBytes: data.length,
@@ -209,14 +264,31 @@ async function sendWhatsAppFiles(
     try {
       const mime = file.mimeType;
       if (mime.startsWith("image/")) {
-        await sock.sendMessage(chatJid, { image: buffer, caption, mimetype: mime });
+        await sock.sendMessage(chatJid, {
+          image: buffer,
+          caption,
+          mimetype: mime,
+        });
       } else if (mime.startsWith("video/")) {
-        await sock.sendMessage(chatJid, { video: buffer, caption, mimetype: mime });
+        await sock.sendMessage(chatJid, {
+          video: buffer,
+          caption,
+          mimetype: mime,
+        });
       } else if (mime.startsWith("audio/")) {
-        await sock.sendMessage(chatJid, { audio: buffer, mimetype: mime, ptt: false });
+        await sock.sendMessage(chatJid, {
+          audio: buffer,
+          mimetype: mime,
+          ptt: false,
+        });
         if (caption) await sock.sendMessage(chatJid, { text: caption });
       } else {
-        await sock.sendMessage(chatJid, { document: buffer, fileName: file.filename, mimetype: mime, caption });
+        await sock.sendMessage(chatJid, {
+          document: buffer,
+          fileName: file.filename,
+          mimetype: mime,
+          caption,
+        });
       }
       if (caption) textSent = true;
     } catch (err) {
@@ -229,6 +301,51 @@ async function sendWhatsAppFiles(
 
   if (!textSent) {
     await sock.sendMessage(chatJid, { text });
+  }
+}
+
+let markitInstance: Markit | null = null;
+
+function getMarkit(): Markit | null {
+  if (markitInstance) return markitInstance;
+  if (!process.env.OPENAI_API_KEY) return null;
+  try {
+    const opts = createLlmFunctions({ llm: { provider: "openai" } });
+    markitInstance = new Markit(opts);
+    return markitInstance;
+  } catch {
+    return null;
+  }
+}
+
+async function transcribeAudio(
+  attachments: MessageAttachment[],
+  log: Logger,
+): Promise<string | null> {
+  const audio = attachments.find((a) => a.type === "audio");
+  if (!audio) return null;
+
+  const markit = getMarkit();
+  if (!markit) return null;
+
+  try {
+    const buffer = readFileSync(audio.path);
+    const result = await markit.convert(buffer, {
+      mimetype: audio.mimeType,
+      filename: audio.filename,
+    });
+    const text = result.markdown.trim();
+    if (!text) return null;
+    log.info("Transcribed audio", {
+      filename: audio.filename,
+      length: text.length,
+    });
+    return text;
+  } catch (err) {
+    log.warn("Audio transcription failed", {
+      error: err instanceof Error ? err.message : String(err),
+    });
+    return null;
   }
 }
 
@@ -259,7 +376,11 @@ function getBotJids(adapters: Record<string, any>): Set<string> {
   return jids;
 }
 
-function replaceMentionIds(text: string, botJids: Set<string>, botName: string): string {
+function replaceMentionIds(
+  text: string,
+  botJids: Set<string>,
+  botName: string,
+): string {
   let result = text;
   for (const jid of botJids) {
     const num = jid.split("@")[0].split(":")[0];

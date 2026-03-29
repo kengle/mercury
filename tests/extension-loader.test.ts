@@ -1,15 +1,15 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { ExtensionRegistry } from "../src/extensions/loader.js";
 import { createDatabase } from "../src/core/db.js";
-import { createExtensionStateService } from "../src/extensions/state-service.js";
-import { createRoleService } from "../src/services/roles/service.js";
-import { createConfigService } from "../src/services/config/service.js";
-import type { Database } from "bun:sqlite";
-import type { RoleService } from "../src/services/roles/interface.js";
+import { ExtensionRegistry } from "../src/extensions/loader.js";
 import type { ExtensionStateService } from "../src/extensions/state-service.js";
+import { createExtensionStateService } from "../src/extensions/state-service.js";
+import { createConfigService } from "../src/services/config/service.js";
+import type { RoleService } from "../src/services/roles/interface.js";
+import { createRoleService } from "../src/services/roles/service.js";
 
 let tmpDir: string;
 let db: Database;
@@ -87,7 +87,12 @@ describe("ExtensionRegistry", () => {
   });
 
   it("returns empty for missing extensions directory", async () => {
-    await registry.loadAll(path.join(tmpDir, "nonexistent"), extState, roles, log);
+    await registry.loadAll(
+      path.join(tmpDir, "nonexistent"),
+      extState,
+      roles,
+      log,
+    );
     expect(registry.size).toBe(0);
   });
 
@@ -123,9 +128,9 @@ describe("ExtensionRegistry", () => {
 
   it("throws on reserved name collision", async () => {
     writeExt("tasks", "export default function(m) {}");
-    await expect(registry.loadAll(extDir, extState, roles, log)).rejects.toThrow(
-      "conflicts with built-in",
-    );
+    await expect(
+      registry.loadAll(extDir, extState, roles, log),
+    ).rejects.toThrow("conflicts with built-in");
   });
 
   it("throws on reserved name collision — all reserved names", async () => {
@@ -278,9 +283,9 @@ describe("ExtensionRegistry", () => {
 
     // Loading again into same registry should skip (already registered)
     // but the current impl would throw on duplicate — let's verify
-    await expect(registry.loadAll(extDir, extState, roles, log)).rejects.toThrow(
-      "Duplicate extension",
-    );
+    await expect(
+      registry.loadAll(extDir, extState, roles, log),
+    ).rejects.toThrow("Duplicate extension");
   });
 
   it("getCliExtensions only returns extensions with cli", async () => {
@@ -304,7 +309,7 @@ describe("ExtensionRegistry", () => {
 			}`,
     );
     await registry.loadAll(extDir, extState, roles, log);
-    expect(extState.get("store-test", "key")).toBe("value");
+    expect(extState.get(0, "store-test", "key")).toBe("value");
   });
 });
 

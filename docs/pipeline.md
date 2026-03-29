@@ -1,6 +1,6 @@
 # Message Pipeline
 
-Messages flow through the ingress service, policy service, and runtime to produce responses.
+Messages flow through the ingress service, policy service, and runtime to produce responses. All workspace-scoped operations use the `workspace_id` resolved from the conversation.
 
 ## Flow
 
@@ -10,33 +10,40 @@ Platform (WhatsApp / Slack / Discord / CLI)
   ├─► Chat SDK Adapter (chatsdk-adapter.ts)
   │     • Parses Chat SDK objects
   │     • Detects platform, callerId, mentions
-  │     • Downloads attachments to inbox/
+  │     • Resolves workspace from conversation → downloads attachments to workspace inbox
   │     • Creates MessageChannel
   │
   ├─► Ingress Service
-  │     ├─► Unpaired? Only /pair allowed, else ignore
-  │     ├─► Paired:
-  │     │     ├─► Slash commands → permission check → execute
-  │     │     ├─► Not addressed to bot → store ambient → return
+  │     ├─► Resolve conversation → workspace_id
+  │     ├─► No workspace? Only /pair <CODE> allowed, else silent ignore
+  │     │     • /pair looks up workspace by pairing code, assigns conversation
+  │     │     • DM /pair also grants admin role in that workspace
+  │     ├─► Assigned to workspace:
+  │     │     ├─► Load workspace config (.env overrides for triggers, model, etc.)
+  │     │     ├─► Slash commands → workspace-scoped permission check → execute
+  │     │     ├─► Not addressed to bot → store ambient (workspace-scoped) → return
   │     │     └─► Mentioned/DM → mark read, start typing → continue
   │     │
-  │     └─► Runtime.handleMessage()
+  │     └─► Runtime.handleMessage() (with workspaceId + workspaceName)
   │
-  ├─► Policy Service
-  │     • Trigger matching (mention/prefix/always)
+  ├─► Policy Service (workspace-scoped)
+  │     • Resolve role (workspace_id, callerId)
   │     • Permission check (prompt.group / prompt.dm)
-  │     • Mute check
-  │     • Rate limit check
+  │     • Mute check (workspace_id, callerId)
+  │     • Rate limit check (workspace-scoped config)
   │     → Returns: process / deny / ignore
   │
   ├─► Runtime (executePrompt)
-  │     • Store user message
+  │     • Store user message (workspace-scoped)
+  │     • Resolve workspace dir (workspaces/<name>/)
+  │     • Load workspace .env overrides (model, secrets, timeout)
+  │     • Install extension skills into workspace .pi/skills/
   │     • Run extension hooks (workspace_init, before_container)
-  │     • Resolve RBAC (denied CLIs, extension env vars)
-  │     • Fetch message history
-  │     • Call agent.run() (subprocess)
+  │     • Resolve RBAC (workspace-scoped roles, denied CLIs, extension env vars)
+  │     • Fetch message history (workspace-scoped)
+  │     • Call agent.run() — cwd=workspaces/<name>/, workspace-specific model/timeout
   │     • Run after_container hooks
-  │     • Store assistant message
+  │     • Store assistant message (workspace-scoped)
   │
   └─► Response
         • Text reply via MessageChannel
@@ -46,16 +53,17 @@ Platform (WhatsApp / Slack / Discord / CLI)
 ## CLI / API Path
 
 ```
-POST /chat
+POST /chat  { text, workspace?, callerId?, files? }
   │
   ├─► Chat Service
-  │     • Save input files to inbox/
-  │     • Build IngressMessage (isDM=true, isReplyToBot=true)
-  │     • Create conversation
+  │     • Resolve workspace by name
+  │     • Save input files to workspace inbox
+  │     • Build IngressMessage (with workspaceId/workspaceName)
+  │     • Create + assign conversation to workspace
   │
   ├─► Runtime.handleMessage(source="cli")
-  │     • Skip policy (trusted ingress)
-  │     • Check mute
+  │     • Reject if no workspace context
+  │     • Check mute (workspace-scoped)
   │     • Execute agent directly
   │
   └─► Response JSON: { reply, files[] }
@@ -71,11 +79,11 @@ POST /chat
 
 DMs always trigger regardless of mode. Replies to bot messages trigger in groups.
 
-Configured via `MERCURY_TRIGGER_PATTERNS` and `MERCURY_TRIGGER_MATCH`, overridable per-deployment via `mrctl config set trigger.match <mode>`.
+Configured via `MERCURY_TRIGGER_PATTERNS` and `MERCURY_TRIGGER_MATCH` in the deployment `.env`, overridable per-workspace via `workspaces/<name>/.env`.
 
 ## Ambient Messages
 
-Non-triggering messages in paired groups are stored as ambient context:
+Non-triggering messages in workspace-assigned groups are stored as ambient context (scoped by workspace_id):
 
 ```
 Alice: hello everyone
@@ -87,7 +95,7 @@ When the agent is later triggered, these ambient messages are included in the pr
 ## Inbox / Outbox
 
 ```
-workspace/
+workspaces/<name>/
 ├── inbox/     # Incoming attachments (images, docs, audio)
 ├── outbox/    # Agent-produced files (attached to reply)
 ```
@@ -108,9 +116,9 @@ Outbox files are scanned by mtime — only files created/modified during the cur
 curl -X POST http://localhost:3000/chat \
   -H "Authorization: Bearer <key>" \
   -H "Content-Type: application/json" \
-  -d '{"text": "hello", "callerId": "alice", "files": [{"name": "doc.pdf", "data": "<base64>"}]}'
+  -d '{"text": "hello", "workspace": "default", "callerId": "alice", "files": [{"name": "doc.pdf", "data": "<base64>"}]}'
 ```
 
 Response: `{ reply: string, files: [{ filename, mimeType, sizeBytes, data }] }`
 
-Always triggers (no trigger matching), respects mutes, per-caller conversation isolation.
+The `workspace` field is required when sending files. Always triggers (no trigger matching), respects workspace-scoped mutes, per-caller conversation isolation.

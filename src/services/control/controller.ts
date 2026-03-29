@@ -19,15 +19,21 @@ export function createControlController(control: ControlService): Hono<Env> {
   app.post("/compact", async (c) => {
     const denied = checkPerm(c, "compact");
     if (denied) return denied;
+    const { workspaceId, workspaceName } = getAuth(c);
     const conversationId = c.req.query("conversation") || "default";
-    return c.json(await control.compact(conversationId));
+    return c.json(
+      await control.compact(workspaceId, workspaceName, conversationId),
+    );
   });
 
   app.post("/new", (c) => {
     const denied = checkPerm(c, "compact");
     if (denied) return denied;
+    const { workspaceId, workspaceName } = getAuth(c);
     const conversationId = c.req.query("conversation") || "default";
-    return c.json(control.newSession(conversationId));
+    return c.json(
+      control.newSession(workspaceId, workspaceName, conversationId),
+    );
   });
 
   return app;

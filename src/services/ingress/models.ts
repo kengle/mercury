@@ -8,12 +8,16 @@ export const IncomingMessage = z.object({
   text: z.string(),
   isDM: z.boolean(),
   isMention: z.boolean(),
-  attachments: z.array(z.object({
-    path: z.string(),
-    type: z.enum(["image", "video", "audio", "voice", "document"]),
-    mimeType: z.string(),
-    filename: z.string().optional(),
-    sizeBytes: z.number().optional(),
-  })).default([]),
+  attachments: z
+    .array(
+      z.object({
+        path: z.string(),
+        type: z.enum(["image", "video", "audio", "voice", "document"]),
+        mimeType: z.string(),
+        filename: z.string().optional(),
+        sizeBytes: z.number().optional(),
+      }),
+    )
+    .default([]),
 });
 export type IncomingMessage = z.infer<typeof IncomingMessage>;

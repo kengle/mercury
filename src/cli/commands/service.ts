@@ -28,13 +28,20 @@ export function startAction(): void {
   const tag = getImageTag(envPath);
   const port = getPort();
   const args = [
-    "run", "-d",
-    "--name", CONTAINER_NAME,
-    "--restart", "unless-stopped",
-    "--cap-add", "SYS_ADMIN",
-    "--security-opt", "seccomp=unconfined",
-    "-v", `${CWD}:/data`,
-    "-p", `${port}:${port}`,
+    "run",
+    "-d",
+    "--name",
+    CONTAINER_NAME,
+    "--restart",
+    "unless-stopped",
+    "--cap-add",
+    "SYS_ADMIN",
+    "--security-opt",
+    "seccomp=unconfined",
+    "-v",
+    `${CWD}:/data`,
+    "-p",
+    `${port}:${port}`,
   ];
 
   if (existsSync(envPath)) args.push("--env-file", envPath);
@@ -54,7 +61,9 @@ export function startAction(): void {
 }
 
 export function stopAction(): void {
-  const check = spawnSync("docker", ["inspect", CONTAINER_NAME], { stdio: "pipe" });
+  const check = spawnSync("docker", ["inspect", CONTAINER_NAME], {
+    stdio: "pipe",
+  });
   if (check.status !== 0) {
     console.log("Mercury is not running.");
     return;

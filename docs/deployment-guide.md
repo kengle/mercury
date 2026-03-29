@@ -27,7 +27,7 @@ mercury init
 
 This creates:
 - `.env` — configuration template
-- `workspace/AGENTS.md` — default agent persona
+- `workspaces/` — workspace directory (create workspaces with `mercury workspace create`)
 - `state.db` — database with first API key
 
 **Save the API key** — it's shown once during init.
@@ -81,16 +81,20 @@ mercury auth login anthropic    # Opens browser for OAuth
 mercury auth status             # Verify credentials
 ```
 
-This saves credentials to `workspace/auth.json`. OAuth tokens auto-refresh.
+OAuth tokens are stored in `pi-agent/auth.json` and auto-refresh.
 
 Alternatively, set an API key directly in `.env`:
 ```bash
 MERCURY_ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-## 5. Define Agent Persona
+## 5. Create Workspace and Define Agent Persona
 
-Edit `workspace/AGENTS.md` with your agent's personality, capabilities, and security rules. See the template created by `mercury init` for the structure.
+```bash
+mercury workspace create default
+```
+
+Edit `workspaces/default/AGENTS.md` with your agent's personality, capabilities, and security rules.
 
 ## 6. Build Docker Image
 
@@ -190,20 +194,20 @@ Then restart the container.
 
 ## 11. Pair via WhatsApp DM
 
-Get the pairing code:
+Get the pairing code for your workspace:
 
 ```bash
 # Via SSH tunnel
 ssh -L 4000:localhost:3000 user@server
 
-curl -s http://localhost:4000/api/conversations/pairing-code \
+curl -s http://localhost:4000/api/workspaces/default/pairing-code \
   -H "Authorization: Bearer <api-key>" \
   -H "x-mercury-caller: system"
 ```
 
-Send `/pair <CODE>` as a WhatsApp DM to the bot's number. This grants you admin access.
+Send `/pair <CODE>` as a WhatsApp DM to the bot's number. This assigns the DM to the workspace and grants you admin access in that workspace.
 
-To pair a group: send `/pair <CODE>` in the group (mentioning the bot).
+To pair a group: send `/pair <CODE>` in the group.
 
 ## File Permissions
 

@@ -1,9 +1,9 @@
 import type { AppConfig } from "../../core/config.js";
+import type { RateLimiter } from "../../core/runtime/rate-limiter.js";
 import type { IngressMessage } from "../../core/types.js";
-import type { RoleService } from "../roles/interface.js";
 import type { ConfigService } from "../config/interface.js";
 import type { MuteService } from "../mutes/interface.js";
-import { RateLimiter } from "../../core/runtime/rate-limiter.js";
+import type { RoleService } from "../roles/interface.js";
 import type { PolicyResult, PolicyService } from "./interface.js";
 
 export function createPolicyService(
@@ -18,7 +18,8 @@ export function createPolicyService(
       const text = message.text.trim();
       if (!text) return { action: "ignore" };
 
-      const role = roles.resolveRole(message.callerId);
+      const wsId = message.workspaceId!;
+      const role = roles.resolveRole(wsId, message.callerId);
 
       // Permission check
       const promptPerm = message.isDM ? "prompt.dm" : "prompt.group";
@@ -32,23 +33,34 @@ export function createPolicyService(
       }
 
       // Mute check
-      if (mutes.isMuted(message.callerId)) {
+      if (mutes.isMuted(wsId, message.callerId)) {
         return { action: "ignore" };
       }
 
       // Rate limit check
       if (rateLimiter) {
-        const rateLimitOverride = config.get("rate_limit");
+        const rateLimitOverride = config.get(wsId, "rate_limit");
         const effectiveLimit = rateLimitOverride
           ? Number.parseInt(rateLimitOverride, 10)
           : appConfig.rateLimitPerUser;
 
-        if (effectiveLimit > 0 && !rateLimiter.isAllowed(message.callerId, effectiveLimit)) {
-          return { action: "deny", reason: "Rate limit exceeded. Try again shortly." };
+        if (
+          effectiveLimit > 0 &&
+          !rateLimiter.isAllowed(message.callerId, effectiveLimit)
+        ) {
+          return {
+            action: "deny",
+            reason: "Rate limit exceeded. Try again shortly.",
+          };
         }
       }
 
-      return { action: "process", prompt: text, callerId: message.callerId, role };
+      return {
+        action: "process",
+        prompt: text,
+        callerId: message.callerId,
+        role,
+      };
     },
   };
 }

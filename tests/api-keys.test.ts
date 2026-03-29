@@ -1,11 +1,11 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Database } from "bun:sqlite";
 import { createDatabase } from "../src/core/db.js";
-import { createApiKeyService } from "../src/services/api-keys/service.js";
 import type { ApiKeyService } from "../src/services/api-keys/interface.js";
+import { createApiKeyService } from "../src/services/api-keys/service.js";
 
 let tmpDir: string;
 let db: Database;

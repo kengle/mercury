@@ -1,6 +1,6 @@
-import { randomBytes, createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
-import type { ApiKeyService, ApiKeyInfo } from "./interface.js";
+import { createHash, randomBytes } from "node:crypto";
+import type { ApiKeyInfo, ApiKeyService } from "./interface.js";
 
 type ApiKeyRow = {
   id: number;
@@ -52,7 +52,19 @@ export function createApiKeyService(db: Database): ApiKeyService {
       insert.run(name, keyHash, keyPrefix, now);
       return {
         key,
-        info: { id: Number((db.query("SELECT last_insert_rowid() as id").get() as { id: number }).id), name, keyPrefix, createdAt: now, revokedAt: null },
+        info: {
+          id: Number(
+            (
+              db.query("SELECT last_insert_rowid() as id").get() as {
+                id: number;
+              }
+            ).id,
+          ),
+          name,
+          keyPrefix,
+          createdAt: now,
+          revokedAt: null,
+        },
       };
     },
 

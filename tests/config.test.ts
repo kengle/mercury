@@ -38,7 +38,7 @@ describe("loadConfig", () => {
   test("derived paths use CWD", () => {
     const config = loadConfig();
     expect(config.dbPath).toBe("state.db");
-    expect(config.workspaceDir).toBe("workspace");
+    expect(config.workspacesDir).toBe("workspaces");
     expect(config.whatsappAuthDir).toBe("whatsapp-auth");
   });
 

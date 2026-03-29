@@ -9,8 +9,14 @@ import {
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
-import { CWD, getImageTag, getVersion, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
 import type { ExtensionMeta } from "../../extensions/types.js";
+import {
+  CWD,
+  getImageTag,
+  getVersion,
+  PACKAGE_ROOT,
+  TEMPLATES_DIR,
+} from "../helpers.js";
 
 async function loadExtensions(): Promise<ExtensionMeta[]> {
   const extensionsDir = join(CWD, "extensions");
@@ -18,9 +24,13 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
 
   const { ExtensionRegistry } = await import("../../extensions/loader.js");
   const { createDatabase } = await import("../../core/db.js");
-  const { createExtensionStateService } = await import("../../extensions/state-service.js");
+  const { createExtensionStateService } = await import(
+    "../../extensions/state-service.js"
+  );
   const { createRoleService } = await import("../../services/roles/service.js");
-  const { createConfigService } = await import("../../services/config/service.js");
+  const { createConfigService } = await import(
+    "../../services/config/service.js"
+  );
 
   const tmpDbPath = join(CWD, "build-tmp.db");
   const db = createDatabase(tmpDbPath);
@@ -30,7 +40,9 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
   const registry = new ExtensionRegistry();
   await registry.loadAll(extensionsDir, extState, rolesSvc, console as any);
   db.close();
-  try { unlinkSync(tmpDbPath); } catch {}
+  try {
+    unlinkSync(tmpDbPath);
+  } catch {}
 
   return registry.list();
 }
@@ -40,7 +52,9 @@ async function generateDockerfileContent(extensions: ExtensionMeta[], mercuryVer
   let content = readFileSync(baseDockerfile, "utf8");
 
   if (extensions.some((e) => e.clis.length > 0)) {
-    const { injectExtensionInstalls } = await import("../../extensions/image-builder.js");
+    const { injectExtensionInstalls } = await import(
+      "../../extensions/image-builder.js"
+    );
     content = injectExtensionInstalls(content, extensions);
   }
 
@@ -81,7 +95,11 @@ function generateEnvExample(extensions: ExtensionMeta[]): string {
 
   if (extEnvVars.length === 0) return base;
 
-  const lines = [base.trimEnd(), "", "# ─── Extensions ────────────────────────────────────────────────────────"];
+  const lines = [
+    base.trimEnd(),
+    "",
+    "# ─── Extensions ────────────────────────────────────────────────────────",
+  ];
   let currentExt = "";
   for (const v of extEnvVars) {
     if (v.ext !== currentExt) {
@@ -191,11 +209,11 @@ export async function buildAction(options: { version?: string; localSource?: str
   await dockerfileAction({ ...options, isLocalBuild });
 
   console.log(`\n📦 Building ${tag}...\n`);
-  const result = spawnSync(
-    "docker",
-    ["build", "-t", tag, "."],
-    { stdio: "inherit", cwd: CWD, timeout: 600_000 },
-  );
+  const result = spawnSync("docker", ["build", "-t", tag, "."], {
+    stdio: "inherit",
+    cwd: CWD,
+    timeout: 600_000,
+  });
 
   // 清理临时源码目录
   if (cleanupFn) {
