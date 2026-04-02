@@ -8,6 +8,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-pip python3-venv \
     bubblewrap \
     fonts-wqy-zenhei fonts-noto-cjk \
+    fd-find \
+    ripgrep \
+    && ln -s $(which fdfind) /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
 # Node.js
@@ -24,7 +27,7 @@ ENV PATH="$BUN_INSTALL/bin:$PATH"
 RUN curl -fsSL https://go.dev/dl/go1.24.1.linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf -
 ENV PATH="/usr/local/go/bin:$PATH"
 
-# pi CLI
+# pi CLI (fd and rg already installed, pi will use system versions)
 RUN bun add -g @mariozechner/pi-coding-agent
 
 
