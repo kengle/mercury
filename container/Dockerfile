@@ -40,8 +40,8 @@ ENV CHROMIUM_FLAGS="--no-sandbox"
 RUN apt-get update && apt-get install -y --no-install-recommends \
     jq \
     && rm -rf /var/lib/apt/lists/*
-ENV LIGHTPANDA_DIR="/usr/local/bin"
-RUN OS="Linux" && \
+ENV LIGHTPANDA_DIR="/root/.local/bin"
+RUN mkdir -p "$LIGHTPANDA_DIR" && \
     ARCH="$(dpkg --print-architecture)" && \
     case "$ARCH" in \
       amd64) DOWNLOAD_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux" ;; \
@@ -61,7 +61,8 @@ RUN OS="Linux" && \
     fi && \
     chmod +x "$LIGHTPANDA_DIR/lightpanda" && \
     echo "Lightpanda installed successfully"
-ENV LIGHTPANDA_BIN="/usr/local/bin/lightpanda"
+ENV PATH="$LIGHTPANDA_DIR:$PATH"
+ENV LIGHTPANDA_BIN="$LIGHTPANDA_DIR/lightpanda"
 
 # Mercury
 ARG MERCURY_VERSION=latest
