@@ -36,6 +36,33 @@ ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
 RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
 ENV CHROMIUM_FLAGS="--no-sandbox"
 
+# Lightpanda Browser
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    jq \
+    && rm -rf /var/lib/apt/lists/*
+ENV LIGHTPANDA_DIR="/usr/local/bin"
+RUN OS="Linux" && \
+    ARCH="$(dpkg --print-architecture)" && \
+    case "$ARCH" in \
+      amd64) DOWNLOAD_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux" ;; \
+      arm64) DOWNLOAD_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-aarch64-linux" ;; \
+      *) echo "ERROR: Unsupported architecture: $ARCH" && exit 1 ;; \
+    esac && \
+    ASSET_NAME="${DOWNLOAD_URL##*/}" && \
+    EXPECTED_DIGEST=$(curl -sL "https://api.github.com/repos/lightpanda-io/browser/releases/tags/nightly" | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name == $name) | .digest') && \
+    EXPECTED_SHA256="${EXPECTED_DIGEST#sha256:}" && \
+    echo "Installing Lightpanda for $ARCH (SHA256: $EXPECTED_SHA256)" && \
+    curl -sL -o "$LIGHTPANDA_DIR/lightpanda" "$DOWNLOAD_URL" && \
+    ACTUAL_SHA256=$(sha256sum "$LIGHTPANDA_DIR/lightpanda" | awk '{print $1}') && \
+    if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then \
+      echo "ERROR: Checksum verification FAILED!" && \
+      rm -f "$LIGHTPANDA_DIR/lightpanda" && \
+      exit 1; \
+    fi && \
+    chmod +x "$LIGHTPANDA_DIR/lightpanda" && \
+    echo "Lightpanda installed successfully"
+ENV LIGHTPANDA_BIN="/usr/local/bin/lightpanda"
+
 # Mercury
 ARG MERCURY_VERSION=latest
 ARG MERCURY_INSTALL="bun add -g mercury-ai@${MERCURY_VERSION}"
