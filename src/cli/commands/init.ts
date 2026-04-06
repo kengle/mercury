@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
-  readdirSync,
   writeFileSync,
 } from "node:fs";
 import { join } from "node:path";
@@ -26,63 +25,13 @@ build-tmp.db-shm
 build-tmp.db-wal
 `;
 
-const CI_WORKFLOW = `name: Build
-
-on:
-  push:
-    branches: [main]
-
-permissions:
-  contents: read
-  packages: write
-
-jobs:
-  build:
-    runs-on: ubuntu-24.04-arm
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: \${{ github.actor }}
-          password: \${{ secrets.GITHUB_TOKEN }}
-
-      - name: Lowercase repo name
-        id: lower
-        run: echo "repo=\${GITHUB_REPOSITORY,,}" >> $GITHUB_OUTPUT
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ghcr.io/\${{ steps.lower.outputs.repo }}:latest
-            ghcr.io/\${{ steps.lower.outputs.repo }}:\${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-`;
-
 export function initAction(): void {
   console.log("🪽 Initializing mercury project...\n");
 
-  const envExamplePath = join(CWD, ".env.example");
-  if (!existsSync(envExamplePath)) {
-    copyFileSync(join(TEMPLATES_DIR, "env.template"), envExamplePath);
-    console.log("  ✓ .env.example");
-  } else {
-    console.log("  • .env.example (already exists)");
-  }
-
   const envPath = join(CWD, ".env");
   if (!existsSync(envPath)) {
-    copyFileSync(envExamplePath, envPath);
-    console.log("  ✓ .env (copied from .env.example — edit this)");
+    copyFileSync(join(TEMPLATES_DIR, "env.template"), envPath);
+    console.log("  ✓ .env");
   } else {
     console.log("  • .env (already exists)");
   }
@@ -118,16 +67,6 @@ export function initAction(): void {
     console.log("  ✓ .gitignore");
   } else {
     console.log("  • .gitignore (already exists)");
-  }
-
-  const ciDir = join(CWD, ".github", "workflows");
-  const ciPath = join(ciDir, "build.yml");
-  if (!existsSync(ciPath)) {
-    mkdirSync(ciDir, { recursive: true });
-    writeFileSync(ciPath, CI_WORKFLOW);
-    console.log("  ✓ .github/workflows/build.yml");
-  } else {
-    console.log("  • .github/workflows/build.yml (already exists)");
   }
 
   // Generate first API key and save to .env
