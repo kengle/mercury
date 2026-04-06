@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import fs from "node:fs";
 import path from "node:path";
 import { HookDispatcher } from "../../extensions/hooks.js";
 import type { ExtensionRegistry } from "../../extensions/loader.js";
@@ -380,10 +381,18 @@ export class MercuryCoreRuntime {
       // Ensure workspace dir structure and install skills
       ensurePiResourceDir(workspace);
       if (this.extensionRegistry) {
+        const builtinSkillNames = new Set<string>();
+        const builtinSkillsDir = path.join(__dirname, "../../resources/skills");
+        if (fs.existsSync(builtinSkillsDir)) {
+          for (const e of fs.readdirSync(builtinSkillsDir, { withFileTypes: true })) {
+            if (e.isDirectory()) builtinSkillNames.add(e.name);
+          }
+        }
         installExtensionSkills(
           this.extensionRegistry.list(),
           workspace,
           logger,
+          builtinSkillNames,
         );
       }
 
