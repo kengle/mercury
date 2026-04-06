@@ -90,6 +90,16 @@ export function initAction(): void {
   mkdirSync(wsRoot, { recursive: true });
   console.log("  ✓ workspaces/");
 
+  // Copy AGENTS.md template to workspaces/ directory
+  // This defines the agent's core capabilities and constraints for all workspaces
+  const workspaceAgentsPath = join(wsRoot, "AGENTS.md");
+  if (!existsSync(workspaceAgentsPath)) {
+    copyFileSync(join(TEMPLATES_DIR, "AGENTS.md"), workspaceAgentsPath);
+    console.log("  ✓ workspaces/AGENTS.md");
+  } else {
+    console.log("  • workspaces/AGENTS.md (already exists)");
+  }
+
   const gitignorePath = join(CWD, ".gitignore");
   if (!existsSync(gitignorePath)) {
     writeFileSync(gitignorePath, GITIGNORE);
