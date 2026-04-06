@@ -100,6 +100,5 @@ export function initAction(): void {
   console.log("  1. Edit .env with your API keys and adapter settings");
   console.log("  2. mercury workspace create <name>  — create a workspace");
   console.log("  3. mercury ext add <source>          — install extensions");
-  console.log("  4. mercury dockerfile                — generate Dockerfile");
-  console.log("  5. mercury build                     — build image locally");
+  console.log("  4. mercury build                     — build image locally");
 }
