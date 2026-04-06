@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import {
   existsSync,
+  mkdirSync,
   readFileSync,
   rmSync,
   unlinkSync,
@@ -8,7 +9,7 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import type { ExtensionMeta } from "../../extensions/types.js";
-import { CWD, getImageTag } from "../helpers.js";
+import { CWD, findMercurySrc, getImageTag } from "../helpers.js";
 
 async function loadExtensions(): Promise<ExtensionMeta[]> {
   const extensionsDir = join(CWD, "extensions");
@@ -128,6 +129,54 @@ export async function buildAction(): Promise<void> {
   writeFileSync(dockerfilePath, dockerfileContent);
   console.log(`✓ Generated Dockerfile`);
 
+  // Find MERCURY-SRC via npm link
+  const mercurySrc = findMercurySrc();
+  console.log(`📦 Mercury source: ${mercurySrc}`);
+
+  // Copy MERCURY-SRC to CWD/mercury-source/
+  const mercurySourceDir = join(CWD, "mercury-source");
+  
+  // Clean up old source directory
+  if (existsSync(mercurySourceDir)) {
+    rmSync(mercurySourceDir, { recursive: true, force: true });
+  }
+  
+  // Create new directory and copy source
+  mkdirSync(mercurySourceDir, { recursive: true });
+  console.log(`📦 Copying mercury-ai source...`);
+  
+  // Use rsync or cp to copy files (exclude .git and other unnecessary files)
+  const srcPath = mercurySrc.endsWith("/") ? mercurySrc : `${mercurySrc}/`;
+  const result = spawnSync("rsync", [
+    "-av",
+    "--delete",
+    "--exclude", ".git",
+    "--exclude", ".gitignore",
+    "--exclude", ".gitmodules",
+    "--exclude", "node_modules",
+    "--exclude", "dist",
+    "--exclude", ".DS_Store",
+    srcPath,
+    mercurySourceDir,
+  ], {
+    stdio: "inherit",
+    timeout: 120_000,
+  });
+  
+  if (result.status !== 0) {
+    console.error("rsync failed, trying cp...");
+    const cpResult = spawnSync("cp", ["-R", srcPath, mercurySourceDir], {
+      stdio: "inherit",
+      timeout: 120_000,
+    });
+    if (cpResult.status !== 0) {
+      console.error("Failed to copy mercury-ai source");
+      process.exit(1);
+    }
+  }
+  
+  console.log(`✓ Copied mercury-ai source to ${mercurySourceDir}`);
+
   console.log(`\n📦 Building ${tag}...\n`);
   const buildResult = spawnSync(
     "docker",
@@ -144,7 +193,7 @@ export async function buildAction(): Promise<void> {
   // Clean up temporary source directory
   if (existsSync(mercurySourceDir)) {
     rmSync(mercurySourceDir, { recursive: true, force: true });
-    console.log(`✓ Cleaned up temporary source directory`);
+    console.log(`✓ Cleaned up mercury-source directory`);
   }
 
   if (buildResult.status !== 0) process.exit(buildResult.status ?? 1);
