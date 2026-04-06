@@ -99,7 +99,10 @@ export async function buildAction(): Promise<void> {
   if (checkRunning.status === 0) {
     const runningImages = checkRunning.stdout.toString().split("\n").filter(Boolean);
     const isRunning = runningImages.some(img => {
-      return img === tag || img.endsWith(`:${tag.split(":").pop()}`);
+      // Normalize image names for comparison (handle localhost/ prefix)
+      const normalizedImg = img.replace(/^localhost\//, "");
+      const normalizedTag = tag.replace(/^localhost\//, "");
+      return normalizedImg === normalizedTag;
     });
     
     if (isRunning) {
