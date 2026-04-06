@@ -203,16 +203,6 @@ export async function addAction(source: string): Promise<void> {
     const destDir = join(extensionsDir, name);
     cpSync(sourceDir, destDir, { recursive: true });
 
-    if (existsSync(join(destDir, "package.json"))) {
-      console.log("Installing dependencies...");
-      const installResult = spawnSync("bun", ["install"], {
-        stdio: "inherit",
-        cwd: destDir,
-      });
-      if (installResult.status !== 0)
-        console.error("Warning: dependency installation failed");
-    }
-
     const hasSkill = hasSkillDir(destDir);
 
     let info: Awaited<ReturnType<typeof readExtensionInfo>>;
@@ -225,7 +215,7 @@ export async function addAction(source: string): Promise<void> {
     console.log(`\n✓ Extension "${name}" installed`);
     if (info.hasCli)
       console.log(
-        `  CLI: ${info.cliNames.join(", ")} (available after image rebuild)`,
+        `  CLI: ${info.cliNames.join(", ")} (available after build)`,
       );
     if (hasSkill) console.log(`  Skill: ${name} (available to agent)`);
     if (info.permissionRoles)
@@ -233,11 +223,9 @@ export async function addAction(source: string): Promise<void> {
         `  Permission: ${name} (default: ${info.permissionRoles.join(", ")})`,
       );
     if (info.hasCli) {
-      console.log("\nRebuild the agent image to include the CLI:");
+      console.log("\nBuild the agent image to activate:");
       console.log("  mercury build");
     }
-    console.log("\nRestart mercury to activate:");
-    console.log("  mercury restart");
   } catch (err) {
     const destDir = join(extensionsDir, name);
     if (existsSync(destDir)) rmSync(destDir, { recursive: true, force: true });
@@ -259,7 +247,7 @@ export function removeAction(name: string): void {
   rmSync(extDir, { recursive: true });
 
   console.log(`✓ Extension "${name}" removed`);
-  console.log("\nRestart mercury to apply:");
+  console.log("\nmercury build:");
   console.log("  mercury restart");
 }
 
