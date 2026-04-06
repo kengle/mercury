@@ -177,6 +177,15 @@ export async function buildAction(): Promise<void> {
   
   console.log(`✓ Copied mercury-ai source to ${mercurySourceDir}`);
 
+  // Copy models.json from CWD to mercury-source if exists
+  const modelsJsonSrc = join(CWD, "models.json");
+  const modelsJsonDest = join(mercurySourceDir, "models.json");
+  if (existsSync(modelsJsonSrc)) {
+    const { copyFileSync } = await import("node:fs");
+    copyFileSync(modelsJsonSrc, modelsJsonDest);
+    console.log(`✓ Copied models.json`);
+  }
+
   console.log(`\n📦 Building ${tag}...\n`);
   const buildResult = spawnSync(
     "docker",

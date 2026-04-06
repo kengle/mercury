@@ -28,11 +28,17 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # ─── Node.js (using npmmirror) ───────────────────────────────────────────
-RUN curl -fsSL https://npmmirror.com/mirrors/node/v24.14.1/node-v24.14.1-linux-$(dpkg --print-architecture).tar.gz | tar -C /usr/local -xzf - && \
-    ln -sf /usr/local/node-v24.14.1-linux-$(dpkg --print-architecture)/bin/node /usr/local/bin/node && \
-    ln -sf /usr/local/node-v24.14.1-linux-$(dpkg --print-architecture)/bin/npm /usr/local/bin/npm && \
-    ln -sf /usr/local/node-v24.14.1-linux-$(dpkg --print-architecture)/bin/npx /usr/local/bin/npx
-ENV PATH="/usr/local/node-v24.14.1-linux-$(dpkg --print-architecture)/bin:$PATH"
+RUN ARCH="$(dpkg --print-architecture)" && \
+    case "$ARCH" in \
+      amd64) NODE_ARCH="x64" ;; \
+      arm64) NODE_ARCH="arm64" ;; \
+      *) echo "ERROR: Unsupported architecture: $ARCH" && exit 1 ;; \
+    esac && \
+    curl -fsSL https://npmmirror.com/mirrors/node/v24.14.1/node-v24.14.1-linux-${NODE_ARCH}.tar.gz | tar -C /usr/local -xzf - && \
+    ln -sf /usr/local/node-v24.14.1-linux-${NODE_ARCH}/bin/node /usr/local/bin/node && \
+    ln -sf /usr/local/node-v24.14.1-linux-${NODE_ARCH}/bin/npm /usr/local/bin/npm && \
+    ln -sf /usr/local/node-v24.14.1-linux-${NODE_ARCH}/bin/npx /usr/local/bin/npx
+ENV PATH="/usr/local/node-v24.14.1-linux-x64/bin:$PATH"
 
 # ─── Bun (using npmmirror) ───────────────────────────────────────────────
 RUN npm install -g bun --registry=https://registry.npmmirror.com
@@ -49,37 +55,20 @@ RUN bun add -g @mariozechner/pi-coding-agent --registry=https://registry.npmmirr
     chmod +x /usr/local/bin/pi
 
 # ─── Playwright Chromium ─────────────────────────────────────────────────
-RUN npx playwright install --with-deps chromium --registry=https://registry.npmmirror.com
+RUN npm install -g playwright --registry=https://registry.npmmirror.com && \
+    playwright install --with-deps chromium
 ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN ln -sf $(find /root/.cache/ms-playwright -name chrome -type f | head -1) /usr/local/bin/chromium
 ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
 RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
 ENV CHROMIUM_FLAGS="--no-sandbox"
 
-# ─── Lightpanda Browser ──────────────────────────────────────────────────
+# ─── Lightpanda Browser (from predownload) ─────────────────────────────────
 ENV LIGHTPANDA_DIR="/root/.local/bin"
-RUN mkdir -p "$LIGHTPANDA_DIR" && \
-    ARCH="$(dpkg --print-architecture)" && \
-    case "$ARCH" in \
-      amd64) DOWNLOAD_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-x86_64-linux" ;; \
-      arm64) DOWNLOAD_URL="https://github.com/lightpanda-io/browser/releases/download/nightly/lightpanda-aarch64-linux" ;; \
-      *) echo "ERROR: Unsupported architecture: $ARCH" && exit 1 ;; \
-    esac && \
-    ASSET_NAME="${DOWNLOAD_URL##*/}" && \
-    EXPECTED_DIGEST=$(curl -sL "https://api.github.com/repos/lightpanda-io/browser/releases/tags/nightly" | jq -r --arg name "$ASSET_NAME" '.assets[] | select(.name == $name) | .digest') && \
-    EXPECTED_SHA256="${EXPECTED_DIGEST#sha256:}" && \
-    echo "Installing Lightpanda for $ARCH (SHA256: $EXPECTED_SHA256)" && \
-    curl -sL -o "$LIGHTPANDA_DIR/lightpanda" "$DOWNLOAD_URL" && \
-    ACTUAL_SHA256=$(sha256sum "$LIGHTPANDA_DIR/lightpanda" | awk '{print $1}') && \
-    if [ "$ACTUAL_SHA256" != "$EXPECTED_SHA256" ]; then \
-      echo "ERROR: Checksum verification FAILED!" && \
-      rm -f "$LIGHTPANDA_DIR/lightpanda" && \
-      exit 1; \
-    fi && \
-    chmod +x "$LIGHTPANDA_DIR/lightpanda" && \
-    echo "Lightpanda installed successfully"
-ENV PATH="$LIGHTPANDA_DIR:$PATH"
-ENV LIGHTPANDA_BIN="$LIGHTPANDA_DIR/lightpanda"
+COPY predownload/lightpanda-x86_64-linux /usr/local/bin/lightpanda
+RUN chmod +x /usr/local/bin/lightpanda && echo "Lightpanda installed from predownload"
+ENV PATH="/usr/local/bin:$PATH"
+ENV LIGHTPANDA_BIN="/usr/local/bin/lightpanda"
 
 # ─── Mercury (from local source) ─────────────────────────────────────────
 # mercury-source is copied from build context by build.ts
@@ -92,10 +81,10 @@ RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/loca
     chmod +x /usr/local/bin/mrctl
 
 # Pi agent dir → persisted project root (symlink resolves at runtime when volume is mounted)
-RUN mkdir -p /root/.pi && ln -s /data/pi-agent /root/.pi/agent
+RUN mkdir -p /root/.pi && mkdir -p /data/pi-agent && ln -sfn /data/pi-agent /root/.pi/agent
 
-# Copy models.json to image (if exists in build context)
-RUN if [ -f /mercury-source/models.json ]; then cp /mercury-source/models.json /root/.pi/agent/models.json; fi
+# Copy models.json to image
+RUN cp /mercury-source/models.json /root/.pi/agent/models.json
 
 # Project root is mounted at /data (persisted across deploys)
 VOLUME /data

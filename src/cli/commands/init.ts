@@ -37,14 +37,12 @@ export function initAction(): void {
     console.log("  • .env (already exists)");
   }
 
-  // Copy Dockerfile.base from MERCURY-SRC
-  const mercurySrc = findMercurySrc();
+  // Copy Dockerfile.base from templates
   const dockerfileBasePath = join(CWD, "Dockerfile.base");
-  const srcDockerfile = join(mercurySrc, "container/Dockerfile");
-  if (!existsSync(dockerfileBasePath) && existsSync(srcDockerfile)) {
-    copyFileSync(srcDockerfile, dockerfileBasePath);
+  if (!existsSync(dockerfileBasePath)) {
+    copyFileSync(join(TEMPLATES_DIR, "Dockerfile.base"), dockerfileBasePath);
     console.log("  ✓ Dockerfile.base");
-  } else if (existsSync(dockerfileBasePath)) {
+  } else {
     console.log("  • Dockerfile.base (already exists)");
   }
 
@@ -60,6 +58,15 @@ export function initAction(): void {
     console.log("  ✓ workspaces/AGENTS.md");
   } else {
     console.log("  • workspaces/AGENTS.md (already exists)");
+  }
+
+  // Copy models.json from templates
+  const modelsJsonPath = join(CWD, "models.json");
+  if (!existsSync(modelsJsonPath)) {
+    copyFileSync(join(TEMPLATES_DIR, "models.json"), modelsJsonPath);
+    console.log("  ✓ models.json");
+  } else {
+    console.log("  • models.json (already exists)");
   }
 
   const gitignorePath = join(CWD, ".gitignore");
