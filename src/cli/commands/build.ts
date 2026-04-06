@@ -150,6 +150,23 @@ export async function buildAction(options: { version?: string; localSource?: str
   const tag = getImageTag(envPath);
   const isLocalBuild = !!options.localSource;
 
+  // Check if any running container is using this image tag
+  const checkRunning = spawnSync("docker", ["ps", "--format", "{{.Image}}"]);
+  if (checkRunning.status === 0) {
+    const runningImages = checkRunning.stdout.toString().split("\n").filter(Boolean);
+    const isRunning = runningImages.some(img => {
+      // Check exact match or tag match (image:tag or registry/image:tag)
+      return img === tag || img.endsWith(`:${tag.split(":").pop()}`);
+    });
+    
+    if (isRunning) {
+      console.error(`❌ Error: Image "${tag}" is currently in use by a running container.`);
+      console.error("   Stop the container first: mercury stop");
+      console.error("   Or use a different tag in .env: MERCURY_IMAGE=mercury:v2");
+      process.exit(1);
+    }
+  }
+
   // 如果是本地构建，需要复制源码到构建上下文
   let cleanupFn: (() => void) | undefined;
   

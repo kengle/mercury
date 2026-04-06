@@ -3,7 +3,12 @@ import { existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { CWD, getImageTag, loadEnvFile } from "../helpers.js";
 
-const CONTAINER_NAME = "mercury";
+function getContainerName(envPath: string): string {
+  const tag = getImageTag(envPath);
+  // Generate container name from image tag: mercury:latest → mercury-latest
+  const safeTag = tag.replace(/[^a-zA-Z0-9_-]/g, "-");
+  return `mercury-${safeTag}`;
+}
 
 function getPort(): string {
   const envPath = join(CWD, ".env");
@@ -22,8 +27,10 @@ export function startAction(): void {
     process.exit(1);
   }
 
+  const containerName = getContainerName(envPath);
+  
   // Stop existing container if running
-  spawnSync("docker", ["rm", "-f", CONTAINER_NAME], { stdio: "pipe" });
+  spawnSync("docker", ["rm", "-f", containerName], { stdio: "pipe" });
 
   const tag = getImageTag(envPath);
   const port = getPort();
@@ -31,7 +38,7 @@ export function startAction(): void {
     "run",
     "-d",
     "--name",
-    CONTAINER_NAME,
+    containerName,
     "--restart",
     "unless-stopped",
     "--cap-add",
@@ -55,13 +62,17 @@ export function startAction(): void {
   }
 
   console.log(`\n✓ Mercury started`);
-  console.log(`  Container: ${CONTAINER_NAME}`);
+  console.log(`  Container: ${containerName}`);
+  console.log(`  Image: ${tag}`);
   console.log(`  Port: ${port}`);
   console.log(`  Logs: mercury logs -f`);
 }
 
 export function stopAction(): void {
-  const check = spawnSync("docker", ["inspect", CONTAINER_NAME], {
+  const envPath = join(CWD, ".env");
+  const containerName = envPath && existsSync(envPath) ? getContainerName(envPath) : "mercury";
+  
+  const check = spawnSync("docker", ["inspect", containerName], {
     stdio: "pipe",
   });
   if (check.status !== 0) {
@@ -70,8 +81,8 @@ export function stopAction(): void {
   }
 
   console.log("Stopping mercury...");
-  spawnSync("docker", ["stop", CONTAINER_NAME], { stdio: "pipe" });
-  spawnSync("docker", ["rm", CONTAINER_NAME], { stdio: "pipe" });
+  spawnSync("docker", ["stop", containerName], { stdio: "pipe" });
+  spawnSync("docker", ["rm", containerName], { stdio: "pipe" });
   console.log("✓ Mercury stopped");
 }
 
@@ -95,9 +106,12 @@ export function restartAction(): void {
 }
 
 export function logsAction(options: { follow?: boolean }): void {
+  const envPath = join(CWD, ".env");
+  const containerName = envPath && existsSync(envPath) ? getContainerName(envPath) : "mercury";
+  
   const args = ["logs"];
   if (options.follow) args.push("-f");
-  args.push(CONTAINER_NAME);
+  args.push(containerName);
 
   const result = spawnSync("docker", args, { stdio: "inherit" });
   if (result.status !== 0) {

@@ -86,6 +86,15 @@ export function initAction(): void {
     console.log("  • .env (already exists)");
   }
 
+  // Copy Dockerfile template
+  const dockerfilePath = join(CWD, "Dockerfile");
+  if (!existsSync(dockerfilePath)) {
+    copyFileSync(join(TEMPLATES_DIR, "Dockerfile.template"), dockerfilePath);
+    console.log("  ✓ Dockerfile");
+  } else {
+    console.log("  • Dockerfile (already exists)");
+  }
+
   const wsRoot = join(CWD, "workspaces");
   mkdirSync(wsRoot, { recursive: true });
   console.log("  ✓ workspaces/");
