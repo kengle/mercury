@@ -41,8 +41,9 @@ async function loadExtensions(): Promise<ExtensionMeta[]> {
 }
 
 async function generateDockerfileContent(extensions: ExtensionMeta[]): Promise<string> {
-  const dockerfilePath = join(CWD, "Dockerfile");
-  let content = readFileSync(dockerfilePath, "utf8");
+  const mercurySrc = findMercurySrc();
+  const templatePath = join(mercurySrc, "container/Dockerfile");
+  let content = readFileSync(templatePath, "utf8");
 
   if (extensions.some((e) => e.clis.length > 0)) {
     const { injectExtensionInstalls } = await import(
@@ -82,31 +83,17 @@ function generateEnvExample(extensions: ExtensionMeta[]): string {
   return lines.join("\n");
 }
 
-export async function dockerfileAction(): Promise<void> {
-  const extensions = await loadExtensions();
-
-  const cliCount = extensions.reduce((n, e) => n + e.clis.length, 0);
-  if (cliCount > 0) {
-    console.log(`Found ${cliCount} extension CLI(s):`);
-    for (const ext of extensions) {
-      for (const cli of ext.clis) {
-        console.log(`  ${ext.name}: ${cli.install}`);
-      }
-    }
-  }
-
-  const dockerfileContent = await generateDockerfileContent(extensions);
-  writeFileSync(join(CWD, "Dockerfile"), dockerfileContent);
-  console.log(`✓ Generated Dockerfile`);
-
-  const envContent = generateEnvExample(extensions);
-  writeFileSync(join(CWD, ".env.example"), envContent);
-  console.log("✓ Generated .env.example");
-}
-
 export async function buildAction(): Promise<void> {
   const envPath = join(CWD, ".env");
   const tag = getImageTag(envPath);
+
+  // Check if Dockerfile.base exists
+  const dockerfileBasePath = join(CWD, "Dockerfile.base");
+  if (!existsSync(dockerfileBasePath)) {
+    console.error(`❌ Error: Dockerfile.base not found.`);
+    console.error("   Run 'mercury init' first to create it.");
+    process.exit(1);
+  }
 
   // Check if any running container is using this image tag
   const checkRunning = spawnSync("docker", ["ps", "--format", "{{.Image}}"]);
@@ -123,6 +110,25 @@ export async function buildAction(): Promise<void> {
       process.exit(1);
     }
   }
+
+  // Load extensions and generate Dockerfile
+  const extensions = await loadExtensions();
+  
+  const cliCount = extensions.reduce((n, e) => n + e.clis.length, 0);
+  if (cliCount > 0) {
+    console.log(`Found ${cliCount} extension CLI(s):`);
+    for (const ext of extensions) {
+      for (const cli of ext.clis) {
+        console.log(`  ${ext.name}: ${cli.install}`);
+      }
+    }
+  }
+
+  // Generate Dockerfile from Dockerfile.base
+  const dockerfileContent = await generateDockerfileContent(extensions);
+  const dockerfilePath = join(CWD, "Dockerfile");
+  writeFileSync(dockerfilePath, dockerfileContent);
+  console.log(`✓ Generated Dockerfile`);
 
   // Find MERCURY-SRC via npm link
   const mercurySrc = findMercurySrc();
@@ -172,15 +178,18 @@ export async function buildAction(): Promise<void> {
   
   console.log(`✓ Copied mercury-ai source to ${mercurySourceDir}`);
 
-  // Generate Dockerfile with extension CLI injections
-  await dockerfileAction();
-
   console.log(`\n📦 Building ${tag}...\n`);
   const buildResult = spawnSync(
     "docker",
     ["build", "-t", tag, "."],
     { stdio: "inherit", cwd: CWD, timeout: 600_000 }
   );
+
+  // Clean up Dockerfile after build
+  if (existsSync(dockerfilePath)) {
+    rmSync(dockerfilePath);
+    console.log(`✓ Cleaned up Dockerfile`);
+  }
 
   // Clean up temporary source directory
   if (existsSync(mercurySourceDir)) {

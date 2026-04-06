@@ -3,7 +3,7 @@
 import { Command } from "commander";
 import { registerApiKeyCommands } from "./commands/api-keys.js";
 import { registerAuthCommands } from "./commands/auth.js";
-import { buildAction, dockerfileAction } from "./commands/build.js";
+import { buildAction } from "./commands/build.js";
 import { chatAction } from "./commands/chat.js";
 import {
   pairAction,
@@ -54,11 +54,6 @@ program
   .description("View container logs")
   .option("-f, --follow", "Follow log output")
   .action(logsAction);
-program
-  .command("dockerfile")
-  .description("Generate Dockerfile from extensions")
-  .action(dockerfileAction);
-
 program
   .command("build")
   .description("Build image from mercury-ai source (via npm link)")

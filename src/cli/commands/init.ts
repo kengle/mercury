@@ -23,6 +23,7 @@ extensions/*/node_modules/
 build-tmp.db
 build-tmp.db-shm
 build-tmp.db-wal
+Dockerfile
 `;
 
 export function initAction(): void {
@@ -36,15 +37,15 @@ export function initAction(): void {
     console.log("  • .env (already exists)");
   }
 
-  // Copy Dockerfile from MERCURY-SRC
+  // Copy Dockerfile.base from MERCURY-SRC
   const mercurySrc = findMercurySrc();
-  const dockerfilePath = join(CWD, "Dockerfile");
+  const dockerfileBasePath = join(CWD, "Dockerfile.base");
   const srcDockerfile = join(mercurySrc, "container/Dockerfile");
-  if (!existsSync(dockerfilePath) && existsSync(srcDockerfile)) {
-    copyFileSync(srcDockerfile, dockerfilePath);
-    console.log("  ✓ Dockerfile");
-  } else if (existsSync(dockerfilePath)) {
-    console.log("  • Dockerfile (already exists)");
+  if (!existsSync(dockerfileBasePath) && existsSync(srcDockerfile)) {
+    copyFileSync(srcDockerfile, dockerfileBasePath);
+    console.log("  ✓ Dockerfile.base");
+  } else if (existsSync(dockerfileBasePath)) {
+    console.log("  • Dockerfile.base (already exists)");
   }
 
   const wsRoot = join(CWD, "workspaces");
