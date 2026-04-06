@@ -2,6 +2,7 @@ import {
   copyFileSync,
   existsSync,
   mkdirSync,
+  readFileSync,
   readdirSync,
   writeFileSync,
 } from "node:fs";
@@ -129,16 +130,26 @@ export function initAction(): void {
     console.log("  • .github/workflows/build.yml (already exists)");
   }
 
-  // Generate first API key
+  // Generate first API key and save to .env
   const dbPath = join(CWD, "state.db");
   const db = createDatabase(dbPath);
   const apiKeys = createApiKeyService(db);
   const existing = apiKeys.list();
   if (existing.length === 0) {
     const { key } = apiKeys.create("default");
-    console.log(`\n  ✓ API key generated`);
-    console.log(`    Key: ${key}`);
-    console.log(`    Save this — it won't be shown again.`);
+    
+    // Save to .env file
+    const envPath = join(CWD, ".env");
+    if (existsSync(envPath)) {
+      const envContent = readFileSync(envPath, "utf8");
+      if (!envContent.includes("MERCURY_API_KEY=")) {
+        const newContent = `${envContent}\n# API Key for internal service communication\nMERCURY_API_KEY=${key}\n`;
+        writeFileSync(envPath, newContent, "utf8");
+        console.log(`  ✓ API key generated and saved to .env`);
+      } else {
+        console.log(`  • API key already exists in .env`);
+      }
+    }
   }
   db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
   db.exec("PRAGMA journal_mode = DELETE");
