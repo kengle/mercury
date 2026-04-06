@@ -138,7 +138,6 @@ export function createIngressService(
             });
           }
 
-          workspaceId = workspace.id;
           assigned = true;
         }
       }

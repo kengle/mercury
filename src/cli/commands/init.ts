@@ -8,7 +8,7 @@ import {
 import { join } from "node:path";
 import { createDatabase } from "../../core/db.js";
 import { createApiKeyService } from "../../services/api-keys/service.js";
-import { CWD, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
+import { CWD, findMercurySrc, PACKAGE_ROOT, TEMPLATES_DIR } from "../helpers.js";
 
 const GITIGNORE = `.env
 state.db
@@ -86,12 +86,14 @@ export function initAction(): void {
     console.log("  • .env (already exists)");
   }
 
-  // Copy Dockerfile template
+  // Copy Dockerfile from MERCURY-SRC
+  const mercurySrc = findMercurySrc();
   const dockerfilePath = join(CWD, "Dockerfile");
-  if (!existsSync(dockerfilePath)) {
-    copyFileSync(join(TEMPLATES_DIR, "Dockerfile.template"), dockerfilePath);
+  const srcDockerfile = join(mercurySrc, "container/Dockerfile");
+  if (!existsSync(dockerfilePath) && existsSync(srcDockerfile)) {
+    copyFileSync(srcDockerfile, dockerfilePath);
     console.log("  ✓ Dockerfile");
-  } else {
+  } else if (existsSync(dockerfilePath)) {
     console.log("  • Dockerfile (already exists)");
   }
 

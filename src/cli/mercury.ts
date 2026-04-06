@@ -57,22 +57,12 @@ program
 program
   .command("dockerfile")
   .description("Generate Dockerfile from extensions")
-  .option(
-    "--mercury-version <version>",
-    "Mercury npm version or tag (default: current version)",
-  )
-  .option("--local-source <path>", "Build from local Mercury source path (e.g., /path/to/mercury)")
-  .action((opts) => dockerfileAction({ version: opts.mercuryVersion, localSource: opts.localSource }));
+  .action(dockerfileAction);
 
 program
   .command("build")
-  .description("Generate Dockerfile and build image locally")
-  .option(
-    "--mercury-version <version>",
-    "Mercury npm version or tag (default: current version)",
-  )
-  .option("--local-source <path>", "Build from local Mercury source path (e.g., /path/to/mercury)")
-  .action((opts) => buildAction({ version: opts.mercuryVersion, localSource: opts.localSource }));
+  .description("Build image from mercury-ai source (via npm link)")
+  .action(buildAction);
 program
   .command("status")
   .description("Show current status and configuration")

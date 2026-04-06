@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -7,6 +7,30 @@ export const PACKAGE_ROOT = join(__dirname, "../..");
 export const CWD = process.cwd();
 export const TEMPLATES_DIR = join(PACKAGE_ROOT, "resources/templates");
 export const VALID_EXT_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
+
+/**
+ * Find MERCURY-SRC directory via npm link symlink.
+ * 
+ * When mercury-ai is linked via `npm link`, the symlink points to:
+ * ~/.bun/install/global/node_modules/mercury-ai -> /path/to/MERCURY-SRC
+ * 
+ * If not a symlink, returns PACKAGE_ROOT.
+ */
+export function findMercurySrc(): string {
+  const mercuryPkgPath = PACKAGE_ROOT;
+  
+  try {
+    const stats = lstatSync(mercuryPkgPath);
+    if (stats.isSymbolicLink()) {
+      const realPath = readlinkSync(mercuryPkgPath);
+      return resolve(dirname(mercuryPkgPath), realPath);
+    }
+  } catch {
+    // Not a symlink or error, use PACKAGE_ROOT directly
+  }
+  
+  return mercuryPkgPath;
+}
 
 export function getVersion(): string {
   try {

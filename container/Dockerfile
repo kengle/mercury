@@ -94,8 +94,8 @@ RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/loca
 # Pi agent dir → persisted project root (symlink resolves at runtime when volume is mounted)
 RUN mkdir -p /root/.pi && ln -s /data/pi-agent /root/.pi/agent
 
-# Copy models.json to image (if exists)
-COPY models.json /root/.pi/agent/models.json
+# Copy models.json to image (if exists in build context)
+RUN if [ -f /mercury-source/models.json ]; then cp /mercury-source/models.json /root/.pi/agent/models.json; fi
 
 # Project root is mounted at /data (persisted across deploys)
 VOLUME /data
