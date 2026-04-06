@@ -81,11 +81,11 @@ RUN mkdir -p "$LIGHTPANDA_DIR" && \
 ENV PATH="$LIGHTPANDA_DIR:$PATH"
 ENV LIGHTPANDA_BIN="$LIGHTPANDA_DIR/lightpanda"
 
-# ─── Mercury ─────────────────────────────────────────────────────────────
-ARG MERCURY_VERSION=latest
-ARG MERCURY_INSTALL="bun add -g mercury-ai@${MERCURY_VERSION} --registry=https://registry.npmmirror.com"
-RUN ${MERCURY_INSTALL}
-ENV MERCURY_PKG_DIR="/root/.bun/install/global/node_modules/mercury-ai"
+# ─── Mercury (from local source) ─────────────────────────────────────────
+# mercury-source is copied from build context by build.ts
+COPY mercury-source /mercury-source
+RUN cd /mercury-source && bun install --frozen-lockfile
+ENV MERCURY_PKG_DIR="/mercury-source"
 
 # mrctl helper
 RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
