@@ -24,8 +24,6 @@ export function createChatSdkAdapter(opts: {
 }) {
   const { ingress, config, log, adapters, conversations, workspaces } = opts;
 
-  let cachedBotJids: Set<string> | null = null;
-
   return async (
     thread: any,
     message: any,
@@ -46,19 +44,7 @@ export function createChatSdkAdapter(opts: {
       const callerId = getCallerId(platform, message.author);
       const authorName = message.author.userName || message.author.fullName;
 
-      // Detect WhatsApp @mentions and reply-to-bot
-      if (!cachedBotJids) cachedBotJids = getBotJids(adapters);
-      const contextInfo = extractContextInfo(message.raw);
-      const rawMentions = contextInfo?.mentionedJid ?? [];
-      const isWhatsAppMention =
-        platform === "whatsapp" &&
-        rawMentions.some((jid: string) => cachedBotJids!.has(jid));
-      const repliedToJid = contextInfo?.participant;
-      const isReplyToBot =
-        platform === "whatsapp" &&
-        !!repliedToJid &&
-        cachedBotJids.has(repliedToJid);
-      const effectiveMention = isMention || isWhatsAppMention || isReplyToBot;
+      const effectiveMention = isMention;
 
       log.info("Message received", {
         platform,
@@ -67,16 +53,11 @@ export function createChatSdkAdapter(opts: {
         text,
         isDM,
         isMention,
-        isWhatsAppMention,
-        isReplyToBot,
         effectiveMention,
         attachments: message.attachments?.length ?? 0,
       });
 
-      // Replace bot JID mentions with bot name
-      const cleanText = effectiveMention
-        ? replaceMentionIds(text, cachedBotJids, config.botUsername)
-        : text;
+      const cleanText = text;
 
       // Resolve workspace inbox for attachments
       const wsId = conversations.getWorkspaceId(platform, externalId);
@@ -147,12 +128,10 @@ function createChannel(
       await thread.post(text);
     },
     async sendFiles(text: string, files: OutputFile[]) {
-      const adapter = adapters[platform === "whatsapp" ? "whatsapp" : platform];
+      const adapter = adapters[platform];
       if (platform === "wecom") {
         // WeCom adapter has its own postMessage method
         await adapter.postMessage(threadId, { text, files });
-      } else if (adapter?._requireSocket) {
-        await sendWhatsAppFiles(adapter, threadId, text, files, log);
       } else {
         const fileUploads = files.map((f) => ({
           filename: f.filename,
@@ -163,10 +142,9 @@ function createChannel(
       }
     },
     async markRead() {
-      const adapter = adapters[platform === "whatsapp" ? "whatsapp" : platform];
+      const adapter = adapters[platform];
       if (adapter?.markRead) {
-        const participant = thread.isDM ? undefined : undefined; // handled by caller
-        await adapter.markRead(threadId, [], participant);
+        await adapter.markRead(threadId);
       }
     },
     async startTyping() {
@@ -226,84 +204,6 @@ async function downloadAttachments(
   return results;
 }
 
-async function sendWhatsAppFiles(
-  adapter: any,
-  threadId: string,
-  text: string,
-  files: OutputFile[],
-  log: Logger,
-): Promise<void> {
-  const { jid: chatJid } = adapter.decodeThreadId(threadId);
-  let sock: any;
-  try {
-    sock = adapter._requireSocket();
-  } catch {
-    log.warn("WhatsApp socket unavailable, falling back to text-only");
-    if (text) await adapter.postMessage(threadId, text);
-    return;
-  }
-
-  let textSent = !text;
-
-  for (let i = 0; i < files.length; i++) {
-    const file = files[i];
-    const isLast = i === files.length - 1;
-    const caption = isLast && !textSent ? text : undefined;
-
-    let buffer: Buffer;
-    try {
-      buffer = readFileSync(file.path);
-    } catch (err) {
-      log.error("Failed to read output file", {
-        path: file.path,
-        error: err instanceof Error ? err.message : String(err),
-      });
-      continue;
-    }
-
-    try {
-      const mime = file.mimeType;
-      if (mime.startsWith("image/")) {
-        await sock.sendMessage(chatJid, {
-          image: buffer,
-          caption,
-          mimetype: mime,
-        });
-      } else if (mime.startsWith("video/")) {
-        await sock.sendMessage(chatJid, {
-          video: buffer,
-          caption,
-          mimetype: mime,
-        });
-      } else if (mime.startsWith("audio/")) {
-        await sock.sendMessage(chatJid, {
-          audio: buffer,
-          mimetype: mime,
-          ptt: false,
-        });
-        if (caption) await sock.sendMessage(chatJid, { text: caption });
-      } else {
-        await sock.sendMessage(chatJid, {
-          document: buffer,
-          fileName: file.filename,
-          mimetype: mime,
-          caption,
-        });
-      }
-      if (caption) textSent = true;
-    } catch (err) {
-      log.error("Failed to send file via WhatsApp", {
-        filename: file.filename,
-        error: err instanceof Error ? err.message : String(err),
-      });
-    }
-  }
-
-  if (!textSent) {
-    await sock.sendMessage(chatJid, { text });
-  }
-}
-
 let markitInstance: Markit | null = null;
 
 function getMarkit(): Markit | null {
@@ -349,42 +249,4 @@ async function transcribeAudio(
   }
 }
 
-function extractContextInfo(raw: any): any {
-  if (!raw?.message) return null;
-  for (const val of Object.values(raw.message)) {
-    if (val && typeof val === "object" && "contextInfo" in (val as any)) {
-      return (val as any).contextInfo;
-    }
-  }
-  return null;
-}
 
-function getBotJids(adapters: Record<string, any>): Set<string> {
-  const jids = new Set<string>();
-  try {
-    const wa = adapters.whatsapp;
-    if (wa?._socket?.user?.id) {
-      const raw = wa._socket.user.id;
-      jids.add(raw);
-      jids.add(raw.replace(/:\d+@/, "@"));
-    }
-    if (wa?._socket?.user?.lid) {
-      jids.add(wa._socket.user.lid);
-      jids.add(wa._socket.user.lid.replace(/:\d+@/, "@"));
-    }
-  } catch {}
-  return jids;
-}
-
-function replaceMentionIds(
-  text: string,
-  botJids: Set<string>,
-  botName: string,
-): string {
-  let result = text;
-  for (const jid of botJids) {
-    const num = jid.split("@")[0].split(":")[0];
-    result = result.replace(new RegExp(`@${num}\\b`, "g"), `@${botName}`);
-  }
-  return result.trim() || text;
-}

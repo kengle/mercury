@@ -6,15 +6,15 @@ export function inferConversationKind(
   if (isDM) return "dm";
 
   switch (platform) {
-    case "whatsapp":
-      return "group";
     case "discord":
       return externalId.includes(":") ? "thread" : "channel";
     case "slack":
       return "channel";
     case "teams":
       return "channel";
+    case "wecom":
+      return "channel";
     default:
-      return "group";
+      return "channel";
   }
 }

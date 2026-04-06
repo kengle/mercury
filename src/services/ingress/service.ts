@@ -46,7 +46,7 @@ export function createIngressService(
       // ─── Auto-pair: create dedicated workspace for new conversations ───
       if (!assigned) {
         const workspaceName = isDM
-          ? `ws-${platform}-${callerId}`
+          ? `ws-${platform}-${externalId}`
           : `ws-${platform}-group-${externalId}`;
         
         let workspace = core.services.workspaces.get(workspaceName);

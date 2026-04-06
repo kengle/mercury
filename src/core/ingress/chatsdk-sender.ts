@@ -48,12 +48,12 @@ export function createChatSdkSender(
 
 function toThreadId(platform: string, externalId: string): string {
   switch (platform) {
-    case "whatsapp":
-      return `baileys:${externalId}`;
     case "discord":
       return `discord:${externalId}`;
     case "slack":
       return `slack:${externalId}`;
+    case "teams":
+      return `teams:${externalId}`;
     default:
       return externalId;
   }

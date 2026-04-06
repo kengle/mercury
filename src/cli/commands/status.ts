@@ -17,14 +17,12 @@ export function statusAction(): void {
     console.log("\nConfigured adapters:");
     const envContent = readFileSync(envPath, "utf-8");
 
-    const hasWhatsApp = /MERCURY_ENABLE_WHATSAPP\s*=\s*true/i.test(envContent);
     const hasSlack = /^[^#]*SLACK_BOT_TOKEN=\S+/m.test(envContent);
     const hasDiscord = /^[^#]*DISCORD_BOT_TOKEN=\S+/m.test(envContent);
     const hasWeCom = /MERCURY_ENABLE_WECOM\s*=\s*true/i.test(envContent);
     const hasWeComBotId = /^[^#]*MERCURY_WECOM_BOT_ID=\S+/m.test(envContent);
     const hasWeComSecret = /^[^#]*MERCURY_WECOM_SECRET=\S+/m.test(envContent);
 
-    console.log(`  WhatsApp: ${hasWhatsApp ? "✓ enabled" : "○ disabled"}`);
     console.log(
       `  Slack:    ${hasSlack ? "✓ configured" : "○ not configured"}`,
     );

@@ -62,32 +62,18 @@ export function doctorAction(): void {
   }
 
   console.log("\nAdapters:");
-  const whatsappEnabled =
-    envVars.MERCURY_ENABLE_WHATSAPP?.toLowerCase() === "true";
   const discordEnabled =
     envVars.MERCURY_ENABLE_DISCORD?.toLowerCase() === "true";
   const slackEnabled = envVars.MERCURY_ENABLE_SLACK?.toLowerCase() === "true";
+  const teamsEnabled = envVars.MERCURY_ENABLE_TEAMS?.toLowerCase() === "true";
   const wecomEnabled = envVars.MERCURY_ENABLE_WECOM?.toLowerCase() === "true";
 
-  if (!whatsappEnabled && !discordEnabled && !slackEnabled && !wecomEnabled) {
+  if (!discordEnabled && !slackEnabled && !teamsEnabled && !wecomEnabled) {
     fail(
       "No adapters enabled",
-      "Set MERCURY_ENABLE_WHATSAPP, MERCURY_ENABLE_DISCORD, MERCURY_ENABLE_SLACK, or MERCURY_ENABLE_WECOM to true in .env",
+      "Set MERCURY_ENABLE_DISCORD, MERCURY_ENABLE_SLACK, MERCURY_ENABLE_TEAMS, or MERCURY_ENABLE_WECOM to true in .env",
     );
   } else {
-    if (whatsappEnabled) {
-      const whatsappAuthDir =
-        envVars.MERCURY_WHATSAPP_AUTH_DIR || join(CWD, "whatsapp-auth");
-      const credsFile = join(whatsappAuthDir, "creds.json");
-      if (existsSync(credsFile)) {
-        pass("WhatsApp: enabled and authenticated");
-      } else {
-        fail(
-          "WhatsApp: enabled but not authenticated",
-          "Run 'mercury auth whatsapp' first",
-        );
-      }
-    }
     if (discordEnabled) {
       if (envVars.MERCURY_DISCORD_BOT_TOKEN) {
         pass("Discord: enabled and token configured");
@@ -109,6 +95,19 @@ export function doctorAction(): void {
           !hasSecret && "MERCURY_SLACK_SIGNING_SECRET",
         ].filter(Boolean);
         fail(`Slack: enabled but missing ${missing.join(", ")}`, "Add to .env");
+      }
+    }
+    if (teamsEnabled) {
+      const hasAppId = !!envVars.MERCURY_TEAMS_APP_ID;
+      const hasPassword = !!envVars.MERCURY_TEAMS_APP_PASSWORD;
+      if (hasAppId && hasPassword) {
+        pass("Teams: enabled and configured");
+      } else {
+        const missing = [
+          !hasAppId && "MERCURY_TEAMS_APP_ID",
+          !hasPassword && "MERCURY_TEAMS_APP_PASSWORD",
+        ].filter(Boolean);
+        fail(`Teams: enabled but missing ${missing.join(", ")}`, "Add to .env");
       }
     }
     if (wecomEnabled) {

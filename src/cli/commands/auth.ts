@@ -8,7 +8,6 @@ import {
 import { dirname, join } from "node:path";
 import type { Command } from "commander";
 import { CWD, loadEnvFile } from "../helpers.js";
-import { authenticate } from "../whatsapp-auth.js";
 
 export function registerAuthCommands(authCommand: Command): void {
   authCommand
@@ -226,34 +225,5 @@ export function registerAuthCommands(authCommand: Command): void {
         }
       }
       if (!hasEnvKeys) console.log("  No API keys found in .env");
-    });
-
-  authCommand
-    .command("whatsapp")
-    .description("Authenticate with WhatsApp via QR code or pairing code")
-    .option("--pairing-code", "Use pairing code instead of QR code")
-    .option(
-      "--phone <number>",
-      "Phone number for pairing code (e.g., 14155551234)",
-    )
-    .action(async (options: { pairingCode?: boolean; phone?: string }) => {
-      const envPath = join(CWD, ".env");
-
-      const authDir =
-        process.env.MERCURY_WHATSAPP_AUTH_DIR || join(CWD, "whatsapp-auth");
-      const statusDir = CWD;
-
-      try {
-        await authenticate({
-          authDir,
-          statusDir,
-          usePairingCode: options.pairingCode,
-          phoneNumber: options.phone,
-        });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        console.error("Authentication failed:", message);
-        process.exit(1);
-      }
     });
 }

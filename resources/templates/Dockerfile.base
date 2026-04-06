@@ -55,13 +55,13 @@ RUN bun add -g @mariozechner/pi-coding-agent --registry=https://registry.npmmirr
     chmod +x /usr/local/bin/pi
 
 # ─── Playwright Chromium ─────────────────────────────────────────────────
-RUN npm install -g playwright --registry=https://registry.npmmirror.com && \
-    playwright install --with-deps chromium
-ENV PUPPETEER_SKIP_DOWNLOAD=true
-RUN ln -sf $(find /root/.cache/ms-playwright -name chrome -type f | head -1) /usr/local/bin/chromium
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
-RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
-ENV CHROMIUM_FLAGS="--no-sandbox"
+#RUN npm install -g playwright --registry=https://registry.npmmirror.com && \
+#    playwright install --with-deps chromium
+#ENV PUPPETEER_SKIP_DOWNLOAD=true
+#RUN ln -sf $(find /root/.cache/ms-playwright -name chrome -type f | head -1) /usr/local/bin/chromium
+#ENV PUPPETEER_EXECUTABLE_PATH=/usr/local/bin/chromium
+#RUN echo '{"args":["--no-sandbox"]}' > /root/.puppeteerrc.json
+#ENV CHROMIUM_FLAGS="--no-sandbox"
 
 # ─── Lightpanda Browser (from predownload) ─────────────────────────────────
 ENV LIGHTPANDA_DIR="/root/.local/bin"
@@ -81,13 +81,23 @@ RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/loca
     chmod +x /usr/local/bin/mrctl
 
 # Pi agent dir → persisted project root (symlink resolves at runtime when volume is mounted)
-RUN mkdir -p /root/.pi && mkdir -p /data/pi-agent && ln -sfn /data/pi-agent /root/.pi/agent
+RUN mkdir -p /root/.pi && ln -sfn /data/pi-agent /root/.pi/agent
 
-# Copy models.json to image
-RUN cp /mercury-source/models.json /root/.pi/agent/models.json
+# Copy models.json to /mercury-source (will be copied to /data/pi-agent at runtime)
+RUN cp /mercury-source/models.json /mercury-source/models.json.bak
 
 # Project root is mounted at /data (persisted across deploys)
 VOLUME /data
 WORKDIR /data
 
-ENTRYPOINT ["sh", "-c", "exec bun run $MERCURY_PKG_DIR/src/main.ts"]
+# Entry script ensures /data/pi-agent exists and copies models.json on first run
+RUN echo '#!/bin/sh' > /usr/local/bin/mercury-entry.sh && \
+    echo 'set -e' >> /usr/local/bin/mercury-entry.sh && \
+    echo 'mkdir -p /data/pi-agent' >> /usr/local/bin/mercury-entry.sh && \
+    echo 'if [ ! -f /data/pi-agent/models.json ] && [ -f /mercury-source/models.json.bak ]; then' >> /usr/local/bin/mercury-entry.sh && \
+    echo '  cp /mercury-source/models.json.bak /data/pi-agent/models.json' >> /usr/local/bin/mercury-entry.sh && \
+    echo 'fi' >> /usr/local/bin/mercury-entry.sh && \
+    echo 'exec bun run $MERCURY_PKG_DIR/src/main.ts' >> /usr/local/bin/mercury-entry.sh && \
+    chmod +x /usr/local/bin/mercury-entry.sh
+
+ENTRYPOINT ["/usr/local/bin/mercury-entry.sh"]

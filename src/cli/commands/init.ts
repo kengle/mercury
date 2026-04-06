@@ -14,7 +14,6 @@ const GITIGNORE = `.env
 state.db
 state.db-shm
 state.db-wal
-whatsapp-auth/
 pi-agent/
 workspaces/
 extensions/*/dist/

@@ -145,7 +145,7 @@ async function main() {
   > = {};
 
   const hasAdapters =
-    config.enableWhatsApp || config.enableDiscord || config.enableSlack || config.enableWeCom;
+    config.enableDiscord || config.enableSlack || config.enableTeams || config.enableWeCom;
 
   if (hasAdapters) {
     adapters = await setupChatSdkAdapters(config, logger);

@@ -64,9 +64,6 @@ const schema = z.object({
   // ─── Teams ───────────────────────────────────────────────────────────
   enableTeams: booleanFromEnv.default(false),
 
-  // ─── WhatsApp ───────────────────────────────────────────────────────
-  enableWhatsApp: booleanFromEnv.default(false),
-
   // ─── WeCom (Enterprise WeChat) ──────────────────────────────────────
   enableWeCom: booleanFromEnv.default(false),
 
@@ -83,7 +80,6 @@ export type AppConfig = z.infer<typeof schema> & {
   projectRoot: string;
   dbPath: string;
   workspacesDir: string;
-  whatsappAuthDir: string;
 };
 
 export function loadConfig(): AppConfig {
@@ -125,9 +121,6 @@ export function loadConfig(): AppConfig {
     // Teams
     enableTeams: process.env.MERCURY_ENABLE_TEAMS,
 
-    // WhatsApp
-    enableWhatsApp: process.env.MERCURY_ENABLE_WHATSAPP,
-
     // WeCom
     enableWeCom: process.env.MERCURY_ENABLE_WECOM,
 
@@ -147,9 +140,6 @@ export function loadConfig(): AppConfig {
     projectRoot,
     dbPath: path.join(projectRoot, "state.db"),
     workspacesDir: path.join(projectRoot, "workspaces"),
-    whatsappAuthDir:
-      process.env.MERCURY_WHATSAPP_AUTH_DIR ??
-      path.join(projectRoot, "whatsapp-auth"),
   };
 }
 

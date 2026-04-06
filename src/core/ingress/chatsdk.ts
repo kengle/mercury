@@ -1,13 +1,13 @@
 /**
  * Chat SDK adapter setup.
  *
- * Creates Chat SDK adapters for WhatsApp (Baileys), Discord, and WeCom.
+ * Creates Chat SDK adapters for Discord, Slack, Teams, and WeCom.
  * Used by deployments that use Chat SDK directly.
  */
 
 import { createDiscordAdapter } from "@chat-adapter/discord";
-import { useMultiFileAuthState } from "baileys";
-import { createBaileysAdapter } from "chat-adapter-baileys";
+import { createSlackAdapter } from "@chat-adapter/slack";
+import { createTeamsAdapter } from "@chat-adapter/teams";
 import type { AppConfig } from "../config.js";
 import { resolveProjectPath } from "../config.js";
 import type { Logger } from "../logger.js";
@@ -22,20 +22,6 @@ export async function setupChatSdkAdapters(
   log: Logger,
 ): Promise<ChatSdkAdapters> {
   const adapters: ChatSdkAdapters = {};
-
-  if (config.enableWhatsApp) {
-    const authDir = resolveProjectPath(config.whatsappAuthDir);
-    const { state, saveCreds } = await useMultiFileAuthState(authDir);
-    adapters.whatsapp = createBaileysAdapter({
-      auth: { state, saveCreds },
-      userName: config.botUsername,
-      onQR: async (qr) => {
-        const QRCode = await import("qrcode-terminal");
-        QRCode.default.generate(qr, { small: true });
-      },
-    });
-    log.info("WhatsApp adapter configured", { authDir });
-  }
 
   if (config.enableDiscord) {
     const token = process.env.MERCURY_DISCORD_BOT_TOKEN;
@@ -59,6 +45,36 @@ export async function setupChatSdkAdapters(
     log.info("Discord adapter configured");
   }
 
+  if (config.enableSlack) {
+    const botToken = process.env.MERCURY_SLACK_BOT_TOKEN;
+    const signingSecret = process.env.MERCURY_SLACK_SIGNING_SECRET;
+    if (!botToken || !signingSecret) {
+      throw new Error(
+        "MERCURY_ENABLE_SLACK=true but missing MERCURY_SLACK_BOT_TOKEN or MERCURY_SLACK_SIGNING_SECRET",
+      );
+    }
+    adapters.slack = createSlackAdapter({
+      botToken,
+      signingSecret,
+    });
+    log.info("Slack adapter configured");
+  }
+
+  if (config.enableTeams) {
+    const appId = process.env.MERCURY_TEAMS_APP_ID;
+    const appPassword = process.env.MERCURY_TEAMS_APP_PASSWORD;
+    if (!appId || !appPassword) {
+      throw new Error(
+        "MERCURY_ENABLE_TEAMS=true but missing MERCURY_TEAMS_APP_ID or MERCURY_TEAMS_APP_PASSWORD",
+      );
+    }
+    adapters.teams = createTeamsAdapter({
+      appId,
+      appPassword,
+    });
+    log.info("Teams adapter configured");
+  }
+
   if (config.enableWeCom) {
     const botId = process.env.MERCURY_WECOM_BOT_ID;
     const secret = process.env.MERCURY_WECOM_SECRET;
@@ -70,15 +86,15 @@ export async function setupChatSdkAdapters(
     adapters.wecom = createWeComAdapter({
       botId,
       secret,
-      workspaceDir: config.workspaceDir,
+      workspaceDir: config.workspacesDir,
       log,
     });
-    log.info("WeCom adapter configured", { workspaceDir: config.workspaceDir });
+    log.info("WeCom adapter configured", { workspaceDir: config.workspacesDir });
   }
 
   if (Object.keys(adapters).length === 0) {
     throw new Error(
-      "No adapters enabled. Set MERCURY_ENABLE_WHATSAPP, MERCURY_ENABLE_DISCORD, or MERCURY_ENABLE_WECOM to true",
+      "No adapters enabled. Set MERCURY_ENABLE_DISCORD, MERCURY_ENABLE_SLACK, MERCURY_ENABLE_TEAMS, or MERCURY_ENABLE_WECOM to true",
     );
   }
 
@@ -92,11 +108,6 @@ export async function connectAdapters(
   adapters: ChatSdkAdapters,
   log: Logger,
 ): Promise<void> {
-  if (adapters.whatsapp) {
-    await adapters.whatsapp.connect();
-    log.info("WhatsApp connected");
-  }
-
   if (adapters.discord) {
     adapters.discord
       .startGatewayListener(
@@ -142,9 +153,9 @@ export async function disconnectAdapters(
  * Resolve platform name from Chat SDK thread ID prefix.
  */
 export function getPlatformFromThreadId(threadId: string): string {
-  if (threadId.startsWith("baileys:")) return "whatsapp";
   if (threadId.startsWith("discord:")) return "discord";
   if (threadId.startsWith("slack:")) return "slack";
+  if (threadId.startsWith("teams:")) return "teams";
   if (threadId.startsWith("wecom:")) return "wecom";
   return "unknown";
 }

@@ -311,6 +311,11 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
     return `wecom:${convId}:${chattype}:${reqId}`;
   }
 
+  channelIdFromThreadId(threadId: string): string {
+    const { convId } = this.decodeThreadId(threadId);
+    return convId;
+  }
+
   async onThreadSubscribe(_threadId: string): Promise<void> {
     // WeCom uses push model, no need to subscribe
   }

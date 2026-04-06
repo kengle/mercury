@@ -127,17 +127,6 @@ export function createApp(ctx: ServerContext): Hono {
     });
   });
 
-  app.get("/auth/whatsapp", (c) => {
-    const wa = adapters.whatsapp;
-    if (!wa) {
-      return c.json({ error: "WhatsApp adapter not enabled" }, 400);
-    }
-    if (typeof wa.getQrStatus === "function") {
-      return c.json(wa.getQrStatus());
-    }
-    return c.json({ status: "connected" });
-  });
-
   // ─── Internal API ───────────────────────────────────────────────────────
 
   const apiApp = createApiApp({
