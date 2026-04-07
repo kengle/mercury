@@ -70,7 +70,7 @@ export function createIngressService(
         }
 
         if (workspace) {
-          const workspaceId = workspace.id;
+          workspaceId = workspace.id;
 
           // Ensure conversation exists in DB
           core.services.conversations.create(
