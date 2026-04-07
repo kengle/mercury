@@ -3,7 +3,10 @@ import fs from "node:fs";
 import path from "node:path";
 import { HookDispatcher } from "../../extensions/hooks.js";
 import type { ExtensionRegistry } from "../../extensions/loader.js";
-import { installExtensionSkills } from "../../extensions/skills.js";
+import {
+  installBuiltinSkills,
+  installExtensionSkills,
+} from "../../extensions/skills.js";
 import type { MercuryExtensionContext } from "../../extensions/types.js";
 import type { PolicyResult } from "../../services/policy/interface.js";
 import type { Services } from "../api-types.js";
@@ -382,18 +385,19 @@ export class MercuryCoreRuntime {
       ensurePiResourceDir(workspace);
       if (this.extensionRegistry) {
         const builtinSkillNames = new Set<string>();
-        const builtinSkillsDir = path.join(__dirname, "../../resources/skills");
+        const builtinSkillsDir = path.join(__dirname, "../../../resources/skills");
         if (fs.existsSync(builtinSkillsDir)) {
           for (const e of fs.readdirSync(builtinSkillsDir, { withFileTypes: true })) {
             if (e.isDirectory()) builtinSkillNames.add(e.name);
           }
+          installExtensionSkills(
+            this.extensionRegistry.list(),
+            workspace,
+            logger,
+            builtinSkillNames,
+          );
+          installBuiltinSkills(builtinSkillsDir, workspace, logger);
         }
-        installExtensionSkills(
-          this.extensionRegistry.list(),
-          workspace,
-          logger,
-          builtinSkillNames,
-        );
       }
 
       if (this.hooks && this.extensionCtx) {

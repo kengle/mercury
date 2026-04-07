@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 import fs from "node:fs";
 import path from "node:path";
 import { ensurePiResourceDir } from "../../core/runtime/workspace.js";
+import { installBuiltinSkills } from "../../extensions/skills.js";
 import type { ConfigService } from "../config/interface.js";
 import type { WorkspaceService } from "./interface.js";
 import type { WorkspaceEntity } from "./models.js";
@@ -16,11 +17,20 @@ const WORKSPACE_SUBDIRS = [
   ".messages",
 ];
 
-function scaffoldWorkspaceDir(workspacesRoot: string, name: string): void {
+function scaffoldWorkspaceDir(
+  workspacesRoot: string,
+  name: string,
+): void {
   const wsDir = path.join(workspacesRoot, name);
   ensurePiResourceDir(wsDir);
   for (const sub of WORKSPACE_SUBDIRS) {
     fs.mkdirSync(path.join(wsDir, sub), { recursive: true });
+  }
+
+  // Install built-in skills (config, mutes, tasks, permissions, roles)
+  const builtinSkillsDir = path.join(__dirname, "../../../resources/skills");
+  if (fs.existsSync(builtinSkillsDir)) {
+    installBuiltinSkills(builtinSkillsDir, wsDir, console as any);
   }
 }
 
