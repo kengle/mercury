@@ -144,10 +144,10 @@ export class SubprocessAgent implements Agent {
   abort(): boolean {
     if (!this.running) return false;
     this.aborted = true;
-    this.running.kill("SIGTERM");
+    this.killProcessTree(this.running, "SIGTERM");
     const proc = this.running;
     setTimeout(() => {
-      if (this.running === proc) proc.kill("SIGKILL");
+      if (this.running === proc) this.killProcessTree(proc, "SIGKILL");
     }, 5000);
     return true;
   }
@@ -155,7 +155,32 @@ export class SubprocessAgent implements Agent {
   kill(): void {
     if (!this.running) return;
     this.aborted = true;
-    this.running.kill("SIGKILL");
+    this.killProcessTree(this.running, "SIGKILL");
+  }
+
+  /**
+   * Kill a process and all its children by killing the process group.
+   * Uses negative PID to target the entire process group.
+   */
+  private killProcessTree(proc: ChildProcess, signal: NodeJS.Signals): void {
+    try {
+      // Try to kill the entire process group first (negative PID)
+      process.kill(-proc.pid, signal);
+      logger.debug("Sent signal to process group", { pid: proc.pid, signal, pgid: -proc.pid });
+    } catch (groupError) {
+      // If process group doesn't exist, fall back to killing just the main process
+      try {
+        proc.kill(signal);
+        logger.debug("Sent signal to single process", { pid: proc.pid, signal });
+      } catch (singleError) {
+        logger.warn("Failed to kill process", {
+          pid: proc.pid,
+          signal,
+          groupError: groupError instanceof Error ? groupError.message : String(groupError),
+          singleError: singleError instanceof Error ? singleError.message : String(singleError),
+        });
+      }
+    }
   }
 
   private wrapWithSandbox(
@@ -262,10 +287,12 @@ export class SubprocessAgent implements Agent {
       timeoutTimer = setTimeout(() => {
         if (this.running === proc) {
           this.timedOut = true;
-          log.warn("Agent timeout, killing", { event: "agent.timeout" });
-          proc.kill("SIGTERM");
+          log.warn("Agent timeout, killing process tree", { event: "agent.timeout", pid: proc.pid });
+          this.killProcessTree(proc, "SIGTERM");
           setTimeout(() => {
-            if (this.running === proc) proc.kill("SIGKILL");
+            if (this.running === proc) {
+              this.killProcessTree(proc, "SIGKILL");
+            }
           }, 5000);
         }
       }, input.agentTimeoutMs);
