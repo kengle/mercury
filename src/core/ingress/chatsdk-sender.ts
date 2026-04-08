@@ -54,6 +54,10 @@ function toThreadId(platform: string, externalId: string): string {
       return `slack:${externalId}`;
     case "teams":
       return `teams:${externalId}`;
+    case "wecom":
+      // WeCom threadId format: wecom:{convId}:{chattype}:{reqId}
+      // For scheduled messages, use "single" chattype and sched- prefixed reqId
+      return `wecom:${externalId}:single:sched-${Date.now()}`;
     default:
       return externalId;
   }
