@@ -1,13 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { CWD, getImageTag, loadEnvFile } from "../helpers.js";
 
 function getContainerName(envPath: string): string {
   const tag = getImageTag(envPath);
-  // Generate container name from image tag: mercury:latest → mercury-latest
+  // Generate container name from project dir + image tag
+  // e.g. /opt/pixie + mercury:latest → pixie-mercury-latest
+  const projectName = basename(CWD).replace(/[^a-zA-Z0-9_-]/g, "-");
   const safeTag = tag.replace(/[^a-zA-Z0-9_-]/g, "-");
-  return `mercury-${safeTag}`;
+  return `${projectName}-${safeTag}`;
 }
 
 function getPort(): string {
