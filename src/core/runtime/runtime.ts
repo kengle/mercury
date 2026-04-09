@@ -227,9 +227,9 @@ export class MercuryCoreRuntime {
     if (error instanceof AgentError) {
       switch (error.reason) {
         case "aborted":
-          return { action: "deny", reason: "Stopped current run." };
+          return { action: "deny", reason: "⛔ 请求已停止。" };
         case "timeout":
-          return { action: "deny", reason: "Agent timed out." };
+          return { action: "deny", reason: "⏱️ 请求超时（15 分钟），可能是在执行耗时操作。请稍后重试或简化任务。" };
         case "error":
           logger.error(
             "Agent error",
