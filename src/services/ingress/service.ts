@@ -325,19 +325,24 @@ export function createIngressService(
         try {
           const result = await core.handleMessage(ingress, "chat-sdk");
 
-          if (result.action === "ignore" || !result.result) return;
+          if (result.action === "ignore") return;
+          
+          // Handle denied requests (timeout, abort, permission denied)
           if (result.action === "deny") {
             await channel.send(result.reason);
             return;
           }
 
-          const { text: replyText, files } = result.result;
-          if (!replyText && files.length === 0) return;
+          // Process successful response
+          if (result.result) {
+            const { text: replyText, files } = result.result;
+            if (!replyText && files.length === 0) return;
 
-          if (files.length > 0) {
-            await channel.sendFiles(replyText, files);
-          } else if (replyText) {
-            await channel.send(replyText);
+            if (files.length > 0) {
+              await channel.sendFiles(replyText, files);
+            } else if (replyText) {
+              await channel.send(replyText);
+            }
           }
         } catch (err) {
           log.error("Agent processing error", {
