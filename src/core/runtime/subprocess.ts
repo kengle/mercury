@@ -328,9 +328,11 @@ export class SubprocessAgent implements Agent {
               // Get specific command from args (tool_execution_start has complete args)
               let specificTool = event.toolName;
               if (specificTool === "bash" && event.args?.command) {
-                // Extract first word (the actual command)
-                const firstWord = event.args.command.split(/\s+/)[0];
-                specificTool = `${firstWord}`;
+                // Show full command, truncate if > 50 chars
+                const cmd = event.args.command;
+                specificTool = cmd.length > 50 
+                  ? `${cmd.substring(0, 50)} ...` 
+                  : cmd;
               }
               if (input.onChunk) input.onChunk(`\n\n🔧 正在调用 ${specificTool}\n\n`);
             }
