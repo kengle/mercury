@@ -129,17 +129,36 @@ function createChannel(
     },
     async sendFiles(text: string, files: OutputFile[]) {
       const adapter = adapters[platform];
-      if (platform === "wecom") {
-        // WeCom adapter has its own postMessage method
-        await adapter.postMessage(threadId, { text, files });
+      // Convert OutputFile[] (from agent) to FileUpload[] (for adapter)
+      const fileUploads = files.map((f) => ({
+        filename: f.filename,
+        data: readFileSync(f.path),
+        mimeType: f.mimeType,
+      }));
+      await adapter.postMessage(threadId, { raw: text || "", files: fileUploads });
+    },
+    async stream(textStream: AsyncIterable<string>) {
+      log.info("[channel.stream] ENTER", { platform, threadId });
+      const adapter = adapters[platform];
+      log.info("[channel.stream] Got adapter", { platform, threadId, adapterExists: !!adapter, streamExists: !!adapter?.stream });
+      
+      if (adapter?.stream) {
+        log.info("[channel.stream] Calling adapter.stream", { platform, threadId });
+        await adapter.stream(threadId, textStream);
+        log.info("[channel.stream] adapter.stream returned", { platform, threadId });
       } else {
-        const fileUploads = files.map((f) => ({
-          filename: f.filename,
-          data: readFileSync(f.path),
-          mimeType: f.mimeType,
-        }));
-        await thread.post({ raw: text || "", files: fileUploads });
+        log.warn("[channel.stream] No adapter.stream, using fallback", { platform, threadId });
+        const chunks: string[] = [];
+        log.info("[channel.stream] Starting to consume generator", { platform, threadId });
+        for await (const chunk of textStream) {
+          log.info("[channel.stream] Consumed chunk", { platform, threadId, chunk: chunk.slice(0, 30) });
+          chunks.push(chunk);
+        }
+        log.info("[channel.stream] Generator consumed", { platform, threadId, chunkCount: chunks.length });
+        await adapter.postMessage(threadId, { raw: chunks.join("") });
+        log.info("[channel.stream] Fallback completed", { platform, threadId });
       }
+      log.info("[channel.stream] EXIT", { platform, threadId });
     },
     async markRead() {
       const adapter = adapters[platform];

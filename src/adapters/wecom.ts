@@ -20,12 +20,13 @@ import type {
   ChatInstance,
   FetchOptions,
   FetchResult,
+  FileUpload,
   Message,
   RawMessage,
   ThreadInfo,
 } from "chat";
 import { Message as ChatMessage } from "chat";
-import type { MessageAttachment, OutputFile } from "../core/types.js";
+import type { MessageAttachment } from "../core/types.js";
 import type { Logger } from "../core/logger.js";
 import { resolveProjectPath } from "../core/config.js";
 
@@ -331,9 +332,24 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
     }
 
     const { convId: chatid, reqId } = this.decodeThreadId(threadId);
-    const text = typeof msg === "string" ? msg : (msg as any).text || "";
-    // Note: chatsdk-adapter.ts passes { text, files } where files is OutputFile[]
-    const files = (msg as any).files as OutputFile[] | undefined;
+    
+    // Parse AdapterPostableMessage correctly
+    // Can be: string | { raw: string, files?: FileUpload[] } | { markdown: string, files?: FileUpload[] } | etc.
+    let text = "";
+    let files: FileUpload[] | undefined;
+    
+    if (typeof msg === "string") {
+      text = msg;
+    } else if ("raw" in msg) {
+      text = msg.raw || "";
+      files = msg.files;
+    } else if ("markdown" in msg) {
+      text = msg.markdown || "";
+      files = msg.files;
+    } else if ("type" in msg && msg.type === "card") {
+      // Card messages not supported with files
+      text = "";
+    }
 
     // Check if this is an active push message (scheduler) or a reply
     const isActivePush = reqId.startsWith("sched-");
@@ -355,7 +371,8 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
         if (files && files.length > 0) {
           for (const file of files) {
             try {
-              const fileBuffer = fs.readFileSync(file.path);
+              // FileUpload has data as Buffer, no need to read from path
+              const fileBuffer = file.data as Buffer;
 
               const mediaType =
                 file.mimeType?.startsWith("image/")
@@ -407,7 +424,8 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
         if (files && files.length > 0) {
           for (const file of files) {
             try {
-              const fileBuffer = fs.readFileSync(file.path);
+              // FileUpload has data as Buffer, no need to read from path
+              const fileBuffer = file.data as Buffer;
 
               const mediaType =
                 file.mimeType?.startsWith("image/")
@@ -450,6 +468,74 @@ export class WeComAdapter implements Adapter<string, WsFrame<BaseMessage>> {
       this.log.error("WeCom: failed to send message", {
         error: error instanceof Error ? error.message : String(error),
       });
+      return { id: "error", threadId, raw: undefined };
+    }
+  }
+
+  /**
+   * Stream a message using WeCom's native replyStream API.
+   * Consumes the async iterable and sends chunks in real-time.
+   */
+  async stream(
+    threadId: string,
+    textStream: AsyncIterable<string>,
+    _options?: any,
+  ): Promise<RawMessage<WsFrame<BaseMessage>>> {
+    const client = this.client;
+    if (!client) {
+      this.log.warn("[WeCom] Cannot stream message - not connected");
+      return { id: "error", threadId, raw: undefined };
+    }
+
+    const { convId: chatid, reqId } = this.decodeThreadId(threadId);
+    const frame = { headers: { req_id: reqId } };
+    const streamId = `stream-${reqId}`;
+
+    // Send each chunk immediately as it arrives
+    // WeCom replyStream can be called multiple times
+    // Last chunk must have finish=true
+    let chunkCount = 0;
+    
+    try {
+      this.log.info("[WeCom.stream] Starting to consume chunks");
+      
+      // Accumulate chunks and send progressively
+      let cache = "";
+      for await (const chunk of textStream) {
+        chunkCount++;
+        cache += chunk;
+        this.log.debug("[WeCom.stream] Received chunk, sending accumulated cache", { 
+          chunkCount,
+          chunk: chunk.slice(0, 50),
+          cacheLength: cache.length 
+        });
+        
+        // Send entire cache with finish=false (more content coming)
+        await client.replyStream(frame, streamId, cache, false);
+      }
+
+      // Send final cache with finish=true (no more content)
+      this.log.info("[WeCom.stream] Generator completed, sending final cache with finish=true", { 
+        chunkCount, 
+        cacheLength: cache.length 
+      });
+      await client.replyStream(frame, streamId, cache, true);
+      this.log.info("[WeCom.stream] Final message sent with finish=true");
+
+      this.log.info("[WeCom] streaming complete", { chatid, reqId, chunkCount });
+      return { id: `msg-${reqId}`, threadId, raw: undefined };
+    } catch (error) {
+      this.log.error("WeCom: streaming failed", {
+        error: error instanceof Error ? error.message : String(error),
+        chunkCount,
+      });
+      // Try to end the stream even on error
+      try {
+        await client.replyStream(frame, streamId, "", true);
+        this.log.info("[WeCom.stream] Error handler sent finish=true");
+      } catch (e) {
+        this.log.error("[WeCom.stream] Failed to send finish=true", { error: e });
+      }
       return { id: "error", threadId, raw: undefined };
     }
   }

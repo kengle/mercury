@@ -8,6 +8,7 @@ import {
 import { handleCommand } from "../../core/ingress/commands.js";
 import { loadTriggerConfig, matchTrigger } from "../../core/ingress/trigger.js";
 import type { Logger } from "../../core/logger.js";
+import { ChunkQueue } from "../../core/runtime/chunk-queue.js";
 import type { MercuryCoreRuntime } from "../../core/runtime/runtime.js";
 import type { IngressMessage } from "../../core/types.js";
 import type { IngressService, MessageChannel } from "./interface.js";
@@ -323,26 +324,61 @@ export function createIngressService(
 
       void (async () => {
         try {
-          const result = await core.handleMessage(ingress, "chat-sdk");
-
-          if (result.action === "ignore") return;
+          log.info("[stream] Starting streaming reply", { platform, callerId });
+          let finalResult: any = null;
+          let chunkCount = 0;
           
-          // Handle denied requests (timeout, abort, permission denied)
-          if (result.action === "deny") {
-            await channel.send(result.reason);
-            return;
-          }
-
-          // Process successful response
-          if (result.result) {
-            const { text: replyText, files } = result.result;
-            if (!replyText && files.length === 0) return;
-
-            if (files.length > 0) {
-              await channel.sendFiles(replyText, files);
-            } else if (replyText) {
-              await channel.send(replyText);
+          async function* generateReply() {
+            const queue = new ChunkQueue();
+            
+            // Start agent with onChunk callback
+            log.debug("[stream] Starting agent with onChunk callback");
+            let agentDone = false;
+            const resultPromise = core.handleMessage(ingress, "chat-sdk", {
+              onChunk: (chunk: string) => {
+                chunkCount++;
+                log.debug("[stream] onChunk called", { chunk: chunk.slice(0, 50), count: chunkCount });
+                queue.push(chunk);
+              },
+            }).then(result => {
+              agentDone = true;
+              finalResult = result;
+              log.info("[stream] Agent completed", { 
+                hasResult: !!result.result,
+                hasFiles: result.result?.files?.length > 0,
+                textLength: result.result?.text?.length 
+              });
+              queue.end();  // Signal queue end when agent completes
+              return result;
+            });
+            
+            // Consume chunks from queue as they arrive
+            log.debug("[stream] Starting to consume chunks");
+            while (true) {
+              const chunk = await queue.next();
+              if (chunk === null) {
+                log.debug("[stream] Queue finished");
+                break;
+              }
+              log.debug("[stream] Yielding chunk", { chunk: chunk.slice(0, 50) });
+              yield chunk;
             }
+            
+            // Wait for agent to complete (should already be done)
+            await resultPromise;
+            log.debug("[stream] Generator completed");
+          }
+          
+          log.debug("[stream] Calling channel.stream()");
+          await channel.stream(generateReply());
+          log.debug("[stream] channel.stream() completed");
+          
+          // Check if there are files to send after streaming
+          if (finalResult?.result?.files && finalResult.result.files.length > 0) {
+            log.info("[stream] Sending files after stream", { fileCount: finalResult.result.files.length });
+            await channel.sendFiles(finalResult.result.text, finalResult.result.files);
+          } else {
+            log.debug("[stream] No files to send");
           }
         } catch (err) {
           log.error("Agent processing error", {

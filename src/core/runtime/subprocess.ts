@@ -122,6 +122,7 @@ export interface AgentInput {
   modelProvider: string;
   model: string;
   agentTimeoutMs: number;
+  onChunk?: (chunk: string) => void;
 }
 
 function sanitizeFilename(id: string): string {
@@ -233,6 +234,7 @@ export class SubprocessAgent implements Agent {
       input.modelProvider,
       "--model",
       input.model,
+      "--mode", "json",  // Enable JSON event stream for real-time streaming
       "--append-system-prompt",
       systemPrompt,
       "-e",
@@ -305,8 +307,46 @@ export class SubprocessAgent implements Agent {
         if (this.running === proc) this.running = null;
       };
 
+      let buffer = "";
+      let accumulatedText = "";
+      
       proc.stdout.on("data", (chunk: Buffer) => {
-        stdout += chunk.toString("utf8");
+        buffer += chunk.toString("utf8");
+        const lines = buffer.split("\n");
+        buffer = lines.pop() || "";
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const event = JSON.parse(line);
+            
+            // Send progress messages for key events
+            if (event.type === "thinking_start") {
+              if (input.onChunk) input.onChunk("💭\n\n");
+            }
+            else if (event.type === "tool_execution_start" && event.toolName) {
+              // Get specific command from args (tool_execution_start has complete args)
+              let specificTool = event.toolName;
+              if (specificTool === "bash" && event.args?.command) {
+                // Extract first word (the actual command)
+                const firstWord = event.args.command.split(/\s+/)[0];
+                specificTool = `${firstWord}`;
+              }
+              if (input.onChunk) input.onChunk(`\n\n🔧 正在调用 ${specificTool}\n\n`);
+            }
+            else if (event.type === "message_update" && 
+                     event.assistantMessageEvent?.type === "thinking_delta") {
+              // Stream thinking delta (not accumulated)
+              if (input.onChunk) input.onChunk(event.assistantMessageEvent.delta);
+            }
+            else if (event.type === "message_update" && 
+                     event.assistantMessageEvent?.type === "text_delta") {
+              accumulatedText += event.assistantMessageEvent.delta;
+            }
+          } catch (e) {
+            // Ignore parse errors
+          }
+        }
       });
 
       proc.stderr.on("data", (chunk: Buffer) => {
@@ -361,9 +401,13 @@ export class SubprocessAgent implements Agent {
           durationMs,
         });
 
-        const text = stdout.trim() || "Done.";
+        // Send final text response
+        if (accumulatedText && input.onChunk) {
+          input.onChunk(`\n\n${accumulatedText}`);
+        }
+
         const files = scanOutbox(input.workspace, startTime);
-        resolve({ text, files });
+        resolve({ text: accumulatedText || stdout.trim() || "Done.", files });
       });
     });
   }

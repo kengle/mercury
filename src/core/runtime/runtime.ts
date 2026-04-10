@@ -117,6 +117,7 @@ export class MercuryCoreRuntime {
   async handleMessage(
     message: IngressMessage,
     source: Exclude<InputSource, "scheduler">,
+    options?: { onChunk?: (chunk: string) => void },
   ): Promise<PolicyResult & { result?: AgentOutput }> {
     const traceId = this.tracer.newTraceId();
     const span = this.tracer.startSpan("mercury.message", traceId);
@@ -134,6 +135,7 @@ export class MercuryCoreRuntime {
         source,
         traceId,
         span.id,
+        options?.onChunk,
       );
       span.attr("message.action", outcome.action);
       span.end(outcome.action !== "deny");
@@ -149,6 +151,7 @@ export class MercuryCoreRuntime {
     source: Exclude<InputSource, "scheduler">,
     traceId: string,
     parentSpanId: string,
+    onChunk?: (chunk: string) => void,
   ): Promise<PolicyResult & { result?: AgentOutput }> {
     const wsId = message.workspaceId;
     const wsName = message.workspaceName;
@@ -177,6 +180,7 @@ export class MercuryCoreRuntime {
           parentSpanId,
           workspaceId: wsId,
           workspaceName: wsName,
+          onChunk,
         });
         return {
           action: "process",
@@ -216,6 +220,7 @@ export class MercuryCoreRuntime {
         parentSpanId,
         workspaceId: wsId,
         workspaceName: wsName,
+        onChunk,
       });
       return { ...policy, result };
     } catch (error) {
@@ -351,6 +356,7 @@ export class MercuryCoreRuntime {
     authorName?: string;
     traceId: string;
     parentSpanId: string;
+    onChunk?: (chunk: string) => void;
   }): Promise<AgentOutput> {
     const {
       prompt,
@@ -526,6 +532,7 @@ export class MercuryCoreRuntime {
           modelProvider: effectiveConfig.modelProvider,
           model: effectiveConfig.model,
           agentTimeoutMs: effectiveConfig.agentTimeoutMs,
+          onChunk: opts.onChunk,
         });
 
         const durationMs = Date.now() - startTime;
