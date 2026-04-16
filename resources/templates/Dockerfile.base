@@ -20,10 +20,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     python3 python3-pip python3-venv \
     bubblewrap \
-    fonts-wqy-zenhei fonts-noto-cjk \
     fd-find \
     ripgrep \
     jq \
+    fontconfig \
+    unzip \
     && ln -s $(which fdfind) /usr/local/bin/fd \
     && rm -rf /var/lib/apt/lists/*
 
@@ -75,6 +76,13 @@ ENV LIGHTPANDA_BIN="/usr/local/bin/lightpanda"
 COPY mercury-source /mercury-source
 RUN cd /mercury-source && bun install --frozen-lockfile
 ENV MERCURY_PKG_DIR="/mercury-source"
+
+# ─── Install Noto Sans SC Fonts ───────────────────────────────────────────
+# Install Chinese font for proper text rendering in images/PDFs
+RUN mkdir -p /root/.local/share/fonts/NotoSansSC && \
+    unzip -o /mercury-source/Noto_Sans_SC.zip -d /root/.local/share/fonts/NotoSansSC/ && \
+    fc-cache -fv /root/.local/share/fonts/ && \
+    echo "Noto Sans SC fonts installed"
 
 # mrctl helper
 RUN echo '#!/bin/sh\nbun run $MERCURY_PKG_DIR/src/cli/mrctl.ts "$@"' > /usr/local/bin/mrctl && \
