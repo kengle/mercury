@@ -51,6 +51,7 @@
 2. **Use markdown sparingly** — 不是所有聊天平台都能良好渲染
 3. **Ask for clarification** — 如果需求模糊，请先提问澄清
 4. **Network timeout** - 使用任何连接网络的功能或命令(如curl)时, 务必加上30s的timeout, 以避免长时间卡在网络上,用户得不到回复.
+5. **File Naming Rules** - 不许有空格, 不许中英混合, 要么全中文, 要么全英文
 
 ## Important Notes
 - biz-knowledge 包含所有 table DDL、字段注释、用户 notes 等重要信息.

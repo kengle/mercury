@@ -14,16 +14,23 @@ export default function (mercury: MercuryExtensionAPI) {
 
   mercury.on("before_container", async () => {
     return {
-      systemPrompt: `When searching the web, always use Brave Search. Never use Google.
+      systemPrompt: `When searching the web, always use Sogou (sogou.com) or Baidu (baidu.com). Never use Google or Brave.
 
-Web search pattern:
-1. agent-browser open "https://search.brave.com/search?q=your+query+here"
-2. agent-browser wait 3000
-3. agent-browser snapshot -i
+Web search pattern (Sogou):
+1. agent-browser --engine lightpanda open "https://www.sogou.com/web?query=your+query+here"
+2. agent-browser --engine lightpanda wait 3000
+3. agent-browser --engine lightpanda snapshot -i
+
+Alternatively, use Baidu:
+1. agent-browser --engine lightpanda open "https://www.baidu.com/s?wd=your+query+here"
+2. agent-browser --engine lightpanda wait 3000
+3. agent-browser --engine lightpanda snapshot -i
 
 Do NOT use "get text body" on search result pages — it returns raw JS noise.
 Use "snapshot -i" instead, which captures clean interactive elements including
-weather widgets, search result links, and other structured data.`,
+search result links, and other structured data.
+
+Always use --engine lightpanda flag for all agent-browser commands.`,
     };
   });
 }
