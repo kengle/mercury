@@ -8,7 +8,37 @@ license: Proprietary. LICENSE.txt has complete terms
 
 ## Overview
 
-This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see REFERENCE.md. If you need to fill out a PDF form, read FORMS.md and follow its instructions. 产生pdf文件的时候, 优先使用中文, 优先使用在 /root/.local/share/fonts/ 目录下的 Noto Sans SC 字体.
+This guide covers essential PDF processing operations using Python libraries and command-line tools. For advanced features, JavaScript libraries, and detailed examples, see REFERENCE.md. If you need to fill out a PDF form, read FORMS.md and follow its instructions. 
+
+### 中文字体使用规范 (Chinese Font Guidelines) 
+ 
+产生 PDF 文件时，**必须**使用中文 NotoSansSC 字体，确保中文正常显示。 
+ 
+#### 字体文件路径 
+
+```
+/root/.local/share/fonts/NotoSansSC/static/
+├── NotoSansSC-Thin.ttf         (最细，不推荐)
+├── NotoSansSC-ExtraLight.ttf   (特细，不推荐)
+├── NotoSansSC-Light.ttf        (细，不推荐)
+├── NotoSansSC-Regular.ttf      (常规，正文使用) ⭐
+├── NotoSansSC-Medium.ttf       (中等，二级标题使用) ⭐
+├── NotoSansSC-SemiBold.ttf     (半粗)
+├── NotoSansSC-Bold.ttf         (粗体，主标题/一级标题使用) ⭐
+├── NotoSansSC-ExtraBold.ttf    (特粗，不推荐)
+└── NotoSansSC-Black.ttf        (最粗，不推荐)
+```
+
+#### 推荐字体方案
+
+| 元素 | 字体文件 | 字号 | 说明 |
+|------|----------|------|------|
+| **主标题** | `NotoSansSC-Bold.ttf` | 18-20pt | 文档大标题 |
+| **一级标题** | `NotoSansSC-Bold.ttf` | 14-16pt | 章节标题 |
+| **二级标题** | `NotoSansSC-Medium.ttf` | 12-13pt | 小节标题 |
+| **三级标题** | `NotoSansSC-Medium.ttf` | 11pt | 子小节 |
+| **正文** | `NotoSansSC-Regular.ttf` | 10-11pt | 主体内容 |
+| **注释/图注** | `NotoSansSC-Regular.ttf` | 9pt | 辅助说明 |
 
 ## Quick Start
 
