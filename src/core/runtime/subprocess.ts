@@ -261,6 +261,9 @@ export class SubprocessAgent implements Agent {
       Object.assign(env, input.extraEnv);
     }
 
+    // Direct reply mode: only stream text_delta, skip thinking/tool events
+    const replyDirectly = env.MERCURY_REPLY_DIRECTLY === "true";
+
     const log: Logger = logger;
     const startTime = Date.now();
 
@@ -320,30 +323,35 @@ export class SubprocessAgent implements Agent {
           try {
             const event = JSON.parse(line);
             
-            // Send progress messages for key events
-            if (event.type === "thinking_start") {
-              if (input.onChunk) input.onChunk("💭\n\n");
-            }
-            else if (event.type === "tool_execution_start" && event.toolName) {
-              // Get specific command from args (tool_execution_start has complete args)
-              let specificTool = event.toolName;
-              if (specificTool === "bash" && event.args?.command) {
-                // Show full command, truncate if > 50 chars
-                const cmd = event.args.command;
-                specificTool = cmd.length > 50 
-                  ? `${cmd.substring(0, 50)} ...` 
-                  : cmd;
+            if (replyDirectly) {
+              // Direct reply mode: only capture final text, skip thinking/tool events
+              if (event.type === "message_update" && 
+                  event.assistantMessageEvent?.type === "text_delta") {
+                accumulatedText += event.assistantMessageEvent.delta;
               }
-              if (input.onChunk) input.onChunk(`\n\n🔧 正在调用 ${specificTool}\n\n`);
-            }
-            else if (event.type === "message_update" && 
-                     event.assistantMessageEvent?.type === "thinking_delta") {
-              // Stream thinking delta (not accumulated)
-              if (input.onChunk) input.onChunk(event.assistantMessageEvent.delta);
-            }
-            else if (event.type === "message_update" && 
-                     event.assistantMessageEvent?.type === "text_delta") {
-              accumulatedText += event.assistantMessageEvent.delta;
+            } else {
+              // Full mode: stream thinking, tool calls, and text
+              if (event.type === "thinking_start") {
+                if (input.onChunk) input.onChunk("💭\n\n");
+              }
+              else if (event.type === "tool_execution_start" && event.toolName) {
+                let specificTool = event.toolName;
+                if (specificTool === "bash" && event.args?.command) {
+                  const cmd = event.args.command;
+                  specificTool = cmd.length > 50 
+                    ? `${cmd.substring(0, 50)} ...` 
+                    : cmd;
+                }
+                if (input.onChunk) input.onChunk(`\n\n🔧 正在调用 ${specificTool}\n\n`);
+              }
+              else if (event.type === "message_update" && 
+                       event.assistantMessageEvent?.type === "thinking_delta") {
+                if (input.onChunk) input.onChunk(event.assistantMessageEvent.delta);
+              }
+              else if (event.type === "message_update" && 
+                       event.assistantMessageEvent?.type === "text_delta") {
+                accumulatedText += event.assistantMessageEvent.delta;
+              }
             }
           } catch (e) {
             // Ignore parse errors
